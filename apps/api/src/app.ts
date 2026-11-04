@@ -21,6 +21,7 @@ import { registerGovernance } from './modules/governance.js';
 import { registerPricing } from './modules/pricing.js';
 import { registerPos } from './modules/pos.js';
 import { registerCustomers } from './modules/customers.js';
+import { registerBilling } from './modules/billing.js';
 import { issueToken } from './lib/tokens.js';
 import { enqueue, url as mailUrl } from './lib/mail.js';
 const SLUG = /^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$/;
@@ -128,6 +129,7 @@ export async function buildApp() {
       const plan = (await c.query(`SELECT id FROM plans WHERE code='starter'`)).rows[0];
       const t = (await c.query('INSERT INTO tenants(plan_id) VALUES ($1) RETURNING id', [plan.id])).rows[0];
       await c.query(`INSERT INTO memberships(tenant_id,user_id,role) VALUES ($1,$2,'owner')`, [t.id, user.id]);
+      await c.query(`INSERT INTO subscriptions(tenant_id, plan_id, provider) VALUES ($1,$2,'none')`, [t.id, plan.id]);
       await c.query('INSERT INTO businesses(tenant_id,legal_type,business_name,contact_email) VALUES ($1,$2,$3,$4)', [t.id, b.legalType, b.businessName, b.email]);
       await c.query('INSERT INTO stores(tenant_id,slug,name) VALUES ($1,$2,$3)', [t.id, b.storeSlug, b.businessName]);
       await audit(c, { actor: user.id, tenantId: t.id, action: 'seller.signup', entityType: 'tenant', entityId: t.id, ip: req.ip });
@@ -328,6 +330,9 @@ export async function buildApp() {
         paidOrders: await n(`SELECT count(*) n FROM orders WHERE ${counted}`), gmvCents: await n(`SELECT coalesce(sum(total_cents),0) n FROM orders WHERE ${counted}`),
         platformFeesCents: await n(`SELECT coalesce(-sum(amount_cents) FILTER (WHERE account='platform_fee'),0) n FROM ledger_entries`),
         refundsCents: await n('SELECT coalesce(sum(amount_cents),0) n FROM refunds'),
+        subscriptionRevenueCents: await n(`SELECT coalesce(sum(amount_cents),0) n FROM invoices WHERE status='paid'`),
+        payingSubscriptions: await n(`SELECT count(*) n FROM subscriptions s JOIN plans p ON p.id=s.plan_id WHERE s.status='active' AND s.provider<>'manual' AND p.price_monthly_cents>0`),
+        pastDueSubscriptions: await n(`SELECT count(*) n FROM subscriptions WHERE status='past_due'`),
         unresolvedUnfulfilledPayments: await n('SELECT count(*) n FROM payments WHERE needs_refund AND refund_resolved_at IS NULL'),
         note: 'Figures are in each seller\'s currency summed as-is; all current stores use CAD.',
       };
@@ -389,14 +394,14 @@ export async function buildApp() {
     const { code } = z.object({ code: z.string().max(40) }).parse(req.params);
     const b = z.object({ reason: z.string().trim().min(5), priceMonthlyCents: z.number().int().min(0).optional(),
       priceAnnualCents: z.number().int().min(0).optional(), transactionFeeBps: z.number().int().min(0).max(10000).optional(),
-      limits: z.record(z.string(), z.number().nullable()).optional() }).parse(req.body);
+      limits: z.record(z.string(), z.number().nullable()).optional(), features: z.record(z.string(), z.boolean()).optional(), trialDays: z.number().int().min(0).max(90).optional() }).parse(req.body);
     return withTx({ platform: true }, async c => {
       const prev = (await c.query('SELECT * FROM plans WHERE code=$1 FOR UPDATE', [code])).rows[0];
       if (!prev) throw new HttpError(404, 'not_found');
       const row = (await c.query(
         `UPDATE plans SET price_monthly_cents=coalesce($2,price_monthly_cents), price_annual_cents=coalesce($3,price_annual_cents),
-           transaction_fee_bps=coalesce($4,transaction_fee_bps), limits=coalesce($5,limits) WHERE code=$1 RETURNING *`,
-        [code, b.priceMonthlyCents ?? null, b.priceAnnualCents ?? null, b.transactionFeeBps ?? null, b.limits ? JSON.stringify(b.limits) : null])).rows[0];
+           transaction_fee_bps=coalesce($4,transaction_fee_bps), limits=coalesce($5,limits), features=coalesce($6,features), trial_days=coalesce($7,trial_days) WHERE code=$1 RETURNING *`,
+        [code, b.priceMonthlyCents ?? null, b.priceAnnualCents ?? null, b.transactionFeeBps ?? null, b.limits ? JSON.stringify(b.limits) : null, b.features ? JSON.stringify(b.features) : null, b.trialDays ?? null])).rows[0];
       await audit(c, { actor: req.user!.id, action: 'plan.update', entityType: 'plan', entityId: code, prev, next: row, reason: b.reason, ip: req.ip });
       return row;
     });
@@ -405,6 +410,7 @@ export async function buildApp() {
   const optionalUserId = async (req: FastifyRequest) => { if (!req.cookies[COOKIE]) return null; try { await authenticate(req); return req.user!.id; } catch { return null; } };
   registerCommerce(app, { tenantCtx, optionalUserId });
   registerCustomers(app, { tenantCtx, authenticate, platformPerm, setSession });
+  registerBilling(app, { tenantCtx, platformPerm });
   registerImport(app, { tenantCtx });
   registerMarketplace(app);
   registerRefunds(app, { tenantCtx });

@@ -9,6 +9,8 @@ export const config = {
 };
 // 'simulated' is the only provider implemented; it is NOT real payment processing.
 export const paymentProvider = process.env.PAYMENT_PROVIDER ?? (process.env.NODE_ENV === 'production' ? 'none' : 'simulated');
+// Subscription billing provider. 'simulated' moves no money and is labelled as such everywhere; 'none' refuses paid plan purchases.
+export const billingProvider = process.env.BILLING_PROVIDER ?? (process.env.NODE_ENV === 'production' ? 'none' : 'simulated');
 export const reservationMinutes = Number(process.env.RESERVATION_MINUTES ?? 15);
 // Origins allowed to make state-changing requests besides same-host. Set explicitly in production (the public web origin).
 export const allowedOrigins = (process.env.ALLOWED_ORIGINS ?? (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:5173,http://127.0.0.1:5173'))

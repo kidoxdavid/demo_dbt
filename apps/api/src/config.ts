@@ -15,3 +15,6 @@ export const allowedOrigins = (process.env.ALLOWED_ORIGINS ?? (process.env.NODE_
   .split(',').map(s => s.trim()).filter(Boolean);
 export const uploadDir = process.env.UPLOAD_DIR ?? './uploads';
 export const maxImageBytes = 5 * 1024 * 1024;
+export const uploadRateLimitMax = Number(process.env.UPLOAD_RATE_LIMIT_MAX ?? 20);
+// Public origin used to build share links and QR codes.
+export const publicUrl = (process.env.PUBLIC_URL ?? 'http://localhost:5173').replace(/\/$/, '');

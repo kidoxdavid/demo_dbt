@@ -91,7 +91,13 @@ export function Login() {
   const [err, setErr] = useState(''); const [busy, setBusy] = useState(false);
   async function submit(e: FormEvent) {
     e.preventDefault(); setErr(''); setBusy(true);
-    try { await api('/api/auth/login', { body: { email, password } }); nav('/dashboard'); }
+    try {
+      await api('/api/auth/login', { body: { email, password } });
+      // Staff accounts have no business of their own: send them to the admin area.
+      const hasBusiness = await api('/api/seller/business').then(() => true).catch(() => false);
+      const isStaff = hasBusiness ? false : await api('/api/admin/me').then(() => true).catch(() => false);
+      nav(isStaff ? '/admin' : '/dashboard');
+    }
     catch (x) { setErr(errorText(x)); } finally { setBusy(false); }
   }
   return <>

@@ -5,7 +5,8 @@ import { z } from 'zod';
 import { withTx, audit, type Ctx } from '../lib/db.js';
 import { HttpError } from '../lib/errors.js';
 import { getProvider } from '../lib/payments.js';
-import { reservationMinutes, uploadDir, maxImageBytes } from '../config.js';
+import { reservationMinutes, uploadDir, maxImageBytes, uploadRateLimitMax } from '../config.js';
+import { customFieldsIn, withKeys, validateCustom, isUuid, type Field } from '../lib/custom.js';
 import { localStorageAdapter, sniffImage, isValidKey } from '../lib/storage.js';
 
 type TenantCtx = { tenantId: string; role: string; userId: string };
@@ -23,7 +24,7 @@ const variantIn = z.object({
 const productIn = z.object({
   name: z.string().trim().min(1).max(200), description: z.string().max(10000).optional(), brand: z.string().max(100).optional(),
   attributes: z.record(z.string(), z.union([z.string().max(500), z.number(), z.boolean()])).default({}),
-  madeToOrder: z.boolean().default(false), status: z.enum(['draft', 'active']).default('draft'),
+  madeToOrder: z.boolean().default(false), status: z.enum(['draft', 'active']).default('draft'), customFields: customFieldsIn.default([]),
   variants: z.array(variantIn).min(1).max(100),
 }).strict();
 
@@ -97,6 +98,14 @@ export async function releaseExpiredReservations() {
   });
 }
 
+/** Delete customer images that were uploaded but never attached to an order (abandoned carts). */
+export async function cleanupOrphanUploads(olderThanHours = 24) {
+  const rows = await withTx({ platform: true }, async c => (await c.query(
+    `DELETE FROM custom_uploads WHERE order_id IS NULL AND created_at < now() - ($1 || ' hours')::interval RETURNING storage_key`, [String(olderThanHours)])).rows);
+  const st = localStorageAdapter(uploadDir); for (const r of rows) await st.remove(r.storage_key);
+  return rows.length;
+}
+
 const TRANSITIONS: Record<string, string[]> = {
   paid: ['processing'], processing: ['ready', 'shipped'], ready: ['completed'], shipped: ['completed'],
 };
@@ -160,8 +169,8 @@ export function registerCommerce(app: FastifyInstance, deps: { tenantCtx: (r: Fa
     const out = await withTx(t, async c => {
       if (b.status === 'active') await assertProductLimit(c, t.tenantId, 1);
       const p = (await c.query(
-        `INSERT INTO products(tenant_id,name,description,brand,attributes,made_to_order,status) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
-        [t.tenantId, b.name, b.description ?? null, b.brand ?? null, JSON.stringify(b.attributes), b.madeToOrder, b.status])).rows[0];
+        `INSERT INTO products(tenant_id,name,description,brand,attributes,made_to_order,status,custom_fields) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
+        [t.tenantId, b.name, b.description ?? null, b.brand ?? null, JSON.stringify(b.attributes), b.madeToOrder, b.status, JSON.stringify(withKeys(b.customFields))])).rows[0];
       for (const v of b.variants) {
         const row = await c.query(
           `INSERT INTO product_variants(tenant_id,product_id,title,sku,options,price_cents,cost_cents,track_inventory,low_stock_threshold)
@@ -189,7 +198,7 @@ export function registerCommerce(app: FastifyInstance, deps: { tenantCtx: (r: Fa
     const t = await tenantCtx(req);
     const { limit, offset } = page.parse(req.query);
     return withTx(t, async c => (await c.query(
-      `SELECT p.id,p.name,p.status,p.brand,p.attributes,
+      `SELECT p.id,p.name,p.status,p.brand,p.attributes,p.custom_fields AS "customFields",
         (SELECT json_agg(json_build_object('id',v.id,'title',v.title,'sku',v.sku,'priceCents',v.price_cents,'costCents',v.cost_cents,
            'onHand',l.on_hand,'reserved',l.reserved,'trackInventory',v.track_inventory,'lowStock',(v.track_inventory AND l.on_hand-l.reserved <= v.low_stock_threshold)))
          FROM product_variants v JOIN inventory_levels l ON l.variant_id=v.id WHERE v.product_id=p.id) AS variants,
@@ -200,14 +209,14 @@ export function registerCommerce(app: FastifyInstance, deps: { tenantCtx: (r: Fa
   app.patch('/api/seller/products/:id', async (req) => {
     const t = await tenantCtx(req); can(t, ['owner', 'manager']);
     const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
-    const b = z.object({ name: z.string().trim().min(1).max(200), description: z.string().max(10000), status: z.enum(['draft', 'active', 'archived']) }).partial().strict().parse(req.body);
+    const b = z.object({ name: z.string().trim().min(1).max(200), description: z.string().max(10000), status: z.enum(['draft', 'active', 'archived']), customFields: customFieldsIn }).partial().strict().parse(req.body);
     return withTx(t, async c => {
       const prev = (await c.query('SELECT * FROM products WHERE id=$1 FOR UPDATE', [id])).rows[0];
       if (!prev) throw new HttpError(404, 'not_found');
       if (b.status === 'active' && prev.status !== 'active') await assertProductLimit(c, t.tenantId, 1);
       const row = (await c.query(
-        `UPDATE products SET name=coalesce($2,name), description=coalesce($3,description), status=coalesce($4,status), updated_at=now() WHERE id=$1 RETURNING *`,
-        [id, b.name ?? null, b.description ?? null, b.status ?? null])).rows[0];
+        `UPDATE products SET name=coalesce($2,name), description=coalesce($3,description), status=coalesce($4,status), custom_fields=coalesce($5::jsonb,custom_fields), updated_at=now() WHERE id=$1 RETURNING *`,
+        [id, b.name ?? null, b.description ?? null, b.status ?? null, b.customFields ? JSON.stringify(withKeys(b.customFields)) : null])).rows[0];
       await audit(c, { actor: t.userId, tenantId: t.tenantId, action: 'product.update', entityType: 'product', entityId: id, prev, next: row });
       return row;
     });
@@ -241,7 +250,8 @@ export function registerCommerce(app: FastifyInstance, deps: { tenantCtx: (r: Fa
     return withTx(t, async c => {
       const o = (await c.query('SELECT * FROM orders WHERE id=$1', [id])).rows[0];
       if (!o) throw new HttpError(404, 'not_found'); // RLS makes other tenants' orders indistinguishable from missing ones
-      o.items = (await c.query('SELECT name,variant_title,quantity,unit_price_cents FROM order_items WHERE order_id=$1', [id])).rows;
+      o.items = (await c.query('SELECT name,variant_title,quantity,unit_price_cents,custom_values FROM order_items WHERE order_id=$1', [id])).rows;
+      o.refunds = (await c.query('SELECT id,amount_cents,reason,restocked,created_at FROM refunds WHERE order_id=$1 ORDER BY created_at', [id])).rows;
       return o;
     });
   });
@@ -282,15 +292,24 @@ export function registerCommerce(app: FastifyInstance, deps: { tenantCtx: (r: Fa
          FROM ledger_entries WHERE at BETWEEN $1 AND $2`, args)).rows[0];
       // If nothing sold has a known cost, COGS and profit are UNKNOWN (null), never reported as zero.
       const costKnown = k.lines_with_cost > 0 || k.lines_missing_cost === 0;
-      const grossProfit = costKnown ? Number(k.sales_with_cost) - Number(k.cogs_known) : null;
+      // Partial refunds on counted orders reduce profit (the sale shrinks, the cost does not). Fully refunded orders drop out of
+      // sales entirely (status 'refunded'). Refunds include any delivery fee refunded, so this is a close estimate, not an accounting figure.
+      const bySource = (await c.query(
+        `SELECT coalesce(source,'direct') AS source, count(*)::int AS orders, coalesce(sum(subtotal_cents),0)::bigint AS sales
+         FROM orders WHERE status IN ('paid','processing','ready','shipped','completed') AND created_at BETWEEN $1 AND $2 GROUP BY 1 ORDER BY sales DESC, 1`, args)).rows
+        .map(r => ({ source: r.source as string, orders: r.orders as number, grossSalesCents: Number(r.sales) }));
+      const refundsOnCounted = Number((await c.query(
+        `SELECT coalesce(sum(r.amount_cents),0)::bigint n FROM refunds r JOIN orders o ON o.id=r.order_id
+         WHERE o.status IN ('paid','processing','ready','shipped','completed') AND o.created_at BETWEEN $1 AND $2`, args)).rows[0].n);
+      const grossProfit = costKnown ? Number(k.sales_with_cost) - Number(k.cogs_known) - refundsOnCounted : null;
       return {
-        currency: 'CAD', orders: o.orders,
+        currency: 'CAD', orders: o.orders, bySource,
         grossSalesCents: Number(o.gross_sales), shippingCollectedCents: Number(o.shipping_collected),
-        discountsCents: 0, refundsCents: 0,
+        discountsCents: 0, refundsCents: refundsOnCounted,
         cogsCents: costKnown ? Number(k.cogs_known) : null, grossProfitCents: grossProfit,
         grossProfitIsPartial: k.lines_missing_cost > 0, lineItemsMissingCost: k.lines_missing_cost,
         platformFeesCents: Number(f.platform_fees), sellerEarningsBeforeProcessorFeesCents: Number(f.seller_earnings_before_processor_fees),
-        notes: ['Gross sales exclude shipping and are not profit.', 'Payment-processor fees and taxes are not included: not yet integrated.',
+        notes: ['Gross sales exclude shipping and are not profit.', 'Fully refunded orders are excluded from sales; partial refunds reduce profit.', 'Payment-processor fees and taxes are not included: not yet integrated.',
                 'Estimated net profit is unavailable until processor fees and operating expenses are recorded.'],
       };
     });
@@ -310,7 +329,7 @@ export function registerCommerce(app: FastifyInstance, deps: { tenantCtx: (r: Fa
     const { limit, offset } = page.parse(req.query);
     const s = await publicStore(slug);
     return withTx({ tenantId: s.tenant_id }, async c => (await c.query(
-      `SELECT p.id,p.name,p.description,p.brand,p.attributes,p.made_to_order AS "madeToOrder",
+      `SELECT p.id,p.name,p.description,p.brand,p.attributes,p.made_to_order AS "madeToOrder",p.custom_fields AS "customFields",
         (SELECT json_agg(json_build_object('id',v.id,'title',v.title,'options',v.options,'priceCents',v.price_cents,
            'available',(NOT v.track_inventory) OR (l.on_hand-l.reserved>0)))
          FROM product_variants v JOIN inventory_levels l ON l.variant_id=v.id WHERE v.product_id=p.id) AS variants,
@@ -319,7 +338,8 @@ export function registerCommerce(app: FastifyInstance, deps: { tenantCtx: (r: Fa
   });
 
   const checkoutIn = z.object({
-    items: z.array(z.object({ variantId: z.string().uuid(), quantity: z.number().int().min(1).max(100) })).min(1).max(50),
+    items: z.array(z.object({ variantId: z.string().uuid(), quantity: z.number().int().min(1).max(100), customizations: z.record(z.string().max(40), z.string().max(1000)).optional() }).strict()).min(1).max(50),
+    source: z.string().regex(/^[a-z0-9_-]{1,40}$/).optional(),
     email: z.string().email().max(254), name: z.string().trim().min(1).max(120),
     fulfilment: z.enum(['pickup', 'delivery']),
     address: z.object({ line1: z.string().min(1).max(200), city: z.string().min(1).max(100), region: z.string().max(100), postalCode: z.string().min(3).max(12), country: z.string().length(2) }).optional(),
@@ -332,9 +352,13 @@ export function registerCommerce(app: FastifyInstance, deps: { tenantCtx: (r: Fa
     if (!provider) throw new HttpError(503, 'payments_not_configured');
     if (b.fulfilment === 'delivery' && !b.address) throw new HttpError(422, 'address_required');
     const s = await publicStore(slug);
-    const merged = new Map<string, number>();
-    for (const i of b.items) merged.set(i.variantId, (merged.get(i.variantId) ?? 0) + i.quantity);
-    const lines = [...merged].map(([variantId, qty]) => ({ variantId, qty }));
+    // Lines stay separate when their customisation differs; stock is reserved per variant in total.
+    const lineMap = new Map<string, { variantId: string; qty: number; custom: Record<string, string> }>();
+    for (const i of b.items) { const custom = i.customizations ?? {}; const k = i.variantId + JSON.stringify(Object.entries(custom).sort());
+      const cur = lineMap.get(k); if (cur) cur.qty += i.quantity; else lineMap.set(k, { variantId: i.variantId, qty: i.quantity, custom }); }
+    const lines = [...lineMap.values()];
+    const qtyByVariant = new Map<string, number>(); for (const l of lines) qtyByVariant.set(l.variantId, (qtyByVariant.get(l.variantId) ?? 0) + l.qty);
+    const reserveLines = [...qtyByVariant].map(([variantId, qty]) => ({ variantId, qty }));
 
     const result = await withTx({ tenantId: s.tenant_id }, async c => {
       const info = (await c.query(
@@ -344,24 +368,35 @@ export function registerCommerce(app: FastifyInstance, deps: { tenantCtx: (r: Fa
       if (!info.fulfilment?.[b.fulfilment === 'pickup' ? 'pickup' : 'delivery']) throw new HttpError(422, 'fulfilment_not_offered');
       // Price comes from the database, never the client.
       const rows = (await c.query(
-        `SELECT v.id, v.title, v.price_cents, v.cost_cents, p.name FROM product_variants v JOIN products p ON p.id=v.product_id
-         WHERE v.id = ANY($1::uuid[]) AND p.status='active'`, [lines.map(l => l.variantId)])).rows;
-      if (rows.length !== lines.length) throw new HttpError(422, 'item_unavailable');
-      if (!(await reserve(c, lines))) throw new HttpError(409, 'out_of_stock');
-      const byId = new Map(rows.map(r => [r.id, r]));
+        `SELECT v.id, v.title, v.price_cents, v.cost_cents, p.name, p.custom_fields FROM product_variants v JOIN products p ON p.id=v.product_id
+         WHERE v.id = ANY($1::uuid[]) AND p.status='active'`, [reserveLines.map(l => l.variantId)])).rows;
+      if (rows.length !== reserveLines.length) throw new HttpError(422, 'item_unavailable');
+      // Customer answers are validated against the product's CURRENT fields; uploaded images must be unattached and belong to this store.
+      const candidateUploads = [...new Set(lines.flatMap(l => Object.values(l.custom)).filter(isUuid))];
+      const availableUploads = new Set<string>(candidateUploads.length ? (await c.query('SELECT id FROM custom_uploads WHERE id = ANY($1::uuid[]) AND order_id IS NULL', [candidateUploads])).rows.map(r => r.id as string) : []);
+      const byVariant = new Map(rows.map(r => [r.id, r]));
+      const checked = lines.map(l => ({ l, ...validateCustom((byVariant.get(l.variantId).custom_fields ?? []) as Field[], l.custom, availableUploads) }));
+      const allUploadIds = checked.flatMap(x => x.uploadIds);
+      if (new Set(allUploadIds).size !== allUploadIds.length) throw new HttpError(422, 'custom_invalid_upload');
+      if (!(await reserve(c, reserveLines))) throw new HttpError(409, 'out_of_stock');
+      const byId = byVariant;
       const subtotal = lines.reduce((n, l) => n + byId.get(l.variantId).price_cents * l.qty, 0);
       const shipping = b.fulfilment === 'delivery' ? s.delivery_fee_cents : 0;
       const token = randomBytes(24).toString('base64url');
       const o = (await c.query(
-        `INSERT INTO orders(tenant_id,store_id,public_token,customer_email,customer_name,fulfilment,delivery_address,currency,subtotal_cents,shipping_cents,total_cents,platform_fee_bps,reservation_expires_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12, now() + ($13 || ' minutes')::interval) RETURNING id, number`,
+        `INSERT INTO orders(tenant_id,store_id,public_token,customer_email,customer_name,fulfilment,delivery_address,currency,subtotal_cents,shipping_cents,total_cents,platform_fee_bps,reservation_expires_at,source)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12, now() + ($13 || ' minutes')::interval, $14) RETURNING id, number`,
         [s.tenant_id, s.id, token, b.email, b.name, b.fulfilment, b.address ? JSON.stringify(b.address) : null, info.currency,
-         subtotal, shipping, subtotal + shipping, info.transaction_fee_bps, String(reservationMinutes)])).rows[0];
-      for (const l of lines) {
+         subtotal, shipping, subtotal + shipping, info.transaction_fee_bps, String(reservationMinutes), b.source ?? null])).rows[0];
+      for (const { l, snapshot } of checked) {
         const r = byId.get(l.variantId);
         await c.query(
-          `INSERT INTO order_items(tenant_id,order_id,variant_id,name,variant_title,quantity,unit_price_cents,unit_cost_cents) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-          [s.tenant_id, o.id, l.variantId, r.name, r.title, l.qty, r.price_cents, r.cost_cents]);
+          `INSERT INTO order_items(tenant_id,order_id,variant_id,name,variant_title,quantity,unit_price_cents,unit_cost_cents,custom_values) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+          [s.tenant_id, o.id, l.variantId, r.name, r.title, l.qty, r.price_cents, r.cost_cents, JSON.stringify(snapshot)]);
+      }
+      if (allUploadIds.length) { // atomically claim the uploads: a concurrent checkout using the same image loses
+        const claimed = await c.query('UPDATE custom_uploads SET order_id=$1 WHERE id = ANY($2::uuid[]) AND order_id IS NULL', [o.id, allUploadIds]);
+        if (claimed.rowCount !== allUploadIds.length) throw new HttpError(422, 'custom_invalid_upload');
       }
       const intent = await provider.createIntent({ orderId: o.id, amountCents: subtotal + shipping, currency: info.currency, idempotencyKey: o.id });
       const pay = (await c.query(
@@ -373,10 +408,36 @@ export function registerCommerce(app: FastifyInstance, deps: { tenantCtx: (r: Fa
     return reply.code(201).send(result);
   });
 
+  // Customer reference images for customisable products: private storage, size/type-checked, rate-limited, expire if never ordered.
+  app.post('/api/public/stores/:slug/custom-upload', { config: { rateLimit: { max: uploadRateLimitMax, timeWindow: '1 minute' } } }, async (req, reply) => {
+    const { slug } = z.object({ slug: z.string().regex(SLUG) }).parse(req.params);
+    const body = req.body as Buffer;
+    if (!Buffer.isBuffer(body) || !body.length) throw new HttpError(400, 'empty_upload');
+    if (body.length > maxImageBytes) throw new HttpError(413, 'image_too_large');
+    const kind = sniffImage(body); if (!kind) throw new HttpError(415, 'unsupported_image_type');
+    const s = await publicStore(slug);
+    const key = await storage.put(kind.ext, body);
+    try {
+      const row = await withTx({ tenantId: s.tenant_id }, async c => (await c.query(
+        'INSERT INTO custom_uploads(tenant_id,storage_key,content_type,bytes) VALUES ($1,$2,$3,$4) RETURNING id', [s.tenant_id, key, kind.type, body.length])).rows[0]);
+      return reply.code(201).send({ id: row.id });
+    } catch (e) { await storage.remove(key); throw e; }
+  });
+
+  // Only the seller who owns the order's tenant can view a customer's uploaded image (RLS + auth); never public.
+  app.get('/api/seller/custom-uploads/:id', async (req, reply) => {
+    const t = await tenantCtx(req);
+    const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
+    const u = await withTx(t, async c => (await c.query('SELECT storage_key, content_type FROM custom_uploads WHERE id=$1', [id])).rows[0]);
+    if (!u) throw new HttpError(404, 'not_found');
+    const data = await storage.get(u.storage_key); if (!data) throw new HttpError(404, 'not_found');
+    return reply.header('content-type', u.content_type).header('x-content-type-options', 'nosniff').header('cache-control', 'private, max-age=300').send(data);
+  });
+
   app.get('/api/public/orders/:token', async (req) => {
     const { token } = z.object({ token: z.string().min(20).max(64) }).parse(req.params);
     const o = await withTx({ platform: true }, async c => { // lookup by unguessable capability token
-      const r = (await c.query('SELECT id,number,status,fulfilment,subtotal_cents,shipping_cents,total_cents,currency,created_at FROM orders WHERE public_token=$1', [token])).rows[0];
+      const r = (await c.query('SELECT id,number,status,fulfilment,subtotal_cents,shipping_cents,total_cents,refunded_cents,currency,created_at FROM orders WHERE public_token=$1', [token])).rows[0];
       if (r) r.items = (await c.query('SELECT name,variant_title,quantity,unit_price_cents FROM order_items WHERE order_id=$1', [r.id])).rows;
       return r;
     });

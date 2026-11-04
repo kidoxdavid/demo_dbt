@@ -1,8 +1,8 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { api, money } from '../api';
+import { api, ApiError, errorText, money } from '../api';
 import { Empty } from '../ui';
-import { useCart, useStore, usePub } from './Store';
+import { useCart, useStore, usePub, rememberSource } from './Store';
 
 export const accentOf = (t: any) => (t?.accent && /^#[0-9a-f]{6}$/i.test(t.accent) ? t.accent : '#141414');
 
@@ -106,19 +106,41 @@ export function Marketplace() {
 export function ProductPage() {
   usePub();
   const { slug = '', id = '' } = useParams(); const { store, missing } = useStore(slug); const cart = useCart(slug);
+  const [sp] = useSearchParams(); useEffect(() => rememberSource(slug, sp.get('src')), [slug, sp]);
+  const [custom, setCustom] = useState<Record<string, string>>({}); const [fileNames, setFileNames] = useState<Record<string, string>>({}); const [cerr, setCerr] = useState(''); const [uploading, setUploading] = useState(false);
   const [p, setP] = useState<any>(null); const [gone, setGone] = useState(false); const [vid, setVid] = useState(''); const [img, setImg] = useState(0); const [added, setAdded] = useState(false);
   useEffect(() => { api(`/api/public/stores/${slug}/products/${id}`).then(d => { setP(d); setVid(d.variants[0].id); }).catch(() => setGone(true)); }, [slug, id]);
   if (missing || gone) return <><PubHeader /><div className="wrap"><Empty title="Product not found">It may have been removed. <Link to="/">Back to the marketplace</Link></Empty></div></>;
   if (!p || !store) return <><PubHeader /><div className="wrap"><p className="muted">Loading…</p></div></>;
   const v = p.variants.find((x: any) => x.id === vid) ?? p.variants[0];
   const attrs = Object.entries(p.attributes ?? {}); const accent = accentOf(store.theme);
-  const add = () => { cart.add({ variantId: v.id, name: p.name, title: v.title, priceCents: v.priceCents }); setAdded(true); setTimeout(() => setAdded(false), 3000); };
+  const fields: any[] = p.customFields ?? [];
+  const setField = (k: string, val: string) => { setCustom(c => ({ ...c, [k]: val })); setCerr(''); };
+  async function pickImage(f: any, file: File | undefined) {
+    if (!file) return; setCerr('');
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) { setCerr('Please choose a JPG, PNG or WebP image.'); return; }
+    if (file.size > 5 * 1024 * 1024) { setCerr('That photo is over 5 MB. Please choose a smaller one.'); return; }
+    setUploading(true);
+    try {
+      const res = await fetch(`/api/public/stores/${slug}/custom-upload`, { method: 'POST', credentials: 'same-origin', headers: { 'content-type': file.type }, body: file });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) { setCerr(errorText(new ApiError(res.status, d.error ?? 'upload_failed'))); return; }
+      setField(f.key, d.id); setFileNames(n => ({ ...n, [f.key]: file.name }));
+    } finally { setUploading(false); }
+  }
+  const add = () => {
+    for (const f of fields) if (f.required && !(custom[f.key] ?? '').trim()) { setCerr(`Please fill in “${f.label}”.`); return; }
+    const answers = Object.fromEntries(Object.entries(custom).filter(([, val]) => val.trim() !== ''));
+    const view = fields.filter(f => answers[f.key]).map(f => ({ label: f.label, type: f.type, value: f.type === 'image' ? (fileNames[f.key] ?? 'photo') : answers[f.key] }));
+    cart.add({ variantId: v.id, name: p.name, title: v.title, priceCents: v.priceCents, ...(fields.length ? { custom: answers, customView: view } : {}) });
+    setAdded(true); setTimeout(() => setAdded(false), 3000);
+  };
   return <div style={{ ['--btn' as any]: accent }}>
     <PubHeader />
     <main className="wrap pdp2">
       <nav className="crumbs" aria-label="Breadcrumb"><Link to="/">Marketplace</Link><span aria-hidden> / </span><Link to={`/store/${slug}`}>{store.name}</Link></nav>
       <div className="pdp2-grid">
-        <div className="gal">
+        <div className={`gal${p.images.length > 1 ? ' has-thumbs' : ''}`}>
           {p.images.length > 1 && <div className="gal-thumbs">{p.images.map((u: string, i: number) => <button key={u} className={i === img ? 'on' : ''} aria-label={`Show photo ${i + 1}`} onClick={() => setImg(i)}><img src={u} alt="" /></button>)}</div>}
           <div className="gal-main">{p.images[img] ? <img src={p.images[img]} alt={`${p.name}, photo ${img + 1}`} /> : <div className="ph" aria-hidden>{p.name.slice(0, 1)}</div>}</div>
         </div>
@@ -129,7 +151,18 @@ export function ProductPage() {
           {p.madeToOrder && <p className="note2">Made to order. Allow extra time for the maker to prepare your piece.</p>}
           {p.variants.length > 1 && <fieldset className="opts2"><legend>Option · <b>{v.title}</b></legend>
             {p.variants.map((x: any) => <button key={x.id} type="button" disabled={!x.available} aria-pressed={x.id === vid} className={x.id === vid ? 'on' : ''} onClick={() => setVid(x.id)}>{x.title}</button>)}</fieldset>}
-          <button className="buy2" disabled={!v.available} onClick={add}>{v.available ? 'Add to cart' : 'Sold out'}</button>
+          {fields.length > 0 && <fieldset className="custom"><legend>Make it yours</legend>
+            {fields.map((f: any) => <div key={f.key}>
+              <label htmlFor={`cf-${f.key}`}>{f.label}{f.required ? ' *' : ' (optional)'}</label>
+              {f.type === 'text' && <input id={`cf-${f.key}`} maxLength={f.maxLength ?? 100} value={custom[f.key] ?? ''} onChange={e => setField(f.key, e.target.value)} />}
+              {f.type === 'textarea' && <textarea id={`cf-${f.key}`} maxLength={f.maxLength ?? 1000} value={custom[f.key] ?? ''} onChange={e => setField(f.key, e.target.value)} />}
+              {f.type === 'select' && <select id={`cf-${f.key}`} value={custom[f.key] ?? ''} onChange={e => setField(f.key, e.target.value)}><option value="">Choose…</option>{f.options.map((o: string) => <option key={o}>{o}</option>)}</select>}
+              {f.type === 'image' && <div><input id={`cf-${f.key}`} type="file" accept="image/jpeg,image/png,image/webp" onChange={e => pickImage(f, e.target.files?.[0])} />
+                {fileNames[f.key] && <p className="muted small" role="status">Attached: {fileNames[f.key]}</p>}</div>}
+            </div>)}
+            {cerr && <p className="alert err" role="alert">{cerr}</p>}
+          </fieldset>}
+          <button className="buy2" disabled={!v.available || uploading} onClick={add}>{uploading ? 'Uploading photo…' : v.available ? 'Add to cart' : 'Sold out'}</button>
           {added && <p className="added" role="status">Added to your cart. <Link to={`/store/${slug}/checkout`}>Check out</Link></p>}
           <div className="acc">
             {p.description && <details open><summary>Description</summary><p>{p.description}</p></details>}

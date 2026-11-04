@@ -2,6 +2,7 @@ import { Link, Route, Routes } from 'react-router-dom';
 import { Landing, Login, Signup } from './pages/Auth';
 import { Marketplace, ProductPage } from './pages/Market';
 import { SellerShell } from './pages/Seller';
+import { AdminShell } from './pages/Admin';
 import { Storefront, StoreCheckout, OrderStatus } from './pages/Store';
 
 export default function App() {
@@ -12,6 +13,7 @@ export default function App() {
       <Route path="/signup" element={<Signup />} />
       <Route path="/login" element={<Login />} />
       <Route path="/dashboard/*" element={<SellerShell />} />
+      <Route path="/admin/*" element={<AdminShell />} />
       <Route path="/store/:slug" element={<Storefront />} />
       <Route path="/store/:slug/p/:id" element={<ProductPage />} />
       <Route path="/store/:slug/checkout" element={<StoreCheckout />} />

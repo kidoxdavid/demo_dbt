@@ -54,6 +54,22 @@ export function registerMarketplace(app: FastifyInstance) {
            AND ($2::text IS NULL OR s.name ILIKE $2 ESCAPE '\\' OR b.category ILIKE $2 ESCAPE '\\' OR s.tagline ILIKE $2 ESCAPE '\\')
          ORDER BY s.published_at DESC LIMIT 12`, [q.category ?? null, like])).rows;
 
+      // Editorial pick: when browsing without filters, the admin-chosen featured store leads (if still published and active).
+      if (!q.q && !q.category) {
+        const slug = (await c.query(`SELECT value->>'slug' AS slug FROM platform_settings WHERE key='featured_store'`)).rows[0]?.slug as string | undefined;
+        if (slug) {
+          let f = stores.find(s => s.slug === slug);
+          if (!f) f = (await c.query(
+            `SELECT s.slug, s.name, s.tagline, s.theme, b.category, b.city, b.region,
+                    (SELECT count(*)::int FROM products p WHERE p.tenant_id=s.tenant_id AND p.status='active') AS "productCount",
+                    (SELECT coalesce(json_agg(img), '[]'::json) FROM (SELECT '/media/'||m.storage_key AS img FROM product_media m JOIN products p ON p.id=m.product_id
+                       WHERE p.tenant_id=s.tenant_id AND p.status='active' ORDER BY p.created_at DESC, m.position LIMIT 3) x) AS covers
+             FROM stores s JOIN tenants t ON t.id=s.tenant_id JOIN businesses b ON b.tenant_id=s.tenant_id
+             WHERE s.slug=$1 AND s.status='published' AND t.status='active' AND EXISTS (SELECT 1 FROM products p WHERE p.tenant_id=s.tenant_id AND p.status='active')`, [slug])).rows[0];
+          if (f) { const i = stores.findIndex(s => s.slug === f!.slug); if (i >= 0) stores.splice(i, 1); stores.unshift(f); }
+        }
+      }
+
       const categories = (await c.query(
         `SELECT b.category AS name, count(DISTINCT s.id)::int AS stores
          FROM stores s JOIN tenants t ON t.id=s.tenant_id JOIN businesses b ON b.tenant_id=s.tenant_id
@@ -70,7 +86,7 @@ export function registerMarketplace(app: FastifyInstance) {
     const s = await withTx({}, async c => (await c.query('SELECT tenant_id FROM stores WHERE slug=$1', [slug])).rows[0]); // RLS: published only
     if (!s) throw new HttpError(404, 'not_found');
     const p = await withTx({ tenantId: s.tenant_id }, async c => (await c.query(
-      `SELECT p.id, p.name, p.description, p.brand, p.attributes, p.made_to_order AS "madeToOrder",
+      `SELECT p.id, p.name, p.description, p.brand, p.attributes, p.made_to_order AS "madeToOrder", p.custom_fields AS "customFields",
         (SELECT json_agg(json_build_object('id',v.id,'title',v.title,'options',v.options,'priceCents',v.price_cents,
            'available',(NOT v.track_inventory) OR (l.on_hand-l.reserved>0)) ORDER BY v.created_at)
          FROM product_variants v JOIN inventory_levels l ON l.variant_id=v.id WHERE v.product_id=p.id) AS variants,

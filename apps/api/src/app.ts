@@ -14,6 +14,8 @@ import { HttpError } from './lib/errors.js';
 import { registerCommerce } from './modules/commerce.js';
 import { registerImport } from './modules/import.js';
 import { registerMarketplace } from './modules/marketplace.js';
+import { registerRefunds } from './modules/refunds.js';
+import { registerShare } from './modules/share.js';
 const SLUG = /^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$/;
 
 const signupSchema = z.object({
@@ -219,11 +221,16 @@ export async function buildApp() {
   // ---- Admin foundation ----
   app.get('/api/admin/sellers', async (req) => {
     await platformPerm(req, 'sellers.read');
-    const { limit, offset } = z.object({ limit: z.coerce.number().int().min(1).max(100).default(25), offset: z.coerce.number().int().min(0).default(0) }).parse(req.query);
+    const { limit, offset, q } = z.object({ limit: z.coerce.number().int().min(1).max(100).default(25), offset: z.coerce.number().int().min(0).default(0), q: z.string().trim().max(80).optional() }).parse(req.query);
+    const like = q ? `%${q.replace(/[\\%_]/g, c => '\\' + c)}%` : null;
     return withTx({ platform: true }, async c => (await c.query(
-      `SELECT t.id, t.status, b.business_name, b.verification_status, s.slug, s.status AS store_status, t.created_at
+      `SELECT t.id, t.status, t.suspended_reason, b.business_name, b.category, b.verification_status, s.slug, s.status AS store_status, t.created_at,
+              (SELECT u.email FROM memberships m JOIN users u ON u.id=m.user_id WHERE m.tenant_id=t.id AND m.role='owner' LIMIT 1) AS owner_email,
+              (SELECT count(*)::int FROM products p WHERE p.tenant_id=t.id AND p.status='active') AS active_products,
+              (SELECT count(*)::int FROM orders o WHERE o.tenant_id=t.id AND o.status IN ('paid','processing','ready','shipped','completed')) AS paid_orders
        FROM tenants t JOIN businesses b ON b.tenant_id=t.id LEFT JOIN stores s ON s.tenant_id=t.id
-       ORDER BY t.created_at DESC LIMIT $1 OFFSET $2`, [limit, offset])).rows);
+       WHERE ($3::text IS NULL OR b.business_name ILIKE $3 ESCAPE '\\' OR s.slug ILIKE $3 ESCAPE '\\')
+       ORDER BY t.created_at DESC LIMIT $1 OFFSET $2`, [limit, offset, like])).rows);
   });
 
   app.post('/api/admin/sellers/:id/suspend', async (req) => {
@@ -254,6 +261,56 @@ export async function buildApp() {
     });
   });
 
+  app.get('/api/admin/me', async (req) => {
+    await authenticate(req);
+    const r = await withTx({ platform: true }, async c => (await c.query(
+      `SELECT ps.role_key AS role, coalesce(array_agg(p.permission ORDER BY p.permission) FILTER (WHERE p.permission IS NOT NULL), '{}') AS permissions
+       FROM platform_staff ps LEFT JOIN platform_role_permissions p ON p.role_key=ps.role_key WHERE ps.user_id=$1 GROUP BY ps.role_key`, [req.user!.id])).rows[0]);
+    if (!r) throw new HttpError(403, 'forbidden');
+    return { ...r, email: req.user!.email };
+  });
+
+  app.get('/api/admin/overview', async (req) => {
+    await platformPerm(req, 'sellers.read');
+    return withTx({ platform: true }, async c => {
+      const n = async (sql: string) => Number((await c.query(sql)).rows[0].n);
+      const counted = `status IN ('paid','processing','ready','shipped','completed')`;
+      return {
+        sellers: { total: await n('SELECT count(*) n FROM tenants'), active: await n(`SELECT count(*) n FROM tenants WHERE status='active'`), suspended: await n(`SELECT count(*) n FROM tenants WHERE status='suspended'`) },
+        publishedStores: await n(`SELECT count(*) n FROM stores WHERE status='published'`), activeProducts: await n(`SELECT count(*) n FROM products WHERE status='active'`),
+        paidOrders: await n(`SELECT count(*) n FROM orders WHERE ${counted}`), gmvCents: await n(`SELECT coalesce(sum(total_cents),0) n FROM orders WHERE ${counted}`),
+        platformFeesCents: await n(`SELECT coalesce(-sum(amount_cents) FILTER (WHERE account='platform_fee'),0) n FROM ledger_entries`),
+        refundsCents: await n('SELECT coalesce(sum(amount_cents),0) n FROM refunds'),
+        unresolvedUnfulfilledPayments: await n('SELECT count(*) n FROM payments WHERE needs_refund AND refund_resolved_at IS NULL'),
+        note: 'Figures are in each seller\'s currency summed as-is; all current stores use CAD.',
+      };
+    });
+  });
+
+  app.get('/api/admin/plans', async (req) => {
+    await platformPerm(req, 'sellers.read');
+    return withTx({ platform: true }, async c => (await c.query('SELECT code,name,price_monthly_cents,price_annual_cents,transaction_fee_bps,limits,features,trial_days,sort_order FROM plans ORDER BY sort_order, code')).rows);
+  });
+
+  // Featured maker on the marketplace home: an editorial choice, never purchasable by plan.
+  app.get('/api/admin/featured', async (req) => {
+    await platformPerm(req, 'sellers.read');
+    return withTx({ platform: true }, async c => ({ slug: (await c.query(`SELECT value->>'slug' AS slug FROM platform_settings WHERE key='featured_store'`)).rows[0]?.slug ?? null }));
+  });
+  app.put('/api/admin/featured', async (req) => {
+    await platformPerm(req, 'settings.write');
+    const b = z.object({ slug: z.string().regex(SLUG).nullable(), reason: z.string().trim().min(5).max(300) }).strict().parse(req.body);
+    return withTx({ platform: true }, async c => {
+      if (b.slug) { const ok = (await c.query(`SELECT 1 FROM stores s JOIN tenants t ON t.id=s.tenant_id WHERE s.slug=$1 AND s.status='published' AND t.status='active'`, [b.slug])).rowCount;
+        if (!ok) throw new HttpError(422, 'store_not_publishable'); }
+      const prev = (await c.query(`SELECT value FROM platform_settings WHERE key='featured_store'`)).rows[0]?.value ?? null;
+      if (b.slug) await c.query(`INSERT INTO platform_settings(key,value) VALUES ('featured_store',$1) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value, updated_at=now()`, [JSON.stringify({ slug: b.slug })]);
+      else await c.query(`DELETE FROM platform_settings WHERE key='featured_store'`);
+      await audit(c, { actor: req.user!.id, action: 'marketplace.featured', entityType: 'setting', entityId: 'featured_store', prev, next: b.slug ? { slug: b.slug } : null, reason: b.reason, ip: req.ip });
+      return { slug: b.slug };
+    });
+  });
+
   app.get('/api/admin/audit', async (req) => {
     await platformPerm(req, 'audit.read');
     return withTx({ platform: true }, async c => (await c.query('SELECT * FROM audit_logs ORDER BY id DESC LIMIT 100')).rows);
@@ -280,6 +337,8 @@ export async function buildApp() {
   registerCommerce(app, { tenantCtx });
   registerImport(app, { tenantCtx });
   registerMarketplace(app);
+  registerRefunds(app, { tenantCtx });
+  registerShare(app, { tenantCtx });
 
   return app;
 }

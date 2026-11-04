@@ -58,7 +58,7 @@ const STORES = [
       { n: 'Angled Phone Stand', d: 'A sturdy stand for desks and nightstands. Printed on demand in your colour.', mto: true, a: { material: 'PLA+', layer_height: '0.2 mm', print_time: '3 hours', fits: 'Phones up to 7 in' }, art: ['stand', 'ink', 'ink'], v: [['Black', 1800, 450, 0], ['White', 1800, 450, 0], ['Blue', 1900, 480, 0]] },
       { n: 'Desk Organizer', d: 'Three compartments for pens, cards and cables.', mto: true, a: { material: 'PETG', print_time: '9 hours', dimensions: '180 × 120 × 70 mm' }, art: ['organizer', 'night', 'night'], v: [['Graphite', 3800, 900, 0], ['Forest', 3800, 900, 0]] },
       { n: 'Self-watering Planter', d: 'A two-part planter with a hidden reservoir.', mto: true, a: { material: 'PLA', print_time: '6 hours', capacity: '350 ml' }, art: ['planter', 'clay', 'clay'], v: [['Small', 2400, 600, 0], ['Large', 3600, 950, 0]] },
-      { n: 'Desk Name Plate', d: 'Bold 3D-lettered plate for a desk or door. Printed to order in PLA.', mto: true, a: { material: 'PLA', production_time: '3 to 5 days' }, art: ['nameplate', 'night', 'plum'], v: [['Standard', 2800, 700, 0]] },
+      { n: 'Desk Name Plate', d: 'Bold 3D-lettered plate for a desk or door. Printed to order in PLA.', mto: true, a: { material: 'PLA', production_time: '3 to 5 days' }, cf: [{ label: 'Name to print', type: 'text', required: true, maxLength: 12 }, { label: 'Colour', type: 'select', required: true, options: ['Black', 'White', 'Blue'] }, { label: 'Reference sketch', type: 'image' }], art: ['nameplate', 'night', 'plum'], v: [['Standard', 2800, 700, 0]] },
       { n: 'Cable Holder Set', d: 'Keep chargers tidy. Pack of four.', a: { material: 'TPU', pack: 4 }, art: ['organizer', 'steel', 'steel'], v: [['Pack of 4', 1200, 260, 40]] },
     ] },
   { slug: 'atelier-nova', name: 'Atelier Nova', category: 'Jewellery', city: 'Vancouver', region: 'BC', tagline: 'Handmade jewellery in recycled gold and silver.', theme: { accent: '#b0762f', hero: 'dark', layout: 'spacious' }, fee: 800,
@@ -111,7 +111,7 @@ async function call(path, { method = 'GET', body, cookie, raw, type } = {}) {
     await call('/api/seller/business', { method: 'PATCH', cookie, body: { category: s.category, description: s.tagline, city: s.city, region: s.region, contactPhone: '403-555-0100', fulfilment: { pickup: true, delivery: true, shipping: false } } });
     await call('/api/seller/store', { method: 'PATCH', cookie, body: { tagline: s.tagline, deliveryFeeCents: s.fee, theme: s.theme } });
     for (const p of s.products) {
-      const body = { name: p.n, description: p.d, brand: p.b, attributes: p.a, madeToOrder: !!p.mto, status: 'active', variants: p.v.map(([title, price, cost, stock]) => ({ title, priceCents: price, costCents: cost, stock })) };
+      const body = { name: p.n, description: p.d, brand: p.b, attributes: p.a, madeToOrder: !!p.mto, customFields: p.cf ?? [], status: 'active', variants: p.v.map(([title, price, cost, stock]) => ({ title, priceCents: price, costCents: cost, stock })) };
       const r = await call('/api/seller/products', { method: 'POST', cookie, body });
       if (r.res.status !== 201) { console.log('product failed', p.n, r.data); continue; }
       for (const pal of [p.art[1], p.art[2]]) {

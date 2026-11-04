@@ -1,22 +1,27 @@
 import { FormEvent, useEffect, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api, ApiError, errorText, money } from '../api';
 import { Alert, Badge, Empty, Field } from '../ui';
 import { PCard } from './Market';
 
-type CartLine = { variantId: string; name: string; title: string; priceCents: number; qty: number };
-const key = (slug: string) => `eazy_cart_${slug}`;
 /** Marks customer-facing pages so the refined public theme applies (body.pub). */
 export function usePub() { useEffect(() => { document.body.classList.add('pub'); return () => document.body.classList.remove('pub'); }, []); }
 
+export type CartLine = { key: string; variantId: string; name: string; title: string; priceCents: number; qty: number; custom?: Record<string, string>; customView?: { label: string; value: string; type: string }[] };
+const key = (slug: string) => `eazy_cart_${slug}`;
+const lineKey = (variantId: string, custom?: Record<string, string>) => variantId + JSON.stringify(Object.entries(custom ?? {}).sort());
+/** Remember which share link brought the shopper (feeds the seller's sales-by-channel report). */
+export function rememberSource(slug: string, src: string | null) { try { if (src && /^[a-z0-9_-]{1,40}$/.test(src)) sessionStorage.setItem(`eazy_src_${slug}`, src); } catch { /* storage unavailable */ } }
+export function recalledSource(slug: string): string | undefined { try { return sessionStorage.getItem(`eazy_src_${slug}`) ?? undefined; } catch { return undefined; } }
+
 export function useCart(slug: string) {
-  const read = (): CartLine[] => { try { return JSON.parse(localStorage.getItem(key(slug)) ?? '[]'); } catch { return []; } };
+  const read = (): CartLine[] => { try { return (JSON.parse(localStorage.getItem(key(slug)) ?? '[]') as CartLine[]).map(l => ({ ...l, key: l.key ?? lineKey(l.variantId, l.custom) })); } catch { return []; } };
   const [lines, setLines] = useState<CartLine[]>(read);
   const save = (l: CartLine[]) => { setLines(l); try { localStorage.setItem(key(slug), JSON.stringify(l)); } catch { /* storage unavailable: cart lives in memory */ } };
   return {
     lines, subtotal: lines.reduce((n, l) => n + l.priceCents * l.qty, 0), count: lines.reduce((n, l) => n + l.qty, 0),
-    add: (l: Omit<CartLine, 'qty'>) => save(lines.some(x => x.variantId === l.variantId) ? lines.map(x => x.variantId === l.variantId ? { ...x, qty: Math.min(x.qty + 1, 100) } : x) : [...lines, { ...l, qty: 1 }]),
-    setQty: (id: string, q: number) => save(q <= 0 ? lines.filter(x => x.variantId !== id) : lines.map(x => x.variantId === id ? { ...x, qty: Math.min(q, 100) } : x)),
+    add: (l: Omit<CartLine, 'qty' | 'key'>) => { const k = lineKey(l.variantId, l.custom); save(lines.some(x => x.key === k) ? lines.map(x => x.key === k ? { ...x, qty: Math.min(x.qty + 1, 100) } : x) : [...lines, { ...l, key: k, qty: 1 }]); },
+    setQty: (k: string, q: number) => save(q <= 0 ? lines.filter(x => x.key !== k) : lines.map(x => x.key === k ? { ...x, qty: Math.min(q, 100) } : x)),
     clear: () => save([]),
   };
 }
@@ -29,7 +34,7 @@ export function useStore(slug: string) {
 
 export function Storefront() {
   usePub();
-  const { slug = '' } = useParams(); const { store, missing } = useStore(slug); const cart = useCart(slug);
+  const { slug = '' } = useParams(); const [sp] = useSearchParams(); useEffect(() => rememberSource(slug, sp.get('src')), [slug, sp]); const { store, missing } = useStore(slug); const cart = useCart(slug);
   const [products, setProducts] = useState<any[] | null>(null);
   useEffect(() => { if (store) api(`/api/public/stores/${slug}/products?limit=100`).then(setProducts); }, [store, slug]);
   if (missing) return <div className="wrap"><h1>Store not found</h1><p>This store doesn't exist or isn't open yet.</p></div>;
@@ -75,7 +80,7 @@ export function StoreCheckout() {
   async function submit(e: FormEvent) {
     e.preventDefault(); setErr(''); setBusy(true);
     try {
-      const body: any = { items: cart.lines.map(l => ({ variantId: l.variantId, quantity: l.qty })), email: f.email, name: f.name, fulfilment: f.fulfilment };
+      const body: any = { items: cart.lines.map(l => ({ variantId: l.variantId, quantity: l.qty, ...(l.custom && Object.keys(l.custom).length ? { customizations: l.custom } : {}) })), email: f.email, name: f.name, fulfilment: f.fulfilment, ...(recalledSource(slug) ? { source: recalledSource(slug) } : {}) };
       if (f.fulfilment === 'delivery') body.address = { line1: f.line1, city: f.city, region: f.region, postalCode: f.postalCode, country: 'CA' };
       setPlaced(await api(`/api/public/stores/${slug}/checkout`, { body }));
     } catch (x) { setErr(errorText(x)); } finally { setBusy(false); }
@@ -108,10 +113,11 @@ export function StoreCheckout() {
     <main className="wrap" style={{ maxWidth: 640 }}>
       <h1 style={{ marginTop: 32 }}>Your cart</h1>
       {!cart.lines.length ? <Empty title="Your cart is empty"><Link to={`/store/${slug}`}>Keep shopping</Link></Empty> : <>
-        <section className="card"><ul className="list">{cart.lines.map(l => <li key={l.variantId} className="row spread">
-          <span>{l.name}{l.title !== 'Default' ? ` (${l.title})` : ''}<br /><span className="muted small">{money(l.priceCents, store.currency)} each</span></span>
-          <span className="qty"><button className="secondary" aria-label={`Decrease ${l.name}`} onClick={() => cart.setQty(l.variantId, l.qty - 1)}>−</button>
-            <span aria-live="polite">{l.qty}</span><button className="secondary" aria-label={`Increase ${l.name}`} onClick={() => cart.setQty(l.variantId, l.qty + 1)}>+</button></span></li>)}</ul>
+        <section className="card"><ul className="list">{cart.lines.map(l => <li key={l.key} className="row spread">
+          <span>{l.name}{l.title !== 'Default' ? ` (${l.title})` : ''}<br /><span className="muted small">{money(l.priceCents, store.currency)} each</span>
+            {l.customView?.map(v => <span key={v.label} className="muted small" style={{ display: 'block' }}>{v.label}: {v.type === 'image' ? 'photo attached' : v.value}</span>)}</span>
+          <span className="qty"><button className="secondary" aria-label={`Decrease ${l.name}`} onClick={() => cart.setQty(l.key, l.qty - 1)}>−</button>
+            <span aria-live="polite">{l.qty}</span><button className="secondary" aria-label={`Increase ${l.name}`} onClick={() => cart.setQty(l.key, l.qty + 1)}>+</button></span></li>)}</ul>
           <div className="sumline"><span>Subtotal</span><span>{money(cart.subtotal, store.currency)}</span></div>
           <div className="sumline"><span>Delivery</span><span>{money(shipping, store.currency)}</span></div>
           <div className="sumline total"><span>Total</span><span>{money(cart.subtotal + shipping, store.currency)}</span></div>
@@ -143,7 +149,8 @@ export function OrderStatus() {
       {o.status === 'paid' && <Alert kind="ok">Thank you! Your order is confirmed. (Simulated payment in this development build.)</Alert>}
       <section className="card"><div className="row spread"><b>Status</b><Badge s={o.status} /></div>
         <table><tbody>{o.items.map((i: any, n: number) => <tr key={n}><td>{i.name} × {i.quantity}</td><td>{money(i.unit_price_cents * i.quantity, o.currency)}</td></tr>)}
-          <tr><td>Delivery</td><td>{money(o.shipping_cents, o.currency)}</td></tr><tr><td><b>Total</b></td><td><b>{money(o.total_cents, o.currency)}</b></td></tr></tbody></table>
+          <tr><td>Delivery</td><td>{money(o.shipping_cents, o.currency)}</td></tr><tr><td><b>Total</b></td><td><b>{money(o.total_cents, o.currency)}</b></td></tr>
+          {o.refunded_cents > 0 && <tr><td>Refunded</td><td>−{money(o.refunded_cents, o.currency)}</td></tr>}</tbody></table>
         <p className="muted small">Bookmark this page to follow your order.</p></section></>}
   </main>;
 }

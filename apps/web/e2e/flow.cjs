@@ -19,8 +19,11 @@ const id = Date.now().toString(36);
 const slug = `e2e-${id}`;
 
 async function noHScroll(page, label) {
-  const o = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
-  assert.ok(o <= 0, `${label}: horizontal overflow of ${o}px`);
+  // On phone emulation the browser WIDENS innerWidth when content overflows, so "scrollWidth - innerWidth" is always 0 there.
+  // Compare against the real device width instead.
+  const expected = page.viewportSize().width;
+  const m = await page.evaluate(() => ({ iw: window.innerWidth, sw: document.documentElement.scrollWidth }));
+  assert.ok(m.iw === expected && m.sw <= expected, `${label}: layout is ${m.iw}px wide (content ${m.sw}px) on a ${expected}px screen`);
 }
 
 (async () => {

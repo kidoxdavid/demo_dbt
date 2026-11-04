@@ -1,6 +1,6 @@
 # EazyStores: product and technical plan (living document)
 
-Status: Phase 1 (foundation), a thin Phase 3 commerce slice, a web UI, product images, CSV import, a customer marketplace, and per-store theming are implemented. Payments are still simulated. Items marked Built are real and tested; everything else is plan.
+Status: Phase 1 (foundation), a thin Phase 3 commerce slice, a web UI, product images, CSV import, a customer marketplace, per-store theming, refunds, customer customisation, share links/QR and an admin area are implemented. Payments are still simulated. Items marked Built are real and tested; everything else is plan.
 Last updated: 2026-11-04
 
 ## 0. Where I challenge the brief
@@ -209,3 +209,43 @@ Edge cases covered by tests: six buyers racing for one unit (exactly one wins); 
 **Update:** the seller dashboard (`body.seller`), `/sell`, signup and login are now restyled to the same family (warm neutrals, hairlines, serif titles and key numbers, normal-case buttons for working screens).
 
 **Open:** font choice awaits the owner's decision (one-line change, currently Newsreader); the featured maker is simply the newest store (needs curation controls in admin); category tiles use the newest store's first photo; placeholder illustrations stand in for photography.
+
+## Refunds, customisation, share links and admin: report
+
+**Tests:** 83 API integration tests (8 files) and two browser end-to-end flows (`e2e/flow.cjs`, `e2e/flow2.cjs`) at 375/390px and 1280px, all passing.
+
+### Refunds (`modules/refunds.ts`, migration 007)
+- Full and partial refunds by owner/manager. Aggregate refunds can never exceed the order total (row lock plus a database CHECK); two simultaneous refunds that together exceed it have exactly one winner (tested).
+- Ledger stays balanced: cash out, platform fee returned pro rata (floor), seller payable reduced. Refund records are append-only.
+- Idempotent on a client key (a double click or retry cannot refund twice); a key reused on another order is rejected.
+- Restocking is offered only for a whole-order refund (a partial refund cannot say which units came back).
+- Payments that succeeded after stock was gone (`needs_refund`) are listed on the seller overview and can be refunded once.
+- Dashboard: partial refunds reduce profit; fully refunded orders drop out of sales. Staff-role members can fulfil but not refund.
+- **Limits:** the provider call runs inside the DB transaction holding the order lock. Acceptable for the simulated adapter; a real provider needs record-intent-first plus reconciliation. No chargeback or dispute handling. Fully refunded orders drop out of COGS even if goods were not restocked (stated in the dashboard notes).
+
+### Customisation (EazyCustom) (`lib/custom.ts`, `modules/commerce.ts`)
+- Sellers define up to 10 customer inputs per product: short text, long text, choice list, reference photo; each optionally required.
+- The server validates every checkout answer against the product's current fields (required, length, allowed choices, unknown keys). Lines with different answers stay separate; stock is reserved per variant in total.
+- The order item stores a snapshot of question and answer, so later product edits cannot rewrite history.
+- Customer photos go to private storage (magic-byte check, 5 MB cap, rate limited), are never served by the public media route, can be viewed only by the owning seller, can be attached to one order only (atomic claim; concurrent reuse has a single winner), and expire after 24 hours if never ordered.
+- **Not built:** custom pricing, quotes, customer approval workflows, file types other than images, date pickers, per-option price changes.
+
+### Share links and QR (EazyLink) (`modules/share.ts`)
+- Channel-tagged store and product links (Instagram, WhatsApp, Facebook, TikTok, email, QR) and SVG QR codes. QR is generated only for the seller's own store/product paths (not an arbitrary-URL service).
+- The tag travels from the link through the cart to the order; the overview shows sales by channel.
+- Set `PUBLIC_URL` in production so links and QR codes point at the real domain (default is the dev origin).
+- **Not built:** discount links, embeddable widgets and buy buttons, link click analytics (only orders are attributed).
+
+### Admin (`/admin`)
+- Overview figures, seller search with owner/products/orders, suspend and reinstate (reason required, store hidden, audit entry), plan editing (reason required, old and new values audited), featured maker (editorial, never purchasable; needs `settings.write` and a reason; a suspended or empty store silently stops leading), audit log viewer.
+- Staff accounts are created with `npm run make-staff -- <email> <role> [password]`. The UI hides actions a role cannot do; the server enforces every permission.
+- **Not built:** verification review queue, product moderation, payout and dispute tools, staff management screens, **staff MFA (must exist before real launch)**, subscription billing.
+
+### Found and fixed during this round
+- The browser overflow check passed on phones when it should not have: in phone emulation the layout width widens to fit overflow, so `scrollWidth - innerWidth` is always 0. The check now compares against the real device width, and all pages were re-verified.
+- A real mobile bug it exposed: screen-reader-only text in a table header was absolutely positioned outside its scroll container and widened the whole page. Fixed with a positioned container.
+- Product pages with zero or one photo squeezed the main image into the 76px thumbnail column.
+- Plan ordering sorted Enterprise (price 0, custom) before Starter; plans now have an explicit sort order.
+- Public product detail did not include custom fields (only the store list did).
+- Test-quality fixes: a vacuous staff-role test was replaced with a real one; a helper that fired a stray extra checkout was removed; a tie in channel ordering made a result nondeterministic and is now deterministic.
+- Deleting a seller that has orders is blocked by the append-only ledger (by design); an anonymise-and-retain closure process is still needed.

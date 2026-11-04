@@ -24,3 +24,15 @@ node e2e/flow.cjs ./shots                      # browser end-to-end test (needs 
 
 Payments are **simulated** in development (`PAYMENT_PROVIDER=simulated`, the default outside production). Nothing moves real money.
 In production set `ALLOWED_ORIGINS` to the public web origin.
+
+## Admin and end-to-end tests
+
+```bash
+cd apps/api && npm run make-staff -- you@example.com super_admin 'a-long-password'   # creates/promotes a platform staff user
+# log in at /login: staff accounts without a store are sent to /admin
+cd apps/web
+node e2e/seed-demo.cjs                  # six demo stores through the real API (dev only)
+node e2e/flow.cjs ./shots               # seller + customer journey
+node e2e/flow2.cjs ./shots              # customisation, share/QR, refunds, admin (needs e2e-admin@eazystores.test staff user)
+```
+Set `PUBLIC_URL` (share links and QR codes) and `ALLOWED_ORIGINS` in production.

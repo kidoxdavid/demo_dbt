@@ -2,12 +2,12 @@ import { ChangeEvent, FormEvent, useCallback, useEffect, useRef, useState } from
 import { Link, NavLink, Route, Routes, useNavigate } from 'react-router-dom';
 import { api, ApiError, errorText, money, toCents } from '../api';
 import { Alert, Badge, Empty, Field } from '../ui';
-import { IcoBox, IcoCog, IcoHome, IcoReceipt, IcoUpload } from '../icons';
+import { IcoBox, IcoCog, IcoHome, IcoLink, IcoReceipt, IcoUpload } from '../icons';
 
 type Biz = { business: any; store: any; role: string };
 const NAV = [
   { to: '/dashboard', label: 'Overview', Icon: IcoHome, end: true }, { to: '/dashboard/products', label: 'Products', Icon: IcoBox },
-  { to: '/dashboard/orders', label: 'Orders', Icon: IcoReceipt }, { to: '/dashboard/import', label: 'Import', Icon: IcoUpload },
+  { to: '/dashboard/orders', label: 'Orders', Icon: IcoReceipt }, { to: '/dashboard/share', label: 'Share', Icon: IcoLink }, { to: '/dashboard/import', label: 'Import', Icon: IcoUpload },
   { to: '/dashboard/settings', label: 'Settings', Icon: IcoCog },
 ];
 
@@ -42,6 +42,7 @@ export function SellerShell() {
           <Route index element={<Overview data={data} />} />
           <Route path="products" element={<Products />} />
           <Route path="orders" element={<Orders />} />
+          <Route path="share" element={<SharePage />} />
           <Route path="import" element={<ImportPage />} />
           <Route path="settings" element={<Settings data={data} reload={reload} />} />
         </Routes>
@@ -54,8 +55,10 @@ export function SellerShell() {
 }
 
 function Overview({ data }: { data: Biz }) {
-  const [d, setD] = useState<any>(null); const [pc, setPc] = useState<number | null>(null);
-  useEffect(() => { api('/api/seller/dashboard').then(setD).catch(() => {}); api('/api/seller/products?limit=1').then(r => setPc(r.length)).catch(() => {}); }, []);
+  const [d, setD] = useState<any>(null); const [pc, setPc] = useState<number | null>(null); const [att, setAtt] = useState<any[]>([]); const [attMsg, setAttMsg] = useState('');
+  const loadAtt = () => api('/api/seller/attention').then(r => setAtt(r.unfulfilledPayments)).catch(() => {});
+  async function refundUnfulfilled(id: string) { setAttMsg(''); try { await api(`/api/seller/payments/${id}/refund-unfulfilled`, { method: 'POST', body: {} }); setAttMsg('Refund issued to the customer.'); loadAtt(); } catch (e) { setAttMsg(errorText(e)); } }
+  useEffect(() => { loadAtt(); api('/api/seller/dashboard').then(setD).catch(() => {}); api('/api/seller/products?limit=1').then(r => setPc(r.length)).catch(() => {}); }, []);
   const published = data.store.status === 'published';
   const steps = [
     { done: !!(data.business.category && data.business.description), label: 'Describe your business', to: '/dashboard/settings' },
@@ -67,6 +70,9 @@ function Overview({ data }: { data: Biz }) {
     <div className="pagehead"><div><h1>Overview</h1><p>{data.business.business_name}</p></div></div>
     {!steps.every(s => s.done) && <section className="card"><div className="eyebrow">Get started</div><ol style={{ margin: '10px 0 0', paddingLeft: 20, lineHeight: 2 }}>
       {steps.map(s => <li key={s.label}>{s.done ? <span className="muted"><s>{s.label}</s> ✓</span> : <Link to={s.to}>{s.label}</Link>}</li>)}</ol></section>}
+    {att.length > 0 && <Alert kind="warn"><b>{att.length} payment{att.length > 1 ? 's' : ''} need{att.length > 1 ? '' : 's'} a refund.</b> The customer paid, but the item sold out while they were checking out, so the order could not be fulfilled.
+      <ul className="list" style={{ marginTop: 8 }}>{att.map(a => <li key={a.id} className="row spread"><span>Order #{a.orderNumber} · {a.customerName} · {money(a.amount_cents, a.currency)}</span><button className="sm" onClick={() => refundUnfulfilled(a.id)}>Refund customer</button></li>)}</ul></Alert>}
+    {attMsg && <Alert kind="ok">{attMsg}</Alert>}
     {published && <Alert kind="ok">Your store is live at <Link to={`/store/${data.store.slug}`}>/store/{data.store.slug}</Link>. Share it anywhere.</Alert>}
     {d && <>
       <div className="grid">
@@ -76,7 +82,10 @@ function Overview({ data }: { data: Biz }) {
         <div className="card stat">{unknown(d.grossProfitCents)}<div className="l">Gross profit{d.grossProfitIsPartial && d.grossProfitCents != null ? ' (partial)' : ''}</div></div>
         <div className="card stat"><div className="n">{money(d.platformFeesCents)}</div><div className="l">EazyStores fees</div></div>
         <div className="card stat"><div className="n">{money(d.shippingCollectedCents)}</div><div className="l">Delivery fees collected</div></div>
+        {d.refundsCents > 0 && <div className="card stat"><div className="n">{money(d.refundsCents)}</div><div className="l">Refunds on open sales</div></div>}
       </div>
+      {d.bySource?.length > 0 && <section className="card"><h3>Sales by channel</h3><p className="muted small">Where your paid orders came from. Share links on the Share page are tagged automatically.</p>
+        <table><thead><tr><th>Channel</th><th>Orders</th><th>Gross sales</th></tr></thead><tbody>{d.bySource.map((r: any) => <tr key={r.source}><td style={{ textTransform: 'capitalize' }}>{r.source}</td><td>{r.orders}</td><td>{money(r.grossSalesCents)}</td></tr>)}</tbody></table></section>}
       {d.grossProfitIsPartial && <Alert kind="warn">{d.lineItemsMissingCost} sold item(s) have no cost recorded, so profit is {d.grossProfitCents == null ? 'unknown' : 'only partly known'}. Add costs on the Products page.</Alert>}
       <ul className="muted small">{d.notes.map((n: string) => <li key={n}>{n}</li>)}</ul>
     </>}
@@ -148,11 +157,14 @@ function Products() {
 function ProductForm({ onDone }: { onDone: () => void }) {
   const [name, setName] = useState(''); const [description, setDescription] = useState(''); const [status, setStatus] = useState('active');
   const [vs, setVs] = useState<VRow[]>([blankV()]); const [err, setErr] = useState(''); const [busy, setBusy] = useState(false);
+  const [mto, setMto] = useState(false); const [cf, setCf] = useState<{ label: string; type: string; required: boolean; options: string }[]>([]);
+  const updCf = (i: number, k: string, v: string | boolean) => setCf(p => p.map((r, j) => j === i ? { ...r, [k]: v } : r));
   const upd = (i: number, k: keyof VRow, v: string) => setVs(p => p.map((r, j) => j === i ? { ...r, [k]: v } : r));
   async function submit(e: FormEvent) {
     e.preventDefault(); setErr(''); setBusy(true);
     try {
-      await api('/api/seller/products', { body: { name, description: description || undefined, status, variants: vs.map(v => ({
+      await api('/api/seller/products', { body: { name, description: description || undefined, status, madeToOrder: mto,
+        customFields: cf.filter(f => f.label.trim()).map(f => ({ label: f.label.trim(), type: f.type, required: f.required, ...(f.type === 'select' ? { options: f.options.split(',').map(o => o.trim()).filter(Boolean) } : {}) })), variants: vs.map(v => ({
         title: v.title || 'Default', priceCents: toCents(v.price), costCents: v.cost ? toCents(v.cost) : undefined, stock: parseInt(v.stock || '0', 10) })) } });
       onDone();
     } catch (x) { setErr(errorText(x)); } finally { setBusy(false); }
@@ -171,6 +183,16 @@ function ProductForm({ onDone }: { onDone: () => void }) {
     </div>)}
     <div className="row"><button type="button" className="secondary" onClick={() => setVs(p => [...p, blankV()])}>Add another option</button>
       {vs.length > 1 && <button type="button" className="danger" onClick={() => setVs(p => p.slice(0, -1))}>Remove last option</button>}</div>
+    <label className="check"><input type="checkbox" checked={mto} onChange={e => setMto(e.target.checked)} />Made to order (I make it after the customer orders, so stock is not tracked)</label>
+    <h3 style={{ marginTop: 16 }}>Customer options</h3>
+    <p className="muted small">Ask for what you need to make the item: a name, a date, a colour, a reference photo. Customers fill these in before they add to cart, and you see their answers on the order.</p>
+    {cf.map((f, i) => <div className="variant-row" key={i} style={{ gridTemplateColumns: '1fr' }}>
+      <Field label="Question or label">{id => <input id={id} maxLength={80} placeholder="e.g. Name to print" value={f.label} onChange={e => updCf(i, 'label', e.target.value)} />}</Field>
+      <Field label="Answer type">{id => <select id={id} value={f.type} onChange={e => updCf(i, 'type', e.target.value)}><option value="text">Short text</option><option value="textarea">Long text</option><option value="select">Choice list</option><option value="image">Photo upload</option></select>}</Field>
+      {f.type === 'select' && <Field label="Choices (separate with commas)">{id => <input id={id} placeholder="Black, White, Blue" value={f.options} onChange={e => updCf(i, 'options', e.target.value)} />}</Field>}
+      <label className="check"><input type="checkbox" checked={f.required} onChange={e => updCf(i, 'required', e.target.checked)} />Customer must answer</label>
+      <div><button type="button" className="danger sm" onClick={() => setCf(p => p.filter((_, j) => j !== i))}>Remove</button></div></div>)}
+    {cf.length < 10 && <p><button type="button" className="secondary" onClick={() => setCf(p => [...p, { label: '', type: 'text', required: false, options: '' }])}>Add a customer option</button></p>}
     <Field label="Visibility">{id => <select id={id} value={status} onChange={e => setStatus(e.target.value)}><option value="active">Visible in my store</option><option value="draft">Save as draft</option></select>}</Field>
     <p><button disabled={busy}>{busy ? 'Saving…' : 'Save product'}</button></p>
   </form>;
@@ -280,9 +302,11 @@ function Orders() {
     {open && <section className="card" aria-live="polite">
       <div className="row spread"><h2 style={{ margin: 0 }}>Order #{open.number}</h2><Badge s={open.status} /></div>
       <p>{open.customer_name} · {open.customer_email}<br />{open.fulfilment === 'delivery' && open.delivery_address ? `Deliver to: ${open.delivery_address.line1}, ${open.delivery_address.city} ${open.delivery_address.postalCode}` : 'Customer pickup'}</p>
-      <div className="table-scroll"><table><tbody>{open.items.map((i: any, n: number) => <tr key={n}><td>{i.name}{i.variant_title !== 'Default' ? ` (${i.variant_title})` : ''} × {i.quantity}</td><td>{money(i.unit_price_cents * i.quantity)}</td></tr>)}
+      <div className="table-scroll"><table><tbody>{open.items.map((i: any, n: number) => <tr key={n}><td>{i.name}{i.variant_title !== 'Default' ? ` (${i.variant_title})` : ''} × {i.quantity}
+        {i.custom_values?.length > 0 && <dl className="answers">{i.custom_values.map((v: any) => <div key={v.label}><dt>{v.label}</dt><dd>{v.type === 'image' ? <a href={`/api/seller/custom-uploads/${v.value}`} target="_blank" rel="noreferrer"><img src={`/api/seller/custom-uploads/${v.value}`} alt={`${v.label} from customer`} width="72" height="72" style={{ objectFit: 'cover', display: 'block' }} /></a> : v.value}</dd></div>)}</dl>}</td><td>{money(i.unit_price_cents * i.quantity)}</td></tr>)}
         <tr><td>Delivery</td><td>{money(open.shipping_cents)}</td></tr><tr><td><b>Total</b></td><td><b>{money(open.total_cents)}</b></td></tr></tbody></table></div>
       <div className="row" style={{ marginTop: 12 }}>{(NEXT[open.status] ?? []).map(n => <button key={n.to} onClick={() => move(open.id, n.to)}>{n.label}</button>)}</div>
+      <RefundPanel order={open} onDone={() => { show(open.id); load(); }} onError={setErr} />
       {open.status === 'awaiting_payment' && <p className="muted small">Waiting for the customer to pay. Stock is held until the reservation expires.</p>}
     </section>}
   </>;
@@ -359,4 +383,65 @@ function Appearance({ data, reload }: { data: Biz; reload: () => void }) {
     </div>
     <p><button onClick={save}>Save appearance</button></p>
   </section>;
+}
+
+const REFUNDABLE = ['paid', 'processing', 'ready', 'shipped', 'completed'];
+function RefundPanel({ order, onDone, onError }: { order: any; onDone: () => void; onError: (m: string) => void }) {
+  const remaining = order.total_cents - order.refunded_cents;
+  const [amount, setAmount] = useState((remaining / 100).toFixed(2)); const [reason, setReason] = useState(''); const [restock, setRestock] = useState(false); const [busy, setBusy] = useState(false);
+  const [key, setKey] = useState(() => crypto.randomUUID());
+  useEffect(() => { setAmount((remaining / 100).toFixed(2)); setReason(''); setRestock(false); setKey(crypto.randomUUID()); }, [order.id, remaining]);
+  const cents = toCents(amount); const isFull = cents === remaining && order.refunded_cents === 0;
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    if (!window.confirm(`Refund ${money(cents)} to ${order.customer_name}? This cannot be undone.`)) return;
+    setBusy(true); onError('');
+    try { await api(`/api/seller/orders/${order.id}/refunds`, { body: { amountCents: cents, reason, restock: restock && isFull, key } }); onDone(); } catch (x) { onError(errorText(x)); } finally { setBusy(false); }
+  }
+  return <div style={{ marginTop: 18, borderTop: '1px solid var(--line)', paddingTop: 14 }}>
+    <h3>Refunds</h3>
+    {order.refunds?.length > 0 && <ul className="list">{order.refunds.map((r: any) => <li key={r.id} className="row spread"><span>{money(r.amount_cents)} · {r.reason}{r.restocked ? ' · restocked' : ''}</span><span className="muted small">{new Date(r.created_at).toLocaleDateString()}</span></li>)}</ul>}
+    {REFUNDABLE.includes(order.status) && remaining > 0 ? <form onSubmit={submit}>
+      <p className="muted small">Refunded so far {money(order.refunded_cents)} · can still refund up to {money(remaining)}.</p>
+      <div className="row" style={{ alignItems: 'flex-start' }}>
+        <div style={{ flex: '1 1 140px' }}><Field label="Amount ($)">{id => <input id={id} required inputMode="decimal" pattern="\d+(\.\d{1,2})?" value={amount} onChange={e => setAmount(e.target.value)} />}</Field></div>
+        <div style={{ flex: '3 1 240px' }}><Field label="Reason (kept in your records)">{id => <input id={id} required minLength={3} maxLength={300} value={reason} onChange={e => setReason(e.target.value)} />}</Field></div>
+      </div>
+      <label className="check"><input type="checkbox" disabled={!isFull} checked={restock && isFull} onChange={e => setRestock(e.target.checked)} />Put the items back in stock{!isFull ? ' (only when refunding the whole order)' : ''}</label>
+      <p><button className="danger" disabled={busy || cents <= 0 || cents > remaining}>{busy ? 'Refunding…' : `Refund ${money(cents > 0 ? cents : 0)}`}</button></p>
+    </form> : order.status === 'refunded' ? <p className="muted small">This order has been fully refunded.</p> : <p className="muted small">Refunds are available once an order is paid.</p>}
+  </div>;
+}
+
+function SharePage() {
+  const [d, setD] = useState<any>(null); const [src, setSrc] = useState('instagram'); const [copied, setCopied] = useState(''); const [err, setErr] = useState('');
+  useEffect(() => { api('/api/seller/share').then(setD).catch(e => setErr(errorText(e))); }, []);
+  if (err) return <Alert kind="err">{err}</Alert>;
+  if (!d) return <p className="muted">Loading…</p>;
+  const live = d.store.status === 'published';
+  const url = (path: string) => `${d.baseUrl}${path}?src=${src}`;
+  const qr = (path: string) => `/api/seller/qr?path=${encodeURIComponent(path)}&src=${src}`;
+  const copy = async (text: string, id: string) => { try { await navigator.clipboard.writeText(text); setCopied(id); setTimeout(() => setCopied(''), 2000); } catch { setErr('Copy is not available here. Select the link and copy it.'); } };
+  const wa = (path: string, name: string) => `https://wa.me/?text=${encodeURIComponent(`${name}: ${url(path)}`)}`;
+  return <>
+    <div className="pagehead"><div><h1>Share</h1><p>Links and QR codes that take people straight to your store or a product.</p></div></div>
+    {!live && <Alert kind="warn">Your store is not published yet, so these links will not work for customers. Publish it in Settings first.</Alert>}
+    <section className="card">
+      <Field label="Where will you share it?" hint="Each channel gets its own tagged link, so the Overview can show which one brings you orders.">
+        {id => <select id={id} value={src} onChange={e => setSrc(e.target.value)}>{d.sources.map((x: any) => <option key={x.key} value={x.key}>{x.label}</option>)}</select>}</Field>
+      <h3 style={{ marginTop: 20 }}>Your store</h3>
+      <div className="row"><input readOnly aria-label="Store link" value={url(d.store.path)} onFocus={e => e.currentTarget.select()} />
+        <button className="secondary" onClick={() => copy(url(d.store.path), 'store')}>{copied === 'store' ? 'Copied' : 'Copy link'}</button>
+        <a className="btn secondary" href={wa(d.store.path, d.store.name)} target="_blank" rel="noreferrer">Share on WhatsApp</a></div>
+      {live && <div className="row" style={{ marginTop: 16, alignItems: 'flex-start' }}>
+        <img src={qr(d.store.path)} alt={`QR code for ${d.store.name}`} width="160" height="160" style={{ border: '1px solid var(--line)', background: '#fff' }} />
+        <div><p className="muted small" style={{ marginTop: 0 }}>Print it for your shop, packaging or business cards.</p>
+          <a className="btn secondary sm" href={qr(d.store.path)} download={`${d.store.slug}-qr.svg`}>Download QR code</a></div></div>}
+    </section>
+    {d.products.length > 0 && <section className="card"><h3>Products</h3>
+      <ul className="list">{d.products.map((p: any) => <li key={p.id} className="row spread"><span>{p.name}</span>
+        <span className="row"><button className="secondary sm" onClick={() => copy(url(p.path), p.id)}>{copied === p.id ? 'Copied' : 'Copy link'}</button>
+          <a className="btn secondary sm" href={wa(p.path, p.name)} target="_blank" rel="noreferrer">WhatsApp</a>
+          {live && <a className="btn secondary sm" href={qr(p.path)} target="_blank" rel="noreferrer">QR code</a>}</span></li>)}</ul></section>}
+  </>;
 }

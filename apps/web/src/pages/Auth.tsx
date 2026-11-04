@@ -2,52 +2,52 @@ import { FormEvent, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api, errorText } from '../api';
 import { Alert, Field } from '../ui';
-import { IcoBox, IcoChart, IcoTag } from '../icons';
+import { usePub } from './Store';
 
 export const Header = () => (
-  <header className="top"><div className="wrap">
-    <Link to="/" className="logo">Eazy<b>Stores</b></Link>
-    <div className="row"><Link className="btn ghost sm" to="/">Browse stores</Link><Link className="btn ghost sm" to="/login">Log in</Link><Link className="btn sm" to="/signup">Start selling</Link></div>
+  <header className="ptop"><div className="wrap pbar">
+    <Link to="/" className="plogo">Eazy<i>Stores</i></Link>
+    <nav className="pnav" aria-label="Sections"><Link to="/">Browse the marketplace</Link><Link to="/sell">Sell with us</Link></nav>
+    <div className="pright"><Link className="plink" to="/login">Log in</Link><Link className="btn sm" to="/signup">Open a store</Link></div>
   </div></header>
 );
 
 export function Landing() {
+  usePub();
+  const steps = [['01', 'Add what you make', 'Upload photos and prices one at a time, or bring a whole spreadsheet. We check every row before anything goes live.'],
+    ['02', 'Share one link', 'Your store has its own address that works on Instagram, WhatsApp and in person. Shoppers can also discover you in the marketplace.'],
+    ['03', 'Know what you earn', 'Sales, costs, fees and profit are kept apart, so you can see whether the business is really making money.']];
   return <>
     <Header />
-    <section className="hero"><div className="wrap">
-      <div className="eyebrow">Free to start · No technical skills needed</div>
-      <h1>Sell online like the big brands.</h1>
-      <p className="lead">Launch a beautiful store in minutes, share one link anywhere, and see what you really earn after costs and fees.</p>
-      <div className="row"><Link className="btn lg" to="/signup">Create your store</Link><Link className="btn secondary lg" to="/login">Log in</Link></div>
-      <div className="mock" aria-hidden="true">
-        <div className="frame">
-          <div className="bar"><i /><i /><i /><span className="url">eazystores.ca/store/your-brand</span></div>
-          <div className="body">
-            <div><div className="tile a"><span><b>Oud Noir</b><b>$80</b></span></div></div>
-            <div><div className="tile b"><span><b>Rose Water</b><b>$25</b></span></div></div>
-            <div><div className="tile c"><span><b>Amber Candle</b><b>$32</b></span></div></div>
-          </div>
+    <section className="lhero"><div className="wrap lhero-grid">
+      <div>
+        <span className="kicker">For independent sellers</span>
+        <h1>A considered home for your brand.</h1>
+        <p className="lede">A beautiful storefront, simple stock control and honest numbers, without the technical work. Free to start.</p>
+        <div className="row" style={{ marginTop: 28 }}><Link className="btn" to="/signup">Open your store</Link><Link className="cta-link" to="/">See the marketplace <span aria-hidden>→</span></Link></div>
+      </div>
+      <div className="lmock" aria-hidden="true">
+        <div className="lmock-bar"><i /><i /><i /><span>eazystores.ca/store/your-brand</span></div>
+        <div className="lmock-body">
+          <div className="lt a"><span>Oud Noir<b>$85</b></span></div><div className="lt b"><span>Rose Water<b>$65</b></span></div><div className="lt c"><span>Amber Candle<b>$32</b></span></div>
         </div>
-        <div className="float"><small>This month</small><b>$4,280</b><small>Gross profit · $1,940</small></div>
+        <div className="lfloat"><small>This month</small><b>$4,280</b><small>Gross profit $1,940</small></div>
       </div>
     </div></section>
     <main className="wrap">
-      <div className="band"><h2>Everything you need to run your business.</h2><p className="sub">One simple place to sell, manage stock and understand your numbers.</p></div>
-      <div className="features">
-        {[['A store that looks the part', 'Clean, fast, mobile-first pages that put your products and photos front and centre.', <IcoTag key="a" />],
-          ['Never oversell', 'Stock is held while a customer checks out, so you never promise what you do not have.', <IcoBox key="b" />],
-          ['Know what you earn', 'Sales, costs, fees and profit kept apart, so you can tell if you are really making money.', <IcoChart key="c" />]]
-          .map(([t, d, i]) => <article className="card feature" key={t as string}><div className="ico">{i}</div><h3>{t}</h3><p>{d}</p></article>)}
-      </div>
-      <section className="cta"><h2>Open your store today.</h2><p>It takes a few minutes and costs nothing to start.</p><Link className="btn lg" to="/signup">Get started free</Link></section>
+      <section className="band2"><div className="band2-head"><h2>How it works</h2></div>
+        <ol className="steps">{steps.map(([n, t, d]) => <li key={n}><span className="num">{n}</span><h3>{t}</h3><p>{d}</p></li>)}</ol></section>
+      <section className="lcta"><h2>Open your store today.</h2><p>It takes a few minutes and costs nothing to start.</p><Link className="btn" to="/signup">Get started</Link></section>
     </main>
-    <footer className="footer"><div className="wrap">© EazyStores · Development build: payments are simulated.</div></footer>
+    <footer className="pfoot"><div className="wrap pfoot-grid"><div><div className="plogo">Eazy<i>Stores</i></div><p className="muted small">A home for independent brands.</p></div>
+      <div className="small"><b>Shoppers</b><br /><Link to="/">Browse the marketplace</Link></div><div className="small muted">Development build. Payments are simulated.</div></div></footer>
   </>;
 }
 
 const slugify = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
 
 export function Signup() {
+  usePub();
   const nav = useNavigate();
   const [f, setF] = useState({ fullName: '', email: '', password: '', businessName: '', storeSlug: '', legalType: 'individual' });
   const [slugTouched, setTouched] = useState(false);
@@ -61,7 +61,7 @@ export function Signup() {
   return <>
     <Header />
     <main className="wrap" style={{ maxWidth: 520 }}>
-      <h1 style={{ marginTop: 40 }}>Create your store</h1><p className="muted" style={{ marginTop: -6 }}>Free to start. You can change everything later.</p>
+      <span className="kicker" style={{ marginTop: 44 }}>Open a store</span><h1 style={{ margin: '12px 0 8px' }}>Create your store</h1><p className="muted" style={{ marginTop: 0 }}>Free to start. You can change everything later.</p>
       <form className="card" onSubmit={submit}>
         {err && <Alert kind="err">{err}</Alert>}
         <Field label="Your name">{id => <input id={id} required autoComplete="name" value={f.fullName} onChange={e => set('fullName', e.target.value)} />}</Field>
@@ -85,6 +85,7 @@ export function Signup() {
 }
 
 export function Login() {
+  usePub();
   const nav = useNavigate();
   const [email, setEmail] = useState(''); const [password, setPassword] = useState('');
   const [err, setErr] = useState(''); const [busy, setBusy] = useState(false);
@@ -96,7 +97,7 @@ export function Login() {
   return <>
     <Header />
     <main className="wrap" style={{ maxWidth: 520 }}>
-      <h1 style={{ marginTop: 40 }}>Welcome back</h1>
+      <span className="kicker" style={{ marginTop: 44 }}>Sellers</span><h1 style={{ margin: '12px 0 8px' }}>Welcome back</h1>
       <form className="card" onSubmit={submit}>
         {err && <Alert kind="err">{err}</Alert>}
         <Field label="Email">{id => <input id={id} type="email" required autoComplete="email" value={email} onChange={e => setEmail(e.target.value)} />}</Field>

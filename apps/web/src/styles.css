@@ -291,3 +291,50 @@ body.pub .sortsel select{border-radius:2px;border-color:transparent;background:t
 .attrs2{margin:0 0 18px}.attrs2 div{display:flex;justify-content:space-between;gap:16px;padding:8px 0;border-top:1px solid var(--line)}.attrs2 div:first-child{border-top:0}.attrs2 dt{color:var(--muted);text-transform:capitalize}.attrs2 dd{margin:0;text-align:right}
 body.pub .cartbar{background:#141414}body.pub .cartbar .btn{background:#fbfaf8;border-color:#fbfaf8;color:#141414}
 body.pub .added{color:var(--ink-2)}
+
+/* ---- Landing (/sell), signup, login: editorial ---- */
+.lhero{padding:clamp(40px,8vw,96px) 0 clamp(40px,6vw,72px);border-bottom:1px solid var(--line)}
+.lhero-grid{display:grid;gap:44px;align-items:center}@media(min-width:960px){.lhero-grid{grid-template-columns:1.05fr 1fr;gap:80px}}
+.lhero h1{font-size:clamp(2.8rem,7.5vw,5.6rem);line-height:.98;letter-spacing:-.04em;margin:18px 0 20px;font-weight:300}
+.lede{font-size:1.15rem;color:var(--ink-2);max-width:30em;margin:0}
+.lmock{position:relative;border:1px solid var(--line-2);background:#fff;box-shadow:0 30px 70px -30px rgba(20,20,20,.25)}
+.lmock-bar{display:flex;align-items:center;gap:6px;padding:11px 14px;border-bottom:1px solid var(--line);background:#fbfaf8}.lmock-bar i{width:9px;height:9px;border-radius:50%;background:#d9d6cf}.lmock-bar span{margin-left:10px;font-size:.72rem;color:var(--muted)}
+.lmock-body{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:16px}
+.lt{aspect-ratio:4/5;position:relative}.lt.a{background:linear-gradient(150deg,#1b1713,#3b322a)}.lt.b{background:linear-gradient(150deg,#f3dde1,#dba9b4)}.lt.c{background:linear-gradient(150deg,#f3ead9,#d9bf8f)}
+.lt span{position:absolute;left:8px;right:8px;bottom:8px;background:#fbfaf8;font:500 .7rem var(--font);padding:6px 8px;display:flex;justify-content:space-between}
+.lfloat{position:absolute;right:-14px;top:-22px;background:#141414;color:#fff;padding:16px 20px}.lfloat b{display:block;font:400 1.7rem var(--display);letter-spacing:-.02em}.lfloat small{display:block;color:rgba(255,255,255,.65);font-size:.7rem;letter-spacing:.06em;text-transform:uppercase}
+@media(max-width:959px){.lfloat{right:10px;top:-18px}}
+.steps{list-style:none;margin:0;padding:0;display:grid;gap:0;border-top:1px solid var(--line)}@media(min-width:860px){.steps{grid-template-columns:repeat(3,1fr);gap:48px;border-top:0}}
+.steps li{padding:26px 0;border-bottom:1px solid var(--line)}@media(min-width:860px){.steps li{border-bottom:0;border-top:1px solid var(--ink);padding-top:22px}}
+.steps .num{font:400 .8rem var(--font);letter-spacing:.2em;color:var(--muted)}.steps h3{font-size:1.6rem;margin:14px 0 10px}.steps p{margin:0;color:var(--ink-2);max-width:28em}
+.lcta{background:#141414;color:#fff;text-align:center;padding:clamp(48px,8vw,96px) 24px;margin:72px 0 0}.lcta h2{color:#fff;font-size:clamp(2rem,5vw,3.4rem);margin:0 0 12px;font-weight:300;letter-spacing:-.03em}.lcta p{color:rgba(255,255,255,.7);margin:0 0 28px}
+body.pub .lcta .btn{background:#fbfaf8;border-color:#fbfaf8;color:#141414}body.pub .lcta .btn:hover{background:#fff;color:#141414}
+body.pub form.card{padding:28px;margin-top:20px}
+
+/* =====================================================================
+   Seller workspace (body.seller): same family as the public side, tuned for working.
+   Warm neutrals, hairlines, small radii, serif for titles and key numbers, normal-case buttons.
+   ===================================================================== */
+body.seller{--app-bg:#f6f5f2;--line:#e6e3dd;--line-2:#d3cfc6;--r:4px;--r-sm:3px;--r-lg:6px;--ink:#141414;--ink-2:#3b3a37;--muted:#77746e;--accent:#141414;--shadow-1:none;background:var(--app-bg)}
+body.seller h1,body.seller h2,body.seller h3{font-family:var(--display);font-weight:400;letter-spacing:-.015em}
+body.seller h1{font-size:clamp(1.9rem,3.4vw,2.4rem);letter-spacing:-.03em}body.seller h2{font-size:1.35rem}body.seller h3{font-size:1.1rem}
+body.seller .card{box-shadow:none;border-color:var(--line)}
+body.seller button,body.seller .btn{border-radius:3px;background:#141414;border-color:#141414;letter-spacing:.01em}
+body.seller button:hover,body.seller .btn:hover{background:#000}
+body.seller button.secondary,body.seller .btn.secondary{background:#fff;color:var(--ink);border-color:var(--line-2);box-shadow:none}body.seller button.secondary:hover{background:#faf9f6;border-color:var(--ink)}
+body.seller button.danger{background:#fff;color:var(--danger);border-color:#e9c4bf}body.seller button.ghost{background:transparent;color:var(--ink-2);border-color:transparent}
+body.seller input,body.seller select,body.seller textarea{border-radius:3px}
+body.seller input:focus,body.seller select:focus,body.seller textarea:focus{border-color:#141414;box-shadow:0 0 0 3px rgba(20,20,20,.08)}
+body.seller .stat .n{font:400 2rem/1.1 var(--display);letter-spacing:-.025em}body.seller .stat .n.unknown{font:italic 400 1.35rem var(--display);color:var(--muted)}
+body.seller .stat .l{font-size:.68rem;letter-spacing:.12em;text-transform:uppercase;font-weight:600}
+body.seller .stat.accent{background:#141414;border-color:#141414}
+body.seller .badge{border-radius:2px;letter-spacing:.06em;text-transform:uppercase;font-size:.62rem;padding:3px 9px}
+body.seller .side,body.seller .mtop{background:#fbfaf8}
+body.seller .side a.nav.active{background:#efede8;color:#141414}body.seller .side a.nav{border-radius:3px}
+body.seller .side .foot{border-radius:3px;background:#fff}
+body.seller .tabbar a.active{color:#141414}body.seller .tabbar{background:rgba(251,250,248,.96)}
+body.seller .pagehead h1{margin-bottom:.15em}
+body.seller .drop,body.seller .variant-row,body.seller .alert,body.seller .note{border-radius:3px}
+body.seller .chip{border-radius:2px}body.seller .thumb{border-radius:2px}body.seller .sw{border-radius:50%}
+body.seller table th{letter-spacing:.1em}
+body.seller .plogo{font-size:1.35rem}body.seller .side .plogo{padding:2px 12px 22px;display:block}

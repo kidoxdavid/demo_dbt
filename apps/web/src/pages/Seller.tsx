@@ -13,6 +13,7 @@ const NAV = [
 
 export function SellerShell() {
   const nav = useNavigate();
+  useEffect(() => { document.body.classList.add('seller'); return () => document.body.classList.remove('seller'); }, []);
   const [data, setData] = useState<Biz | null>(null);
   const [loadErr, setLoadErr] = useState('');
   const reload = useCallback(async () => {
@@ -26,7 +27,7 @@ export function SellerShell() {
   const live = data.store.status === 'published';
   return <div className="app">
     <aside className="side" aria-label="Main navigation">
-      <Link to="/dashboard" className="logo">Eazy<b>Stores</b></Link>
+      <Link to="/dashboard" className="plogo">Eazy<i>Stores</i></Link>
       {NAV.map(({ to, label, Icon, end }) => <NavLink key={to} end={end} to={to} className={({ isActive }) => `nav${isActive ? ' active' : ''}`}><Icon />{label}</NavLink>)}
       <div className="foot">
         <div className="small" style={{ fontWeight: 600 }}>{data.business.business_name}</div>
@@ -35,7 +36,7 @@ export function SellerShell() {
       </div>
     </aside>
     <div>
-      <div className="mtop"><Link to="/dashboard" className="logo">Eazy<b>Stores</b></Link><button className="ghost sm" onClick={logout}>Log out</button></div>
+      <div className="mtop"><Link to="/dashboard" className="plogo">Eazy<i>Stores</i></Link><button className="ghost sm" onClick={logout}>Log out</button></div>
       <main className="main">
         <Routes>
           <Route index element={<Overview data={data} />} />

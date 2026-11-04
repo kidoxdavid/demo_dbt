@@ -206,4 +206,6 @@ Edge cases covered by tests: six buyers racing for one unit (exactly one wins); 
 
 **Bugs found while building:** a class-name collision (`.feature`) between the new hero and the old landing cards; global public button padding overriding the thumbnail padding (specificity); duplicated "brand · store" label when they are identical; the near-black accent producing a flat grey hero tint (reduced).
 
-**Open:** font choice awaits the owner's decision (one-line change); landing page (`/sell`) and seller dashboard are not yet restyled to match the editorial public theme; the featured maker is simply the newest store (needs curation controls in admin); category tiles use the newest store's first photo; placeholder illustrations stand in for photography.
+**Update:** the seller dashboard (`body.seller`), `/sell`, signup and login are now restyled to the same family (warm neutrals, hairlines, serif titles and key numbers, normal-case buttons for working screens).
+
+**Open:** font choice awaits the owner's decision (one-line change, currently Newsreader); the featured maker is simply the newest store (needs curation controls in admin); category tiles use the newest store's first photo; placeholder illustrations stand in for photography.

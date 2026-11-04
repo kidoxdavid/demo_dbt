@@ -5,7 +5,8 @@ import { pool } from '../src/lib/db.js';
 import { owner, oq, ck, kit } from './helpers.js';
 
 let app: FastifyInstance; const k = kit(() => app);
-beforeAll(async () => { app = await buildApp(); });
+let G = 0, P = 0, PA = 0;       // plan prices are read from the database: other test files edit them
+beforeAll(async () => { app = await buildApp(); const r = (await oq(`SELECT code, price_monthly_cents m, price_annual_cents a FROM plans`)).rows; G = r.find(x => x.code === 'growth').m; P = r.find(x => x.code === 'professional').m; PA = r.find(x => x.code === 'professional').a; });
 afterAll(async () => { await app.close(); await pool.end(); await owner.end(); });
 
 const call = (method: 'GET' | 'POST', url: string, cookie?: string, payload?: object) => app.inject({ method, url, ...(payload ? { payload } : {}), ...(cookie ? ck(cookie) : {}) });
@@ -57,22 +58,22 @@ describe('trial and renewal', () => {
     expect((await call('POST', '/api/seller/pos/sales', s.cookie, { items: [{ variantId: p.variantId, quantity: 1 }], paymentMethod: 'cash' })).statusCode).toBe(201);
     expect((await change(s.cookie, 'starter')).json()).toMatchObject({ applied: 'now' });          // leaving during a trial costs nothing
     expect(await planOf(s.tenantId)).toBe('starter');
-    expect((await change(s.cookie, 'growth')).json()).toMatchObject({ applied: 'now', chargedCents: 2900 });   // no second trial
+    expect((await change(s.cookie, 'growth')).json()).toMatchObject({ applied: 'now', chargedCents: G });   // no second trial
   });
   it('when the trial ends the first invoice is charged once, and the job is safe to run twice', async () => {
     const s = await k.seller('bl4'); await change(s.cookie, 'growth');
     expect((await run(s.tenantId, 5))).toEqual({});                                                // mid-trial: nothing due
     expect(await run(s.tenantId, 15)).toMatchObject({ trialConverted: 1 });
     expect(await run(s.tenantId, 15)).toEqual({});                                                  // same moment again: nothing happens
-    expect(await invoices(s.tenantId)).toEqual([expect.objectContaining({ status: 'paid', a: 2900, attempts: 1 })]);
+    expect(await invoices(s.tenantId)).toEqual([expect.objectContaining({ status: 'paid', a: G, attempts: 1 })]);
     const b = await bill(s.cookie); expect(b.subscription.status).toBe('active'); expect(new Date(b.subscription.currentPeriodEnd).getTime()).toBeGreaterThan(Date.now() + 40 * DAY);
     expect(await mails(s.tenantId, 'billing_receipt')).toBe(1);
   });
   it('renews monthly and annually at the right price', async () => {
     const s = await paidSeller('bl5'); const a = await paidSeller('bl5b', 'professional'); await call('POST', '/api/seller/billing/change', a.cookie, { plan: 'professional', interval: 'annual' });
     expect(await run(s.tenantId, 32)).toMatchObject({ renewed: 1 });
-    expect((await invoices(s.tenantId)).map(i => i.a)).toEqual([2900, 2900]);
-    const inv = await invoices(a.tenantId); expect(inv.at(-1)).toMatchObject({ description: 'Professional plan, annual' }); expect(inv.at(-1)!.a + inv.at(-1)!.cr).toBe(79000);
+    expect((await invoices(s.tenantId)).map(i => i.a)).toEqual([G, G]);
+    const inv = await invoices(a.tenantId); expect(inv.at(-1)).toMatchObject({ description: 'Professional plan, annual' }); expect(inv.at(-1)!.a + inv.at(-1)!.cr).toBe(PA);
     expect((await bill(a.cookie)).subscription.interval).toBe('annual'); expect(await run(a.tenantId, 32)).toEqual({});       // a yearly plan is not billed again after a month
     expect((await call('POST', '/api/seller/billing/change', a.cookie, { plan: 'professional', interval: 'monthly' })).json()).toMatchObject({ applied: 'period_end' });
   });
@@ -82,7 +83,7 @@ describe('changing plans', () => {
   it('an upgrade is charged now with a credit for the unused time', async () => {
     const s = await paidSeller('bl6');                                                              // paid $29 just now
     const r = (await change(s.cookie, 'professional')).json();
-    expect(r).toMatchObject({ applied: 'now' }); expect(r.creditCents).toBeGreaterThan(2880); expect(r.creditCents).toBeLessThanOrEqual(2900); expect(r.chargedCents + r.creditCents).toBe(7900);
+    expect(r).toMatchObject({ applied: 'now' }); expect(r.creditCents).toBeGreaterThan(G - 30); expect(r.creditCents).toBeLessThanOrEqual(G); expect(r.chargedCents + r.creditCents).toBe(P);
     expect(await planOf(s.tenantId)).toBe('professional');
     expect((await invoices(s.tenantId)).at(-1)).toMatchObject({ status: 'paid', a: r.chargedCents, cr: r.creditCents });
   });
@@ -99,7 +100,7 @@ describe('changing plans', () => {
     expect((await call('POST', '/api/seller/billing/resume', s.cookie)).json().error).toBe('nothing_scheduled');
     await change(s.cookie, 'growth'); expect(await run(s.tenantId, 3)).toEqual({});                // not yet due
     expect(await run(s.tenantId, 32)).toMatchObject({ downgraded: 1, renewed: 1 });
-    expect(await planOf(s.tenantId)).toBe('growth'); expect((await invoices(s.tenantId)).at(-1)).toMatchObject({ a: 2900 });
+    expect(await planOf(s.tenantId)).toBe('growth'); expect((await invoices(s.tenantId)).at(-1)).toMatchObject({ a: G });
   });
   it('cancelling moves to Starter at period end without a charge', async () => {
     const s = await paidSeller('bl9');
@@ -170,7 +171,7 @@ describe('staff', () => {
   });
   it('the admin overview and billing page report subscription revenue', async () => {
     await paidSeller('bl16'); const adm = await admin();
-    const ov = (await call('GET', '/api/admin/overview', adm)).json(); expect(ov.subscriptionRevenueCents).toBeGreaterThanOrEqual(2900); expect(ov.payingSubscriptions).toBeGreaterThanOrEqual(1);
+    const ov = (await call('GET', '/api/admin/overview', adm)).json(); expect(ov.subscriptionRevenueCents).toBeGreaterThanOrEqual(G); expect(ov.payingSubscriptions).toBeGreaterThanOrEqual(1);
     const ab = (await call('GET', '/api/admin/billing', adm)).json(); expect(ab.provider.simulated).toBe(true); expect(ab.byPlan.find((p: any) => p.code === 'growth').tenants).toBeGreaterThanOrEqual(1); expect(ab.note).toMatch(/simulated/);
   });
 });

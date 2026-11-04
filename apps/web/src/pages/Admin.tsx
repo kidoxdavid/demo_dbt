@@ -75,8 +75,11 @@ function AdminOverview() {
       <div className="card stat"><div className="n">{d.sellers.suspended}</div><div className="l">Suspended</div></div>
       <div className="card stat"><div className="n">{d.publishedStores}</div><div className="l">Published stores</div></div>
       <div className="card stat"><div className="n">{d.activeProducts}</div><div className="l">Active products</div></div>
+      <div className="card stat"><div className="n">{d.payingSubscriptions}</div><div className="l">Paying subscriptions</div></div>
+      <div className="card stat"><div className="n">{money(d.subscriptionRevenueCents)}</div><div className="l">Subscription invoices paid</div></div>
+      <div className="card stat"><div className="n">{d.pastDueSubscriptions}</div><div className="l">Past due</div></div>
     </div>
-    <p className="muted small">{d.note} Subscription revenue is not shown because subscription billing is not built yet.</p>
+    <p className="muted small">{d.note} Subscription figures come from invoices; with the simulated billing provider no money was collected.</p>
   </>;
 }
 
@@ -93,6 +96,7 @@ function AdminSellers({ can }: { can: (p: string) => boolean }) {
   return <>
     <div className="pagehead"><div><h1>Sellers</h1><p>Review accounts, and suspend or reinstate with a recorded reason.</p></div></div>
     {msg && <Alert kind={msg.k}>{msg.t}</Alert>}
+    <AdminBilling />
     <Field label="Search by business name or store address">{id => <input id={id} type="search" value={q} onChange={e => setQ(e.target.value)} />}</Field>
     {rows && !rows.length && <section className="card" style={{ marginTop: 16 }}><Empty title="No sellers found">Try a different search.</Empty></section>}
     {rows && rows.length > 0 && <section className="card" style={{ marginTop: 16 }}><div className="table-scroll"><table>
@@ -110,6 +114,17 @@ function AdminSellers({ can }: { can: (p: string) => boolean }) {
         {id => <textarea id={id} required minLength={5} maxLength={500} value={reason} onChange={e => setReason(e.target.value)} />}</Field>
         <div className="row" style={{ marginTop: 12 }}><button disabled={busy || reason.trim().length < 5}>{busy ? 'Saving…' : acting.kind === 'suspend' ? 'Suspend seller' : 'Reinstate seller'}</button><button type="button" className="ghost" onClick={() => setActing(null)}>Cancel</button></div></form></section>}
   </>;
+}
+
+function AdminBilling() {
+  const [b, setB] = useState<any>(null);
+  useEffect(() => { api('/api/admin/billing').then(setB).catch(() => setB(null)); }, []);
+  if (!b) return null;
+  return <section className="card"><h2>Subscriptions</h2>{b.provider.simulated && <Alert kind="warn">Billing provider: <b>simulated</b>. No money has moved.</Alert>}
+    <div className="table-scroll"><table><thead><tr><th>Plan</th><th>Businesses</th><th>Trialing</th><th>Past due</th><th>Est. monthly recurring</th></tr></thead>
+      <tbody>{b.byPlan.map((r: any) => <tr key={r.code}><td>{r.name}</td><td>{r.tenants}</td><td>{r.trialing}</td><td>{r.pastDue}</td><td>{money(r.mrrCents)}</td></tr>)}</tbody></table></div>
+    {b.pastDue.length > 0 && <><h3>Unpaid</h3><ul className="list">{b.pastDue.map((p: any) => <li key={p.tenantId}>{p.storeSlug} · {p.plan} · since {new Date(p.pastDueSince).toLocaleDateString('en-CA')}</li>)}</ul></>}
+    <p className="muted small">{b.note}</p></section>;
 }
 
 function AdminPlans({ can }: { can: (p: string) => boolean }) {

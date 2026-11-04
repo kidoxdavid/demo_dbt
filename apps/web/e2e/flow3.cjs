@@ -28,6 +28,12 @@ async function noHScroll(page, label) {
   assert.ok(m.iw === expected && m.sw <= expected, `${label}: layout is ${m.iw}px wide (content ${m.sw}px) on a ${expected}px screen`);
 }
 
+
+// On phones the tab bar shows five items; the rest live under More.
+async function openNav(page, name, exact = false) {
+  if (page.viewportSize().width < 900) await page.getByRole('link', { name: 'More', exact: true }).click();
+  await page.getByRole('link', { name, exact }).first().click();
+}
 let browser, cur;
 (async () => {
   browser = await chromium.launch();
@@ -51,7 +57,7 @@ let browser, cur;
     assert.equal(await p.getByText(/Confirm your email address to publish/).count(), 0, 'banner should disappear once verified');
 
     // --- Settings: province, GST/HST, delivery; publish
-    await p.getByRole('link', { name: 'Settings' }).click();
+    await openNav(p, 'Settings');
     await p.getByLabel('What do you sell? (category)').fill('Gifts'); await p.getByLabel('About your business', { exact: true }).fill('Gifts and candles.');
     await p.getByLabel('Province', { exact: true }).selectOption('AB');
     await p.getByLabel('Customer pickup').check(); await p.getByLabel('Delivery', { exact: true }).check(); await p.getByLabel('Delivery fee ($)').fill('5.00');
@@ -110,7 +116,7 @@ let browser, cur;
     await p.getByLabel('Password').fill(pw2); await p.getByRole('button', { name: 'Log in' }).click(); await p.waitForURL('**/dashboard');
 
     // --- Seller turns on two-factor, then signs in with a code
-    await p.getByRole('link', { name: 'Settings' }).click(); await p.getByRole('button', { name: 'Set up two-factor' }).click();
+    await openNav(p, 'Settings'); await p.getByRole('button', { name: 'Set up two-factor' }).click();
     const secret = (await p.locator('.secretkey').innerText()).trim();
     await noHScroll(p, `${name} two-factor setup`); await p.screenshot({ path: `${out}/${name}-y5-mfa-setup.png`, fullPage: true });
     await p.getByLabel('6-digit code').fill(code(secret)); await p.getByRole('button', { name: 'Turn on two-factor' }).click();

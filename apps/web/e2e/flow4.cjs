@@ -23,6 +23,12 @@ async function noHScroll(page, label) {
   const expected = page.viewportSize().width; const m = await page.evaluate(() => ({ iw: window.innerWidth, sw: document.documentElement.scrollWidth }));
   assert.ok(m.iw === expected && m.sw <= expected, `${label}: layout is ${m.iw}px wide (content ${m.sw}px) on a ${expected}px screen`);
 }
+
+// On phones the tab bar shows five items; the rest live under More.
+async function openNav(page, name, exact = false) {
+  if (page.viewportSize().width < 900) await page.getByRole('link', { name: 'More', exact: true }).click();
+  await page.getByRole('link', { name, exact }).first().click();
+}
 let browser; const pages = {};
 (async () => {
   execFileSync('npm', ['run', 'reset-mfa', '--silent', '--', ADMIN.email], { cwd: `${__dirname}/../../api`, stdio: 'pipe' });
@@ -53,7 +59,7 @@ let browser; const pages = {};
     await p.getByLabel('Your name').fill('Review Seller'); await p.getByLabel('Email').fill(email); await p.getByLabel('Password').fill(pw); await p.getByLabel('Business name').fill(biz); await p.getByLabel('Store address').fill(slug);
     const terms = p.getByRole('checkbox', { name: /I agree to the/ }); assert.equal(await terms.getAttribute('required'), '', 'terms checkbox must be required'); await terms.check();
     await p.getByRole('button', { name: 'Create store' }).click(); await p.waitForURL('**/dashboard');
-    await p.getByRole('link', { name: 'Settings' }).click();
+    await openNav(p, 'Settings');
     await p.getByLabel('What do you sell? (category)').fill('Gifts'); await p.getByLabel('About your business', { exact: true }).fill('Hand made gifts.'); await p.getByLabel('Customer pickup').check();
     await p.getByRole('button', { name: 'Save changes' }).click(); await p.getByText('Saved.').waitFor();
     assert.equal((await p.request.post(`${BASE}/api/seller/products`, { data: { name: 'Candle', status: 'active', variants: [{ priceCents: 2000, costCents: 700, stock: 9 }] } })).status(), 201);
@@ -111,7 +117,7 @@ let browser; const pages = {};
     }
 
     // --- Seller closes the account (confirmation, password, and a typed word are all required)
-    await p.getByRole('link', { name: 'Settings' }).click(); await p.getByRole('button', { name: 'Close my account…' }).click();
+    await openNav(p, 'Settings'); await p.getByRole('button', { name: 'Close my account…' }).click();
     assert.ok(await p.getByRole('button', { name: 'Permanently close my account' }).isDisabled(), 'needs the typed confirmation');
     await p.getByLabel('Your password').fill('wrong-password-123'); await p.getByLabel('Type CLOSE to confirm').fill('CLOSE'); await p.getByRole('button', { name: 'Permanently close my account' }).click();
     await p.getByRole('alert').filter({ hasText: 'incorrect' }).waitFor();

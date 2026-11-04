@@ -44,19 +44,9 @@ export function registerPos(app: FastifyInstance, deps: { tenantCtx: (r: Fastify
     });
   });
 
-  const saleIn = z.object({
-    items: z.array(z.object({ variantId: z.string().uuid(), quantity: z.number().int().min(1).max(1000) }).strict()).min(1).max(100),
-    paymentMethod: z.enum(METHODS), tenderedCents: z.number().int().min(0).max(100_000_000).optional(),
-    discountCode: z.string().trim().max(40).optional(), customerEmail: z.string().email().max(254).optional(), note: z.string().trim().max(200).optional(),
-  }).strict();
-
-  app.post('/api/seller/pos/sales', async (req, reply) => {
-    const t = await tenantCtx(req); staffOk(t);
-    const b = saleIn.parse(req.body);
-    const qty = new Map<string, number>(); for (const i of b.items) qty.set(i.variantId, (qty.get(i.variantId) ?? 0) + i.quantity);
-    const sale = await withTx(t, async c => {
-      await needPos(c, t.tenantId);
-      const info = (await c.query(`SELECT t.status tenant_status, b.currency, b.region AS biz_region, b.tax_federal, b.tax_provincial, s.id AS store_id, s.name AS store_name
+  /** Load the items and price them exactly as a sale would. Shared by the quote (no locks) and the sale. */
+  async function cartFor(c: pg.PoolClient, b: { discountCode?: string; customerEmail?: string }, qty: Map<string, number>, lockDiscount: boolean) {
+    const info = (await c.query(`SELECT t.status tenant_status, b.currency, b.region AS biz_region, b.tax_federal, b.tax_provincial, s.id AS store_id, s.name AS store_name
                                    FROM tenants t JOIN businesses b ON b.tenant_id=t.id JOIN stores s ON s.tenant_id=t.id`)).rows[0];
       if (info.tenant_status !== 'active') throw new HttpError(403, 'store_unavailable');
       const rows = (await c.query(`SELECT v.id, v.title, v.price_cents, v.cost_cents, v.weight_grams, v.track_inventory, p.name FROM product_variants v JOIN products p ON p.id=v.product_id
@@ -64,8 +54,32 @@ export function registerPos(app: FastifyInstance, deps: { tenantCtx: (r: Fastify
       if (rows.length !== qty.size) throw new HttpError(422, 'item_unavailable');
       const byId = new Map(rows.map(r => [r.id as string, r]));
       const priced = await priceCart(c, { fulfilment: 'pickup', sellerRegion: info.biz_region, federal: info.tax_federal, provincial: info.tax_provincial, flatDeliveryFeeCents: 0,
-        code: b.discountCode, email: b.customerEmail, lockDiscount: true,
+        code: b.discountCode, email: b.customerEmail, lockDiscount,
         lines: [...qty].map(([variantId, q]) => ({ variantId, qty: q, priceCents: byId.get(variantId)!.price_cents, weightGrams: byId.get(variantId)!.weight_grams })) });
+    return { info, rows, byId, priced };
+  }
+
+  const saleIn = z.object({
+    items: z.array(z.object({ variantId: z.string().uuid(), quantity: z.number().int().min(1).max(1000) }).strict()).min(1).max(100),
+    paymentMethod: z.enum(METHODS), tenderedCents: z.number().int().min(0).max(100_000_000).optional(),
+    discountCode: z.string().trim().max(40).optional(), customerEmail: z.string().email().max(254).optional(), note: z.string().trim().max(200).optional(),
+  }).strict();
+
+  app.post('/api/seller/pos/quote', async (req) => {
+    const t = await tenantCtx(req); staffOk(t);
+    const b = saleIn.pick({ items: true, discountCode: true, customerEmail: true }).strict().parse(req.body);
+    const qty = new Map<string, number>(); for (const i of b.items) qty.set(i.variantId, (qty.get(i.variantId) ?? 0) + i.quantity);
+    return withTx(t, async c => { await needPos(c, t.tenantId); const { priced } = await cartFor(c, b, qty, false);
+      return { subtotalCents: priced.subtotalCents, discountCents: priced.discountCents, discountCode: priced.discountCode, taxCents: priced.taxCents, taxLines: priced.taxLines, totalCents: priced.totalCents }; });
+  });
+
+  app.post('/api/seller/pos/sales', async (req, reply) => {
+    const t = await tenantCtx(req); staffOk(t);
+    const b = saleIn.parse(req.body);
+    const qty = new Map<string, number>(); for (const i of b.items) qty.set(i.variantId, (qty.get(i.variantId) ?? 0) + i.quantity);
+    const sale = await withTx(t, async c => {
+      await needPos(c, t.tenantId);
+      const { info, rows, byId, priced } = await cartFor(c, b, qty, true);
       if (b.paymentMethod === 'cash' && b.tenderedCents != null && b.tenderedCents < priced.totalCents) throw new HttpError(422, `tendered_too_low:${priced.totalCents}`);
       const token = randomBytes(24).toString('base64url');
       const o = (await c.query(

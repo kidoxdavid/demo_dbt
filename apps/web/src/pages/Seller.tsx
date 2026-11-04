@@ -3,14 +3,20 @@ import { Link, NavLink, Route, Routes, useNavigate } from 'react-router-dom';
 import { api, ApiError, errorText, money, toCents, PROVINCES } from '../api';
 import { Alert, Badge, Empty, Field } from '../ui';
 import { SecurityPanel } from './Security';
-import { IcoBox, IcoCog, IcoHome, IcoLink, IcoReceipt, IcoUpload } from '../icons';
+import { IcoBox, IcoCog, IcoHome, IcoLink, IcoReceipt, IcoUpload, IcoPos, IcoMore, IcoStar, IcoTag, IcoChart } from '../icons';
+import { MorePage, Discounts, ShippingRules, Pos, Reviews, Plan, Assist, AiPhotoDraft, AiStoreText } from './SellerExtra';
 
 type Biz = { business: any; store: any; role: string };
 const NAV = [
   { to: '/dashboard', label: 'Overview', Icon: IcoHome, end: true }, { to: '/dashboard/products', label: 'Products', Icon: IcoBox },
-  { to: '/dashboard/orders', label: 'Orders', Icon: IcoReceipt }, { to: '/dashboard/share', label: 'Share', Icon: IcoLink }, { to: '/dashboard/import', label: 'Import', Icon: IcoUpload },
+  { to: '/dashboard/orders', label: 'Orders', Icon: IcoReceipt }, { to: '/dashboard/pos', label: 'Sell', Icon: IcoPos },
+  { to: '/dashboard/discounts', label: 'Discounts', Icon: IcoTag }, { to: '/dashboard/delivery', label: 'Delivery', Icon: IcoBox },
+  { to: '/dashboard/reviews', label: 'Reviews', Icon: IcoStar }, { to: '/dashboard/assist', label: 'Insights', Icon: IcoChart },
+  { to: '/dashboard/plan', label: 'Plan', Icon: IcoTag },
+  { to: '/dashboard/share', label: 'Share', Icon: IcoLink }, { to: '/dashboard/import', label: 'Import', Icon: IcoUpload },
   { to: '/dashboard/settings', label: 'Settings', Icon: IcoCog },
 ];
+const TABS = [NAV[0], NAV[1], NAV[2], NAV[3], { to: '/dashboard/more', label: 'More', Icon: IcoMore, end: false }];
 
 export function SellerShell() {
   const nav = useNavigate();
@@ -21,7 +27,7 @@ export function SellerShell() {
   useEffect(() => { api('/api/me').then(setMe).catch(() => {}); }, []);
   const reload = useCallback(async () => {
     try { setData(await api('/api/seller/business')); }
-    catch (e) { if (e instanceof ApiError && e.status === 401) nav('/login'); else setLoadErr(errorText(e)); }
+    catch (e) { if (e instanceof ApiError && e.status === 401) nav('/login'); else if (e instanceof ApiError && e.code === 'no_business') nav('/account'); else setLoadErr(errorText(e)); }
   }, [nav]);
   useEffect(() => { reload(); }, [reload]);
   if (loadErr) return <div className="wrap"><Alert kind="err">{loadErr}</Alert></div>;
@@ -48,11 +54,18 @@ export function SellerShell() {
           <Route path="orders" element={<Orders />} />
           <Route path="share" element={<SharePage />} />
           <Route path="import" element={<ImportPage />} />
-          <Route path="settings" element={<Settings data={data} reload={reload} />} />
+          <Route path="pos" element={<Pos />} />
+          <Route path="discounts" element={<Discounts />} />
+          <Route path="delivery" element={<ShippingRules />} />
+          <Route path="reviews" element={<Reviews />} />
+          <Route path="assist" element={<Assist />} />
+          <Route path="plan" element={<Plan />} />
+          <Route path="more" element={<MorePage items={NAV.filter(n => !TABS.some(t => t.to === n.to))} />} />
+          <Route path="settings" element={<><Settings data={data} reload={reload} /><AiStoreText /></>} />
         </Routes>
       </main>
       <nav className="tabbar" aria-label="Main navigation">
-        {NAV.map(({ to, label, Icon, end }) => <NavLink key={to} end={end} to={to} className={({ isActive }) => isActive ? 'active' : ''}><Icon />{label}</NavLink>)}
+        {TABS.map(({ to, label, Icon, end }) => <NavLink key={to} end={end} to={to} className={({ isActive }) => isActive ? 'active' : ''}><Icon />{label}</NavLink>)}
       </nav>
     </div>
   </div>;
@@ -97,8 +110,8 @@ function Overview({ data }: { data: Biz }) {
   </>;
 }
 
-type VRow = { title: string; price: string; cost: string; stock: string };
-const blankV = (): VRow => ({ title: 'Default', price: '', cost: '', stock: '0' });
+type VRow = { title: string; price: string; cost: string; stock: string; weight: string; barcode: string };
+const blankV = (): VRow => ({ title: 'Default', price: '', cost: '', stock: '0', weight: '', barcode: '' });
 
 function Products() {
   const [items, setItems] = useState<any[] | null>(null);
@@ -171,12 +184,13 @@ function ProductForm({ onDone }: { onDone: () => void }) {
     try {
       await api('/api/seller/products', { body: { name, description: description || undefined, status, madeToOrder: mto,
         customFields: cf.filter(f => f.label.trim()).map(f => ({ label: f.label.trim(), type: f.type, required: f.required, ...(f.type === 'select' ? { options: f.options.split(',').map(o => o.trim()).filter(Boolean) } : {}) })), variants: vs.map(v => ({
-        title: v.title || 'Default', priceCents: toCents(v.price), costCents: v.cost ? toCents(v.cost) : undefined, stock: parseInt(v.stock || '0', 10) })) } });
+        title: v.title || 'Default', priceCents: toCents(v.price), costCents: v.cost ? toCents(v.cost) : undefined, stock: parseInt(v.stock || '0', 10), weightGrams: v.weight ? parseInt(v.weight, 10) : undefined, barcode: v.barcode.trim() || undefined })) } });
       onDone();
     } catch (x) { setErr(errorText(x)); } finally { setBusy(false); }
   }
   return <form className="card" onSubmit={submit}>
     {err && <Alert kind="err">{err}</Alert>}
+    <AiPhotoDraft onDraft={d => { setName(d.name); setDescription(d.description); }} />
     <Field label="Product name">{id => <input id={id} required maxLength={200} value={name} onChange={e => setName(e.target.value)} />}</Field>
     <Field label="Description">{id => <textarea id={id} value={description} onChange={e => setDescription(e.target.value)} />}</Field>
     <h3 style={{ marginTop: 16 }}>Options and pricing</h3>
@@ -186,6 +200,8 @@ function ProductForm({ onDone }: { onDone: () => void }) {
       <Field label="Price ($)">{id => <input id={id} required inputMode="decimal" pattern="\d+(\.\d{1,2})?" value={v.price} onChange={e => upd(i, 'price', e.target.value)} />}</Field>
       <Field label="Your cost ($)">{id => <input id={id} inputMode="decimal" pattern="\d+(\.\d{1,2})?" value={v.cost} onChange={e => upd(i, 'cost', e.target.value)} />}</Field>
       <Field label="In stock">{id => <input id={id} required inputMode="numeric" pattern="\d+" value={v.stock} onChange={e => upd(i, 'stock', e.target.value)} />}</Field>
+      <Field label="Weight (g)" hint="For delivery prices">{id => <input id={id} inputMode="numeric" pattern="\d+" value={v.weight} onChange={e => upd(i, 'weight', e.target.value)} />}</Field>
+      <Field label="Barcode" hint="For counter sales">{id => <input id={id} maxLength={64} value={v.barcode} onChange={e => upd(i, 'barcode', e.target.value)} />}</Field>
     </div>)}
     <div className="row"><button type="button" className="secondary" onClick={() => setVs(p => [...p, blankV()])}>Add another option</button>
       {vs.length > 1 && <button type="button" className="danger" onClick={() => setVs(p => p.slice(0, -1))}>Remove last option</button>}</div>
@@ -303,7 +319,7 @@ function Orders() {
     {items && items.length > 0 && <section className="card"><ul className="list">
       {items.map(o => <li key={o.id}>
         <button className="ghost" style={{ width: '100%', justifyContent: 'space-between', borderRadius: 12 }} onClick={() => show(o.id)} aria-label={`Open order ${o.number}`}>
-          <span>#{o.number} · {o.customer_name}</span><span>{money(o.total_cents, o.currency)} <Badge s={o.status} /></span></button></li>)}
+          <span>#{o.number} · {o.customer_name}{o.channel === 'pos' && <> <Badge s="counter" /></>}</span><span>{money(o.total_cents, o.currency)} <Badge s={o.status} /></span></button></li>)}
     </ul></section>}
     {open && <section className="card" aria-live="polite">
       <div className="row spread"><h2 style={{ margin: 0 }}>Order #{open.number}</h2><Badge s={open.status} /></div>

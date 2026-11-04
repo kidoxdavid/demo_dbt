@@ -96,7 +96,9 @@ export function Login() {
     // Staff accounts have no business of their own: send them to the admin area.
     const hasBusiness = await api('/api/seller/business').then(() => true).catch(() => false);
     const isStaff = hasBusiness ? false : await api('/api/admin/me').then(() => true).catch(() => false);
-    nav(isStaff ? '/admin' : '/dashboard');
+    const next = new URLSearchParams(location.search).get('next');
+    const safe = next && /^\/[a-zA-Z0-9/_?=&.%#-]*$/.test(next) && !next.startsWith('//') ? next : null;
+    nav(isStaff ? '/admin' : safe ?? (hasBusiness ? '/dashboard' : '/account'));
   }
   async function submit(e: FormEvent) {
     e.preventDefault(); setErr(''); setBusy(true);
@@ -117,14 +119,14 @@ export function Login() {
   return <>
     <Header />
     <main className="wrap" style={{ maxWidth: 520 }}>
-      <span className="kicker" style={{ marginTop: 44 }}>{challenge ? 'Two-factor' : 'Sellers'}</span>
+      <span className="kicker" style={{ marginTop: 44 }}>{challenge ? 'Two-factor' : 'Log in'}</span>
       <h1 style={{ margin: '12px 0 8px' }}>{challenge ? 'Enter your code' : 'Welcome back'}</h1>
       {!challenge ? <form className="card" onSubmit={submit}>
         {err && <Alert kind="err">{err}</Alert>}
         <Field label="Email">{id => <input id={id} type="email" required autoComplete="email" value={email} onChange={e => setEmail(e.target.value)} />}</Field>
         <Field label="Password">{id => <input id={id} type="password" required autoComplete="current-password" value={password} onChange={e => setPassword(e.target.value)} />}</Field>
         <p><button disabled={busy}>{busy ? 'Logging in…' : 'Log in'}</button></p>
-        <p className="muted small"><Link to="/forgot">Forgot your password?</Link></p>
+        <p className="muted small"><Link to="/forgot">Forgot your password?</Link> · New customer? <Link to="/account/signup">Create an account</Link></p>
       </form> : <form className="card" onSubmit={submitCode}>
         {err && <Alert kind="err">{err}</Alert>}
         <p className="muted small" style={{ marginTop: 0 }}>{recovery ? 'Enter one of your saved recovery codes. Each works once.' : 'Open your authenticator app and enter the 6-digit code.'}</p>

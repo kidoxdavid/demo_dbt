@@ -4,6 +4,7 @@ import { Marketplace, ProductPage } from './pages/Market';
 import { SellerShell } from './pages/Seller';
 import { AdminShell } from './pages/Admin';
 import { TermsPage, SellerTermsPage, PrivacyPage, RulesPage } from './pages/Legal';
+import { Account, CustomerSignup } from './pages/Customer';
 import { Storefront, StoreCheckout, OrderStatus } from './pages/Store';
 
 export default function App() {
@@ -20,6 +21,8 @@ export default function App() {
       <Route path="/rules" element={<RulesPage />} />
       <Route path="/reset" element={<ResetPassword />} />
       <Route path="/verify" element={<VerifyEmail />} />
+      <Route path="/account" element={<Account />} />
+      <Route path="/account/signup" element={<CustomerSignup />} />
       <Route path="/dashboard/*" element={<SellerShell />} />
       <Route path="/admin/*" element={<AdminShell />} />
       <Route path="/store/:slug" element={<Storefront />} />

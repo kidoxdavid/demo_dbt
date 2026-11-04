@@ -364,3 +364,26 @@ body.seller .plogo{font-size:1.35rem}body.seller .side .plogo{padding:2px 12px 2
 .storetools{display:flex;gap:12px;flex-wrap:wrap;margin:0 0 26px}.storetools input{flex:1 1 240px;border-radius:2px}.storetools select{flex:0 0 auto;width:auto;border-radius:2px}
 .sample{display:flex;gap:12px;overflow-x:auto;padding:4px 0 14px}.sample-item{flex:0 0 108px;font-size:.78rem;display:flex;flex-direction:column;gap:3px}.sample-item img,.sample-ph{width:108px;height:108px;object-fit:cover;background:#efede8}
 .badge.removed,.badge.pending_review{background:var(--danger-soft);color:#7a1610}.badge.pending_review{background:var(--warn-soft);color:#6b4a12}
+
+/* ---- Stage 3: pos, plans, discounts, reviews, account ---- */
+.grid2{display:grid;grid-template-columns:1fr;gap:12px}@media(min-width:700px){.grid2{grid-template-columns:1fr 1fr}}
+.morelink{display:flex;justify-content:space-between;align-items:center;padding:16px 4px;min-height:52px;color:inherit;text-decoration:none;font-weight:600}
+.chips{border:0;padding:0;margin:12px 0 0;display:flex;flex-wrap:wrap;gap:6px}.chips legend{font:600 .8rem var(--font);margin-bottom:6px;padding:0}
+.chip{display:inline-flex;align-items:center;justify-content:center;min-width:42px;min-height:40px;padding:0 10px;border:1px solid var(--line);border-radius:999px;font:600 .8rem var(--font);cursor:pointer;margin:0}
+.chip input{position:absolute;opacity:0;width:1px;height:1px}.chip.on{background:#141414;color:#fff;border-color:#141414}.chip:focus-within{outline:2px solid #3347e0;outline-offset:2px}
+.plans{display:grid;grid-template-columns:1fr;gap:12px;margin:12px 0}@media(min-width:900px){.plans{grid-template-columns:repeat(3,1fr)}}
+.plan.current{border-color:#141414;box-shadow:0 0 0 1px #141414}.plan .price{font-size:1.7rem;margin:4px 0 8px}
+.ticks{list-style:none;padding:0;margin:8px 0}.ticks li{padding:3px 0 3px 20px;position:relative;font-size:.92rem}.ticks li:before{content:"✓";position:absolute;left:0;color:#1f6f5c}
+.reply{margin:8px 0 0;padding:8px 12px;border-left:3px solid #141414;background:#faf9f6}
+.receipt{border-color:#1f6f5c}.aibox{margin:0 0 12px}.btn{display:inline-flex;align-items:center;min-height:44px;padding:0 16px;border-radius:12px;border:1px solid var(--line);cursor:pointer;font-weight:600}
+.stars{color:#b0762f;letter-spacing:1px;white-space:nowrap}.stars .muted{color:#bbb}
+.heart{background:none;border:1px solid var(--line);border-radius:999px;min-width:44px;min-height:44px;font-size:1.2rem;cursor:pointer;line-height:1}.heart.on{color:#c2410c}
+@media(max-width:899px){body.seller .tabbar{grid-template-columns:repeat(5,1fr)}}
+.rate{border:0;padding:0;margin:0 0 12px;display:flex;gap:4px;align-items:center}.rate legend{font:600 .85rem var(--font);width:100%;margin-bottom:6px;padding:0}
+.rate button{background:none;border:0;font-size:1.9rem;line-height:1;min-width:44px;min-height:44px;color:#ccc;cursor:pointer;padding:0}.rate button.on{color:#b0762f}
+.reviews{margin:40px 0}.wishgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
+.pc-meta .stars{font-size:.8rem}.textbtn{background:none;border:0;color:inherit;text-decoration:underline;cursor:pointer;padding:0;font:inherit}
+.rate{min-inline-size:0;max-width:100%;flex-wrap:wrap;gap:0}.rate button{width:40px;min-width:40px;padding:0;margin:0}
+body.pub .rate button,body.pub .rate button:hover{background:transparent;border:0;box-shadow:none;color:#d4d0c8;font-size:2rem;line-height:1;text-transform:none;letter-spacing:0;border-radius:6px}
+body.pub .rate button.on{color:#b0762f}body.pub .rate button:focus-visible{outline:2px solid #3347e0}
+body.pub .heart,body.pub .heart:hover{background:#fff;color:#141414;border:1px solid var(--line);font-size:1.2rem;text-transform:none;letter-spacing:0;padding:0;min-width:44px}body.pub .heart.on{color:#c2410c}

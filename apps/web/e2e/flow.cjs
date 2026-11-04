@@ -26,6 +26,12 @@ async function noHScroll(page, label) {
   assert.ok(m.iw === expected && m.sw <= expected, `${label}: layout is ${m.iw}px wide (content ${m.sw}px) on a ${expected}px screen`);
 }
 
+
+// On phones the tab bar shows five items; the rest live under More.
+async function openNav(page, name, exact = false) {
+  if (page.viewportSize().width < 900) await page.getByRole('link', { name: 'More', exact: true }).click();
+  await page.getByRole('link', { name, exact }).first().click();
+}
 (async () => {
   const browser = await chromium.launch();
   for (const [name, vp, mobile] of [['mobile', { width: 375, height: 740 }, true], ['desktop', { width: 1280, height: 800 }, false]]) {
@@ -49,7 +55,7 @@ async function noHScroll(page, label) {
     await p.getByRole('heading', { name: 'Overview' }).waitFor();
 
     // 2. Publishing is blocked until the profile is complete (real validation)
-    await p.getByRole('link', { name: 'Settings' }).click();
+    await openNav(p, 'Settings');
     await p.getByRole('button', { name: 'Publish my store' }).click();
     await p.getByRole('alert').filter({ hasText: 'Before publishing' }).waitFor();
 
@@ -149,7 +155,7 @@ async function noHScroll(page, label) {
     // 7. Stock actually decreased: 100ml now sold out of 2 -> 1 left, visible to the next guest
     await g.goto(`${BASE}/store/${s}`);
     // 8. Spreadsheet import through the real UI: preview flags problems, commit skips them, nothing existing is overwritten
-    await p.getByRole('link', { name: 'Import' }).click();
+    await openNav(p, 'Import');
     const csv = 'Product Name,Option,SKU,Price,Cost,Quantity,Brand\nRose Water,,RW-1,12.50,5,10,Maison\nOud Noir,30ml,ON-30,50,20,3,Maison\nBad Row,,BR-1,abc,,2,\nSilk Scarf,,SS-1,45,18,6,';
     await p.getByLabel('CSV file').setInputFiles({ name: 'products.csv', mimeType: 'text/csv', buffer: Buffer.from(csv) });
     await p.getByRole('button', { name: 'Check my file' }).click();

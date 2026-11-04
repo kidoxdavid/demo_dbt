@@ -290,3 +290,37 @@ Edge cases covered by tests: six buyers racing for one unit (exactly one wins); 
 - S3-compatible storage, monitoring/alerting, load testing, tested container images.
 - Admin-editable email templates, seller notification preferences, a staff-management screen.
 - Lawyer-reviewed legal text and a decided retention policy.
+
+## Stage 3 report: pricing, counter sales, customers, billing, insights, AI drafting
+
+**Tests:** 204 API tests (was 142) and 5 browser flows (`apps/web/e2e/flow.cjs` to `flow5.cjs`, desktop 1280 px and phone 390 px, strict no-horizontal-scroll check) pass.
+
+### What was built
+| Area | What it does | Where |
+|---|---|---|
+| Discount codes | Percent, fixed amount, free delivery; start/end dates, minimum spend, total uses, uses per email; limits hold under concurrent checkouts (row lock); a cancelled order gives the use back; code can be paused/extended/capped but not changed once used | `lib/pricing.ts`, `modules/pricing.ts`, migration 012 |
+| Delivery rules | Ordered rules by province, weight and order value; first match wins; rules but no match = cannot check out for delivery (never silently free); flat fee when no rules | same |
+| One pricing function | `priceCart` is used by the cart quote, web checkout and counter sales, so the price shown is the price charged. Platform fee is on (subtotal − discount); tax on (subtotal − discount + delivery) | `lib/pricing.ts` |
+| EazyPOS | Barcode/SKU/name lookup, quote, sale (cash, own card terminal, e-Transfer, other), change due, receipt, end-of-day totals by method in the seller's time zone, refunds with restock. Shares stock with the online store (units reserved by an online checkout cannot be sold at the counter; the last unit has exactly one winner). No platform fee on counter sales. Professional/Enterprise plans only | `modules/pos.ts` |
+| Customer accounts | Sign up, order history (orders linked at checkout, or matched by a VERIFIED email), favourites (visible products only), close account, privacy erasure extended | `modules/customers.ts` |
+| Reviews | Verified purchase only (paid, not refunded/cancelled), one per customer per product, editable, first name shown, seller replies once, only staff can remove (with a reason, audited; a removed review cannot be resurrected by editing). Averages on product page, storefront cards and marketplace cards | same |
+| Subscription billing | Plans page, one free trial per business, upgrades now with credit for unused time, downgrades/cancel at period end (refused while usage exceeds the lower plan limits), monthly/yearly, failed payment → past due → daily retries → grace days (default 7, `platform_settings.billing_grace_days`) → automatic move to Starter, emails, invoices, staff-arranged plans (e.g. Enterprise), admin revenue/past-due views | `lib/billing.ts`, `modules/billing.ts`, migration 014 |
+| EazyAssist ("Insights") | Nine fixed questions (best sellers, slow movers, gross profit by product, month profit after costs and platform fees, low stock, restock, lapsed customers, month vs month, best discount code). Deterministic SQL, no language model; every answer lists exactly how it was defined | `modules/assist.ts` |
+| AI drafting | EazySnap (photo → listing draft) and EazyLaunch (tagline/About/delivery/returns text). Suggestions only: nothing is created or published. Output is parsed, length-limited, stripped of markup, and scanned for claims the seller did not write (awards, certifications, guarantees, health, origin...), which are flagged. Daily quota per business. Off without `ANTHROPIC_API_KEY` | `lib/ai.ts`, `modules/ai.ts`, migration 015 |
+
+### What is NOT real, or not verified (read this)
+- **Billing is simulated.** `BILLING_PROVIDER=simulated` moves no money and the UI says so everywhere. With `none` (the production default) paid plans cannot be bought. No card processor adapter exists. A real one must record the charge intent *before* calling the provider and reconcile afterwards: today the provider call happens inside the database transaction (fine for the simulator, not for a real processor, same caveat as refunds).
+- **Subscription fees carry no sales tax and the invoices are not tax invoices.** Whether GST/HST applies to EazyStores' own fees, and what an invoice must contain, is an accounting question for you and an accountant.
+- **The AI features have never called the real model.** They are tested only against a local fake server that speaks the Messages API shape (request fields, image re-encoding, parsing, flagging, quotas, failure handling). Output quality, cost and latency are unmeasured. Set `ANTHROPIC_API_KEY` (optionally `AI_MODEL`, `AI_BASE_URL`, `AI_DAILY_LIMIT`) and try it before promising it to sellers. The claim flagger is a keyword list: it catches common claims, not all.
+- **POS has no card terminal integration.** "Card" means the seller took the payment on their own terminal and recorded it here. No hardware (barcode scanners that type a code and press Enter work; nothing else was tested). Offline sales are not supported.
+- **EazyAssist is arithmetic, not advice.** Gross profit uses the cost price saved on each product; items without a cost price overstate profit (the answer says so). Partial refunds are not deducted; rent, wages, delivery you paid, advertising and income tax are not in the system.
+- **The billing job** runs hourly inside the API process (`server.ts`). With several API instances it is still safe (row locks, one invoice per period) but you should run it from one place in production.
+- Customer accounts: no marketing consent capture and no email notifications for review replies. Reviews have no automatic profanity filter, only staff removal.
+- Delivery prices use the destination province only (no postal-code zones, no carrier rates).
+
+### Decisions for you
+1. Real plan prices, fees, trial length and which features belong to which plan (Stage 3 uses the seeded placeholders; POS is Professional+).
+2. Billing provider (for Canada: Stripe is the usual choice; Moneris and Paddle are alternatives) and the tax treatment of subscription fees.
+3. Whether reviews should be allowed without a purchase (currently never) and whether sellers may reply more than once (currently once).
+4. Grace period before a non-paying store moves to Starter (7 days now) and what happens to products above the Starter limit (today they stay visible; only new products are blocked).
+5. AI: which model, a monthly budget per seller, and whether AI drafting is a paid-plan feature.

@@ -1,3 +1,4 @@
+import { Stars, WishHeart, ReviewsSection } from './Customer';
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api, ApiError, errorText, money } from '../api';
@@ -21,6 +22,7 @@ export function PubHeader({ q, categories = [], onSearch }: { q?: string; catego
       <div className="pright">
         <button className="iconbtn" aria-label={open ? 'Close search' : 'Search'} aria-expanded={open} onClick={() => setOpen(o => !o)}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg></button>
+        <Link className="plink" to="/account">Account</Link>
         <Link className="plink" to="/sell">Sell</Link>
       </div>
     </div>
@@ -37,7 +39,7 @@ export function PCard({ p }: { p: any }) {
       {p.image2 && <img className="b" src={thumb(p.image2)} alt="" loading="lazy" />}
       {!p.available ? <span className="tag">Sold out</span> : p.madeToOrder ? <span className="tag">Made to order</span> : null}
     </div>
-    <div className="pc-meta"><span className="pc-store">{p.storeName}</span><span className="pc-name">{p.name}</span><span className="pc-price">{price}</span></div>
+    <div className="pc-meta"><span className="pc-store">{p.storeName}</span><span className="pc-name">{p.name}</span>{p.rating?.count > 0 && <Stars avg={p.rating.avg} count={p.rating.count} />}<span className="pc-price">{price}</span></div>
   </Link>;
 }
 
@@ -149,7 +151,8 @@ export function ProductPage() {
         </div>
         <div className="pinfo2">
           <Link className="kicker" to={`/store/${slug}`}>{p.brand && p.brand !== store.name ? `${p.brand} · ` : ''}{store.name}</Link>
-          <h1>{p.name}</h1>
+          <div className="row spread"><h1 style={{ margin: 0 }}>{p.name}</h1><WishHeart productId={p.id} /></div>
+          {p.rating?.count > 0 && <a href="#rv-h" style={{ textDecoration: 'none' }}><Stars avg={p.rating.avg} count={p.rating.count} /></a>}
           <div className="pprice">{money(v.priceCents, store.currency)}</div>
           {p.madeToOrder && <p className="note2">Made to order. Allow extra time for the maker to prepare your piece.</p>}
           {p.variants.length > 1 && <fieldset className="opts2"><legend>Option · <b>{v.title}</b></legend>
@@ -174,6 +177,7 @@ export function ProductPage() {
           </div>
         </div>
       </div>
+      <ReviewsSection slug={slug} productId={p.id} />
     </main>
     {cart.count > 0 && <div className="cartbar"><div className="wrap row spread"><span>{cart.count} item{cart.count > 1 ? 's' : ''} · <b>{money(cart.subtotal, store.currency)}</b></span><Link className="btn sm" to={`/store/${slug}/checkout`}>Checkout</Link></div></div>}
   </div>;

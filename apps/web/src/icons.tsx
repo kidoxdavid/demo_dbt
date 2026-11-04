@@ -9,3 +9,6 @@ export const IcoCog = I(<><circle cx="12" cy="12" r="3" /><path d="M19 12a7 7 0 
 export const IcoTag = I(<><path d="M3 12V3h9l9 9-9 9-9-9z" /><circle cx="7.5" cy="7.5" r="1.2" /></>);
 export const IcoChart = I(<><path d="M4 20V10M10 20V4M16 20v-8M22 20H2" /></>);
 export const IcoLink = I(<><path d="M10 14a4 4 0 005.6 0l3-3a4 4 0 00-5.6-5.6l-1 1" /><path d="M14 10a4 4 0 00-5.6 0l-3 3A4 4 0 0011 18.6l1-1" /></>);
+export const IcoPos = I(<><rect x="4" y="3" width="16" height="18" rx="2" /><path d="M8 7h8M8 11h2M12 11h2M16 11h0M8 15h2M12 15h2M16 15h0" /></>);
+export const IcoMore = I(<><circle cx="5" cy="12" r="1.3" /><circle cx="12" cy="12" r="1.3" /><circle cx="19" cy="12" r="1.3" /></>);
+export const IcoStar = I(<><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9L12 3z" /></>);

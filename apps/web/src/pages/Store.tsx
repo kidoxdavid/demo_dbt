@@ -76,22 +76,29 @@ export function Storefront() {
   </div>;
 }
 
+function discountText(code: string) {
+  const [, why, extra] = code.split(':');
+  return ({ not_found: 'That code is not valid.', inactive: 'That code is no longer active.', not_started: 'That code is not active yet.', expired: 'That code has expired.', used_up: 'That code has been fully used.', used_by_you: 'You have already used that code the maximum number of times.',
+    not_applicable: 'Free delivery only applies to delivery orders with a delivery fee.', min_subtotal: `That code needs an order of at least $${(Number(extra) / 100).toFixed(2)}.` } as Record<string, string>)[why] ?? 'That code cannot be used.';
+}
 export function StoreCheckout() {
   usePub();
   const { slug = '' } = useParams(); const nav = useNavigate(); const { store, missing } = useStore(slug); const cart = useCart(slug);
   const [f, setF] = useState({ name: '', email: '', fulfilment: 'pickup', line1: '', city: '', region: '', postalCode: '' });
   const [err, setErr] = useState(''); const [busy, setBusy] = useState(false); const [placed, setPlaced] = useState<any>(null);
+  const [code, setCode] = useState(''); const [appliedCode, setAppliedCode] = useState('');
+  useEffect(() => { api('/api/me').then(m => setF(p => ({ ...p, name: p.name || m.fullName, email: p.email || m.email }))).catch(() => {}); }, []);   // signed-in customers are pre-filled
   useEffect(() => { if (store && !store.fulfilment.pickup && store.fulfilment.delivery) setF(p => ({ ...p, fulfilment: 'delivery' })); }, [store]);
   // The cart shows exactly what checkout will charge, including tax, by asking the same pricing code the server uses.
   const [quote, setQuote] = useState<any>(null); const [quoteErr, setQuoteErr] = useState('');
-  const quoteKey = JSON.stringify([cart.lines.map(l => [l.variantId, l.qty]), f.fulfilment, f.region]);
+  const quoteKey = JSON.stringify([cart.lines.map(l => [l.variantId, l.qty]), f.fulfilment, f.region, appliedCode]);
   useEffect(() => {
     if (!store || !cart.lines.length) { setQuote(null); return; }
     const qty = new Map<string, number>(); for (const l of cart.lines) qty.set(l.variantId, (qty.get(l.variantId) ?? 0) + l.qty);
     let cancelled = false;
-    api(`/api/public/stores/${slug}/quote`, { body: { items: [...qty].map(([variantId, quantity]) => ({ variantId, quantity })), fulfilment: f.fulfilment, ...(f.fulfilment === 'delivery' && f.region ? { region: f.region } : {}) } })
+    api(`/api/public/stores/${slug}/quote`, { body: { items: [...qty].map(([variantId, quantity]) => ({ variantId, quantity })), fulfilment: f.fulfilment, ...(f.fulfilment === 'delivery' && f.region ? { region: f.region } : {}), ...(appliedCode ? { discountCode: appliedCode } : {}) } })
       .then(q => { if (!cancelled) { setQuote(q); setQuoteErr(''); } })
-      .catch(e => { if (!cancelled) { setQuote(null); setQuoteErr(e instanceof ApiError && e.code === 'tax_region_unknown' ? 'Choose your province so we can work out tax.' : errorText(e)); } });
+      .catch(e => { if (!cancelled) { setQuote(null); setQuoteErr(e instanceof ApiError && e.code === 'tax_region_unknown' ? 'Choose your province so we can work out tax.' : e instanceof ApiError && e.code === 'no_shipping_option' ? 'This seller does not deliver to that province or order size. Try pickup or another address.' : e instanceof ApiError && e.code.startsWith('discount_invalid') ? discountText(e.code) : errorText(e)); } });
     return () => { cancelled = true; };
   }, [quoteKey, store]); // eslint-disable-line
   if (missing) return <div className="wrap"><h1>Store not found</h1></div>;
@@ -101,7 +108,7 @@ export function StoreCheckout() {
   async function submit(e: FormEvent) {
     e.preventDefault(); setErr(''); setBusy(true);
     try {
-      const body: any = { items: cart.lines.map(l => ({ variantId: l.variantId, quantity: l.qty, ...(l.custom && Object.keys(l.custom).length ? { customizations: l.custom } : {}) })), email: f.email, name: f.name, fulfilment: f.fulfilment, ...(recalledSource(slug) ? { source: recalledSource(slug) } : {}) };
+      const body: any = { items: cart.lines.map(l => ({ variantId: l.variantId, quantity: l.qty, ...(l.custom && Object.keys(l.custom).length ? { customizations: l.custom } : {}) })), email: f.email, name: f.name, fulfilment: f.fulfilment, ...(appliedCode ? { discountCode: appliedCode } : {}), ...(recalledSource(slug) ? { source: recalledSource(slug) } : {}) };
       if (f.fulfilment === 'delivery') body.address = { line1: f.line1, city: f.city, region: f.region, postalCode: f.postalCode, country: 'CA' };
       setPlaced(await api(`/api/public/stores/${slug}/checkout`, { body }));
     } catch (x) { setErr(errorText(x)); } finally { setBusy(false); }
@@ -140,9 +147,13 @@ export function StoreCheckout() {
           <span className="qty"><button className="secondary" aria-label={`Decrease ${l.name}`} onClick={() => cart.setQty(l.key, l.qty - 1)}>−</button>
             <span aria-live="polite">{l.qty}</span><button className="secondary" aria-label={`Increase ${l.name}`} onClick={() => cart.setQty(l.key, l.qty + 1)}>+</button></span></li>)}</ul>
           <div className="sumline"><span>Subtotal</span><span>{money(quote?.subtotalCents ?? cart.subtotal, store.currency)}</span></div>
-          <div className="sumline"><span>Delivery</span><span>{money(quote?.shippingCents ?? shipping, store.currency)}</span></div>
+          {quote?.discountCents > 0 && <div className="sumline"><span>Discount ({quote.discountCode})</span><span>−{money(quote.discountCents, store.currency)}</span></div>}
+          <div className="sumline"><span>Delivery{quote?.shippingRule ? ` (${quote.shippingRule})` : ''}</span><span>{money(quote?.shippingCents ?? shipping, store.currency)}</span></div>
           {quote?.taxLines?.map((t: any) => <div className="sumline" key={t.name}><span>{t.name}</span><span>{money(t.cents, store.currency)}</span></div>)}
           <div className="sumline total"><span>Total</span><span>{money(quote?.totalCents ?? cart.subtotal + shipping, store.currency)}</span></div>
+          <form className="row" style={{ marginTop: 10 }} onSubmit={e => { e.preventDefault(); setAppliedCode(code.trim()); }}>
+            <input aria-label="Discount code" placeholder="Discount code" value={code} onChange={e => setCode(e.target.value.toUpperCase())} style={{ flex: 1 }} maxLength={40} />
+            <button type="submit" className="secondary">Apply</button>{appliedCode && <button type="button" className="ghost" onClick={() => { setAppliedCode(''); setCode(''); }}>Remove</button>}</form>
           {quoteErr && <p className="muted small" role="status">{quoteErr}</p>}
           <p className="muted small">{store.chargesTax ? 'Tax is worked out for your province. Final prices are confirmed when you place the order.' : 'This seller does not charge sales tax. Final prices are confirmed when you place the order.'}</p></section>
         <form className="card" onSubmit={submit}>

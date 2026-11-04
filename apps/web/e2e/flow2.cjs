@@ -61,6 +61,12 @@ async function noHScroll(page, label) {
   assert.ok(m.iw === expected && m.sw <= expected, `${label}: layout is ${m.iw}px wide (content ${m.sw}px) on a ${expected}px screen`);
 }
 
+
+// On phones the tab bar shows five items; the rest live under More.
+async function openNav(page, name, exact = false) {
+  if (page.viewportSize().width < 900) await page.getByRole('link', { name: 'More', exact: true }).click();
+  await page.getByRole('link', { name, exact }).first().click();
+}
 (async () => {
   execFileSync('npm', ['run', 'reset-mfa', '--silent', '--', ADMIN.email], { cwd: `${__dirname}/../../api`, stdio: 'pipe' });   // start from a known state
   const browser = await chromium.launch();
@@ -75,7 +81,7 @@ async function noHScroll(page, label) {
     await p.getByLabel('Business name').fill(`Custom ${slug}`); await p.getByLabel('Store address').fill(slug);
     await p.getByRole('checkbox', { name: /I agree to the/ }).check();
     await p.getByRole('button', { name: 'Create store' }).click(); await p.waitForURL('**/dashboard');
-    await p.getByRole('link', { name: 'Settings' }).click();
+    await openNav(p, 'Settings');
     await p.getByLabel('What do you sell? (category)').fill('Personalised gifts'); await p.getByLabel('About your business', { exact: true }).fill('Made to order gifts.');
     await p.getByLabel('Customer pickup').check(); await p.getByRole('button', { name: 'Save changes' }).click();
     await p.getByText('Saved.').waitFor(); await p.getByRole('button', { name: 'Publish my store' }).click(); await p.getByText('Your store is live!').waitFor();
@@ -96,7 +102,7 @@ async function noHScroll(page, label) {
     await p.getByRole('button', { name: 'Save product' }).click(); await p.getByText(/Product saved/).waitFor();
 
     // --- Seller: share page (channel-tagged link + QR that really renders)
-    await p.getByRole('link', { name: 'Share', exact: true }).click(); await p.getByRole('heading', { name: 'Share' }).waitFor();
+    await openNav(p, 'Share', true); await p.getByRole('heading', { name: 'Share' }).waitFor();
     await p.getByLabel('Where will you share it?').selectOption('whatsapp');
     const link = await p.getByLabel('Store link').inputValue(); assert.match(link, new RegExp(`/store/${slug}\\?src=whatsapp$`));
     const qrImg = p.getByRole('img', { name: /QR code for/ }); await qrImg.waitFor();

@@ -44,6 +44,12 @@ describe('EazyPOS', () => {
     const o = (await oq(`SELECT status, channel, platform_fee_bps, source FROM orders WHERE id=$1`, [r.json().id])).rows[0]; expect(o).toMatchObject({ status: 'completed', channel: 'pos', platform_fee_bps: 0, source: 'pos' });
     expect((await oq(`SELECT count(*)::int n FROM audit_logs WHERE action='pos.sale' AND tenant_id=$1`, [s.tenantId])).rows[0].n).toBe(1);
   });
+  it('a quote shows the same total as the sale and changes nothing', async () => {
+    const { s, p } = await shop('pos13', { federal: true, price: 2000 });
+    const q = (await call('POST', '/api/seller/pos/quote', s.cookie, { items: [{ variantId: p.variantId, quantity: 2 }] })).json();
+    expect(q).toMatchObject({ subtotalCents: 4000, taxCents: 200, totalCents: 4200 }); expect(await k.stock(p.variantId)).toMatchObject({ on_hand: 10 });
+    expect((await sale(s.cookie, p.variantId, 2)).json().totalCents).toBe(q.totalCents);
+  });
   it('refuses cash that does not cover the total, and sells nothing', async () => {
     const { s, p } = await shop('pos5');
     const r = await sale(s.cookie, p.variantId, 1, { tenderedCents: 500 }); expect(r.statusCode).toBe(422); expect(r.json().error).toBe('tendered_too_low:1000');

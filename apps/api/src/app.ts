@@ -12,6 +12,7 @@ declare module 'fastify' { interface FastifyRequest { user?: { id: string; email
 
 import { HttpError } from './lib/errors.js';
 import { registerCommerce } from './modules/commerce.js';
+import { registerImport } from './modules/import.js';
 const SLUG = /^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$/;
 
 const signupSchema = z.object({
@@ -29,7 +30,7 @@ const businessPatch = z.object({
 }).partial().strict();
 
 export async function buildApp() {
-  const app = Fastify({ logger: false, bodyLimit: 1_000_000 });
+  const app = Fastify({ logger: false, bodyLimit: 3_000_000 });
   await app.register(helmet);
   await app.register(cookie);
   await app.register(rateLimit, { global: false });
@@ -274,6 +275,7 @@ export async function buildApp() {
   });
 
   registerCommerce(app, { tenantCtx });
+  registerImport(app, { tenantCtx });
 
   return app;
 }

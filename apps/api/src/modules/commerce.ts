@@ -5,7 +5,8 @@ import { z } from 'zod';
 import { withTx, audit, type Ctx } from '../lib/db.js';
 import { HttpError } from '../lib/errors.js';
 import { getProvider } from '../lib/payments.js';
-import { reservationMinutes } from '../config.js';
+import { reservationMinutes, uploadDir, maxImageBytes } from '../config.js';
+import { localStorageAdapter, sniffImage, isValidKey } from '../lib/storage.js';
 
 type TenantCtx = { tenantId: string; role: string; userId: string };
 const SLUG = /^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$/;
@@ -102,6 +103,55 @@ const TRANSITIONS: Record<string, string[]> = {
 
 export function registerCommerce(app: FastifyInstance, deps: { tenantCtx: (r: FastifyRequest) => Promise<TenantCtx> }) {
   const { tenantCtx } = deps;
+  const storage = localStorageAdapter(uploadDir);
+
+  // ---------------- Images ----------------
+  // Raw binary upload (no multipart dependency). Type is decided by magic bytes, size is capped by bodyLimit + check.
+  app.addContentTypeParser(['image/jpeg', 'image/png', 'image/webp'], { parseAs: 'buffer', bodyLimit: maxImageBytes }, (_r, body, done) => done(null, body));
+
+  app.post('/api/seller/products/:id/images', async (req, reply) => {
+    const t = await tenantCtx(req); can(t, ['owner', 'manager']);
+    const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
+    const body = req.body as Buffer;
+    if (!Buffer.isBuffer(body) || !body.length) throw new HttpError(400, 'empty_upload');
+    if (body.length > maxImageBytes) throw new HttpError(413, 'image_too_large');
+    const kind = sniffImage(body);
+    if (!kind) throw new HttpError(415, 'unsupported_image_type');
+    const key = await storage.put(kind.ext, body);
+    try {
+      const row = await withTx(t, async c => {
+        const p = (await c.query('SELECT 1 FROM products WHERE id=$1', [id])).rowCount;
+        if (!p) throw new HttpError(404, 'not_found');
+        const n = (await c.query('SELECT count(*)::int n, coalesce(max(position),-1)+1 pos FROM product_media WHERE product_id=$1', [id])).rows[0];
+        if (n.n >= 8) throw new HttpError(409, 'too_many_images');
+        return (await c.query(
+          `INSERT INTO product_media(tenant_id,product_id,storage_key,content_type,bytes,position) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id,position`,
+          [t.tenantId, id, key, kind.type, body.length, n.pos])).rows[0];
+      });
+      return reply.code(201).send({ id: row.id, url: `/media/${key}`, position: row.position });
+    } catch (e) { await storage.remove(key); throw e; } // never orphan a file when the DB write is rejected
+  });
+
+  app.delete('/api/seller/images/:id', async (req) => {
+    const t = await tenantCtx(req); can(t, ['owner', 'manager']);
+    const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
+    const key = await withTx(t, async c => (await c.query('DELETE FROM product_media WHERE id=$1 RETURNING storage_key', [id])).rows[0]?.storage_key);
+    if (!key) throw new HttpError(404, 'not_found');
+    await storage.remove(key);
+    return { ok: true };
+  });
+
+  // Public image delivery: unguessable key; only images of ACTIVE products are served.
+  app.get('/media/:key', async (req, reply) => {
+    const { key } = req.params as { key: string };
+    if (!isValidKey(key)) throw new HttpError(404, 'not_found');
+    const type = await withTx({}, async c => (await c.query('SELECT media_content_type($1) t', [key])).rows[0].t as string | null);
+    if (!type) throw new HttpError(404, 'not_found');
+    const data = await storage.get(key);
+    if (!data) throw new HttpError(404, 'not_found');
+    return reply.header('content-type', type).header('x-content-type-options', 'nosniff').header('cross-origin-resource-policy', 'cross-origin')
+      .header('cache-control', 'public, max-age=3600').send(data);
+  });
 
   // ---------------- Seller: catalogue ----------------
   app.post('/api/seller/products', async (req, reply) => {
@@ -142,7 +192,8 @@ export function registerCommerce(app: FastifyInstance, deps: { tenantCtx: (r: Fa
       `SELECT p.id,p.name,p.status,p.brand,p.attributes,
         (SELECT json_agg(json_build_object('id',v.id,'title',v.title,'sku',v.sku,'priceCents',v.price_cents,'costCents',v.cost_cents,
            'onHand',l.on_hand,'reserved',l.reserved,'trackInventory',v.track_inventory,'lowStock',(v.track_inventory AND l.on_hand-l.reserved <= v.low_stock_threshold)))
-         FROM product_variants v JOIN inventory_levels l ON l.variant_id=v.id WHERE v.product_id=p.id) AS variants
+         FROM product_variants v JOIN inventory_levels l ON l.variant_id=v.id WHERE v.product_id=p.id) AS variants,
+        (SELECT coalesce(json_agg(json_build_object('id',m.id,'url','/media/'||m.storage_key) ORDER BY m.position),'[]'::json) FROM product_media m WHERE m.product_id=p.id) AS images
        FROM products p ORDER BY p.created_at DESC LIMIT $1 OFFSET $2`, [limit, offset])).rows);
   });
 
@@ -262,7 +313,8 @@ export function registerCommerce(app: FastifyInstance, deps: { tenantCtx: (r: Fa
       `SELECT p.id,p.name,p.description,p.brand,p.attributes,
         (SELECT json_agg(json_build_object('id',v.id,'title',v.title,'options',v.options,'priceCents',v.price_cents,
            'available',(NOT v.track_inventory) OR (l.on_hand-l.reserved>0)))
-         FROM product_variants v JOIN inventory_levels l ON l.variant_id=v.id WHERE v.product_id=p.id) AS variants
+         FROM product_variants v JOIN inventory_levels l ON l.variant_id=v.id WHERE v.product_id=p.id) AS variants,
+        (SELECT coalesce(json_agg('/media/'||m.storage_key ORDER BY m.position),'[]'::json) FROM product_media m WHERE m.product_id=p.id) AS images
        FROM products p WHERE p.status='active' ORDER BY p.created_at DESC LIMIT $1 OFFSET $2`, [limit, offset])).rows);
   });
 

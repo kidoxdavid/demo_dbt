@@ -223,3 +223,60 @@ describe('store settings', () => {
     expect((await app.inject({ method: 'PATCH', url: '/api/seller/store', ...ck(s.cookie), payload: { deliveryFeeCents: -1 } })).statusCode).toBe(400);
   });
 });
+
+describe('product images', () => {
+  const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(64, 1)]);
+  const up = (cookie: string, pid: string, body: Buffer, type = 'image/png') =>
+    app.inject({ method: 'POST', url: `/api/seller/products/${pid}/images`, headers: { 'content-type': type }, cookies: { eazy_sid: cookie }, payload: body });
+
+  it('stores a valid image, serves it publicly with safe headers, and lists it on the storefront', async () => {
+    const s = await seller('img1'); const p = await product(s.cookie);
+    const r = await up(s.cookie, p.id, PNG);
+    expect(r.statusCode).toBe(201);
+    const served = await app.inject({ method: 'GET', url: r.json().url });
+    expect(served.statusCode).toBe(200);
+    expect(served.headers['content-type']).toBe('image/png');
+    expect(served.headers['x-content-type-options']).toBe('nosniff');
+    expect(served.rawPayload.equals(PNG)).toBe(true);
+    const pub = (await app.inject({ method: 'GET', url: `/api/public/stores/${s.slug}/products` })).json();
+    expect(pub[0].images).toEqual([r.json().url]);
+  });
+  it('rejects non-images even when the client claims image/png, and enforces the size cap', async () => {
+    const s = await seller('img2'); const p = await product(s.cookie);
+    expect((await up(s.cookie, p.id, Buffer.from('<script>alert(1)</script>'.padEnd(40)))).statusCode).toBe(415);
+    expect((await up(s.cookie, p.id, Buffer.from('GIF89a' + 'x'.repeat(40)), 'image/png')).statusCode).toBe(415);
+    expect((await up(s.cookie, p.id, Buffer.alloc(6 * 1024 * 1024, 1))).statusCode).toBe(413);
+    expect((await app.inject({ method: 'POST', url: `/api/seller/products/${p.id}/images`, headers: { 'content-type': 'text/html' }, cookies: { eazy_sid: s.cookie }, payload: '<b>x</b>' })).statusCode).toBe(415);
+  });
+  it("a seller cannot attach to or delete another seller's images; unknown keys and traversal are 404", async () => {
+    const a = await seller('img3'); const b = await seller('img4'); const pb = await product(b.cookie);
+    expect((await up(a.cookie, pb.id, PNG)).statusCode).toBe(404);
+    const mine = (await up(b.cookie, pb.id, PNG)).json();
+    expect((await app.inject({ method: 'DELETE', url: `/api/seller/images/${mine.id}`, cookies: { eazy_sid: a.cookie } })).statusCode).toBe(404);
+    expect((await app.inject({ method: 'GET', url: '/media/ffffffffffffffffffffffffffffffff.png' })).statusCode).toBe(404);
+    expect((await app.inject({ method: 'GET', url: '/media/..%2F..%2Fetc%2Fpasswd' })).statusCode).toBe(404);
+  });
+  it('images of draft products are not served; delete removes the file; max 8 per product; no orphan files on rejection', async () => {
+    const s = await seller('img5'); const p = await product(s.cookie, { status: 'draft' });
+    const r = (await up(s.cookie, p.id, PNG)).json();
+    expect((await app.inject({ method: 'GET', url: r.url })).statusCode).toBe(404);
+    await app.inject({ method: 'PATCH', url: `/api/seller/products/${p.id}`, cookies: { eazy_sid: s.cookie }, payload: { status: 'active' } });
+    expect((await app.inject({ method: 'GET', url: r.url })).statusCode).toBe(200);
+    for (let i = 0; i < 7; i++) expect((await up(s.cookie, p.id, PNG)).statusCode).toBe(201);
+    const { readdirSync } = await import('node:fs');
+    const filesBefore = readdirSync(process.env.UPLOAD_DIR!).length;
+    expect((await up(s.cookie, p.id, PNG)).statusCode).toBe(409);
+    expect(readdirSync(process.env.UPLOAD_DIR!).length).toBe(filesBefore);
+    expect((await app.inject({ method: 'DELETE', url: `/api/seller/images/${r.id}`, cookies: { eazy_sid: s.cookie } })).statusCode).toBe(200);
+    expect((await app.inject({ method: 'GET', url: r.url })).statusCode).toBe(404);
+  });
+});
+
+describe('media lookup privilege containment', () => {
+  it('media_content_type does not leave elevated platform access on for the rest of the transaction', async () => {
+    await seller('leakmedia');
+    const { withTx } = await import('../src/lib/db.js');
+    const n = await withTx({}, async c => { await c.query(`SELECT media_content_type('ffffffffffffffffffffffffffffffff.png')`); return (await c.query('SELECT count(*)::int n FROM businesses')).rows[0].n; });
+    expect(n).toBe(0);
+  });
+});

@@ -13,3 +13,5 @@ export const reservationMinutes = Number(process.env.RESERVATION_MINUTES ?? 15);
 // Origins allowed to make state-changing requests besides same-host. Set explicitly in production (the public web origin).
 export const allowedOrigins = (process.env.ALLOWED_ORIGINS ?? (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:5173,http://127.0.0.1:5173'))
   .split(',').map(s => s.trim()).filter(Boolean);
+export const uploadDir = process.env.UPLOAD_DIR ?? './uploads';
+export const maxImageBytes = 5 * 1024 * 1024;

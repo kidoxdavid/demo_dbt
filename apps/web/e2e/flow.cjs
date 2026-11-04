@@ -1,6 +1,18 @@
 // End-to-end: drives the real UI against the real API + Postgres. Usage: node e2e/flow.cjs <screenshotDir>
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
+const zlib = require('node:zlib');
+// Minimal PNG encoder: a diagonal two-colour gradient, so uploaded photos are real, renderable images.
+function png(w, h, c1, c2) {
+  const raw = Buffer.alloc((w * 3 + 1) * h);
+  for (let y = 0; y < h; y++) { raw[y * (w * 3 + 1)] = 0; for (let x = 0; x < w; x++) { const t = (x / w + y / h) / 2, o = y * (w * 3 + 1) + 1 + x * 3;
+    for (let k = 0; k < 3; k++) raw[o + k] = Math.round(c1[k] + (c2[k] - c1[k]) * t); } }
+  const crcT = Array.from({ length: 256 }, (_, n) => { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; return c >>> 0; });
+  const crc = b => { let c = 0xffffffff; for (const x of b) c = crcT[(c ^ x) & 0xff] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; };
+  const chunk = (t, d) => { const l = Buffer.alloc(4); l.writeUInt32BE(d.length); const td = Buffer.concat([Buffer.from(t), d]); const c = Buffer.alloc(4); c.writeUInt32BE(crc(td)); return Buffer.concat([l, td, c]); };
+  const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(w, 0); ihdr.writeUInt32BE(h, 4); ihdr[8] = 8; ihdr[9] = 2;
+  return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]);
+}
 const BASE = process.env.BASE_URL ?? 'http://127.0.0.1:5173';
 const out = process.argv[2] ?? '.';
 const id = Date.now().toString(36);
@@ -30,10 +42,10 @@ async function noHScroll(page, label) {
     await p.screenshot({ path: `${out}/${name}-1-signup.png` });
     await p.getByRole('button', { name: 'Create store' }).click();
     await p.waitForURL('**/dashboard');
-    await p.getByRole('heading', { name: 'Overview' }).waitFor();
+    await p.getByRole('heading', { name: /Good to see you/ }).waitFor();
 
     // 2. Publishing is blocked until the profile is complete (real validation)
-    await p.getByRole('link', { name: 'Store settings' }).click();
+    await p.getByRole('link', { name: 'Settings' }).click();
     await p.getByRole('button', { name: 'Publish my store' }).click();
     await p.getByRole('alert').filter({ hasText: 'Before publishing' }).waitFor();
 
@@ -70,6 +82,11 @@ async function noHScroll(page, label) {
     await p.getByText('Product saved.').waitFor();
     await p.getByText('4 in stock').waitFor();
     await noHScroll(p, `${name} products`);
+    // Photo upload through the real UI (bad type is refused client-side first)
+    await p.getByLabel('Add photos to Oud Noir').setInputFiles({ name: 'notes.txt', mimeType: 'text/plain', buffer: Buffer.from('not an image') });
+    await p.getByRole('alert').filter({ hasText: 'use a JPG, PNG or WebP' }).waitFor();
+    await p.getByLabel('Add photos to Oud Noir').setInputFiles({ name: 'oud.png', mimeType: 'image/png', buffer: png(480, 600, [14, 62, 52], [214, 170, 92]) });
+    await p.getByLabel('Photos of Oud Noir').locator('img').waitFor();
     // Stock adjustment
     await p.getByRole('button', { name: 'Add one Oud Noir 50ml' }).click();
     await p.getByText('5 in stock').waitFor();
@@ -79,17 +96,19 @@ async function noHScroll(page, label) {
     const g = await guest.newPage();
     await g.goto(`${BASE}/store/${s}`);
     await g.getByRole('heading', { name: `Scented ${s}` }).waitFor();
-    await g.getByText('Pickup available · Delivery $5.00').waitFor();
+    await g.getByText('Pickup available').waitFor(); await g.getByText('Delivery $5.00').first().waitFor();
+    await g.locator('.pmedia img').first().waitFor();   // uploaded photo is shown on the public storefront
+    assert.ok(await g.locator('.pmedia img').first().evaluate(i => i.complete && i.naturalWidth > 0), 'storefront image failed to load');
     await noHScroll(g, `${name} storefront`);
     await g.screenshot({ path: `${out}/${name}-4-storefront.png`, fullPage: true });
-    await g.getByLabel('Option').selectOption({ label: '100ml — $140.00' });
+    await g.getByLabel('Option for Oud Noir').selectOption({ label: '100ml · $140.00' });
     await g.getByRole('button', { name: 'Add to cart' }).click();
     await g.getByRole('link', { name: 'Checkout' }).click();
-    await g.getByText('Total: $140.00').waitFor();
+    await g.locator('.sumline.total').filter({ hasText: '$140.00' }).waitFor();
     await g.getByLabel('Name').fill('Guest Buyer');
     await g.getByLabel('Email').fill('guest@example.test');
     await g.getByLabel('How would you like to receive it?').selectOption('delivery');
-    await g.getByText('Total: $145.00').waitFor();
+    await g.locator('.sumline.total').filter({ hasText: '$145.00' }).waitFor();
     await g.getByLabel('Street address').fill('1 Main St');
     await g.getByLabel('City').fill('Calgary');
     await g.getByLabel('Province').fill('AB');
@@ -123,7 +142,24 @@ async function noHScroll(page, label) {
 
     // 7. Stock actually decreased: 100ml now sold out of 2 -> 1 left, visible to the next guest
     await g.goto(`${BASE}/store/${s}`);
-    await g.getByLabel('Option').selectOption({ label: '100ml — $140.00' });
+    // 8. Spreadsheet import through the real UI: preview flags problems, commit skips them, nothing existing is overwritten
+    await p.getByRole('link', { name: 'Import' }).click();
+    const csv = 'Product Name,Option,SKU,Price,Cost,Quantity,Brand\nRose Water,,RW-1,12.50,5,10,Maison\nOud Noir,30ml,ON-30,50,20,3,Maison\nBad Row,,BR-1,abc,,2,\nSilk Scarf,,SS-1,45,18,6,';
+    await p.getByLabel('CSV file').setInputFiles({ name: 'products.csv', mimeType: 'text/csv', buffer: Buffer.from(csv) });
+    await p.getByRole('button', { name: 'Check my file' }).click();
+    await p.getByText('2 ready').waitFor();
+    await p.getByText('1 with problems').waitFor();
+    await p.getByText(/Invalid price "abc"/).waitFor();
+    await p.getByText(/already exists/).waitFor();                // "Oud Noir" already in the catalogue
+    await noHScroll(p, `${name} import`);
+    await p.screenshot({ path: `${out}/${name}-10-import-preview.png`, fullPage: true });
+    await p.getByRole('button', { name: 'Import 2 row(s)' }).click();
+    await p.getByText(/Imported 2 product\(s\)/).waitFor();
+    await p.getByRole('link', { name: 'Products' }).click();
+    await p.getByRole('heading', { name: 'Rose Water' }).waitFor();
+    await p.getByRole('heading', { name: 'Silk Scarf' }).waitFor();
+    assert.equal(await p.getByRole('heading', { name: 'Oud Noir' }).count(), 1, 'existing product must not be duplicated or overwritten');
+    await p.screenshot({ path: `${out}/${name}-11-products.png`, fullPage: true });
     await seller.close(); await guest.close();
     console.log(`✓ ${name}: full flow passed`);
   }

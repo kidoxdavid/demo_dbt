@@ -1,6 +1,6 @@
 # EazyStores: product and technical plan (living document)
 
-Status: Phase 1 (foundation), a thin Phase 3 commerce slice, and a first web UI (seller dashboard, storefront, checkout) are implemented. Items marked Built are real and tested; everything else is plan.
+Status: Phase 1 (foundation), a thin Phase 3 commerce slice, a web UI, product images, and CSV import are implemented. Payments are still simulated. Items marked Built are real and tested; everything else is plan.
 Last updated: 2026-11-04
 
 ## 0. Where I challenge the brief
@@ -159,3 +159,18 @@ Edge cases covered by tests: six buyers racing for one unit (exactly one wins); 
 **Found and fixed:** dashboard showed COGS and gross profit as $0.00 when sold items had no cost recorded; the API now returns null and the UI shows "Unknown". Dev-proxy requests were rejected by the same-origin check; replaced with an explicit `ALLOWED_ORIGINS` allowlist (dev default only, empty in production).
 
 **Known UI gaps:** no product images (placeholder tile with initial), no search/filters, no pagination controls (lists load up to 100), seller nav tabs scroll horizontally on small phones and the active tab can clip the first one, no automated accessibility audit yet (labels, focus rings, 44px targets and 16px inputs are in place by design but unverified by axe), no password reset or email verification, no admin UI, no emails sent.
+
+## Images, import and visual redesign report
+
+**Implemented and tested** (48 API tests, plus the browser E2E at 375px and 1280px):
+- **Product images:** raw binary upload (JPG/PNG/WebP, 5 MB cap, max 8 per product). Type is decided from the file's magic bytes, never the declared content type or filename, so a script labelled `image/png` is refused (415). Files sit behind a `Storage` port (local disk now; S3-compatible adapter to come). Keys are unguessable and validated against path traversal. Images are served publicly only for ACTIVE products, with `nosniff`. Rejected DB writes remove the stored file (no orphans). Cross-tenant attach/delete returns 404.
+- **CSV import assistant:** RFC 4180 parser (quotes, embedded newlines, CRLF, BOM); column mapping suggested from header synonyms and editable; per-row validation with line numbers (missing name, bad price/quantity, repeated SKU in file); duplicates against the existing catalogue by SKU and by product name are skipped, never merged or overwritten; rows with the same name become options of one product; preview writes nothing; commit imports only clean rows, defaults to drafts, honours plan limits, writes stock movements, and is audited.
+- **Redesign:** a design system with warm neutrals, deep-forest brand and gold accent, serif display type, soft shadows, pill buttons, focus rings and `prefers-reduced-motion`. Seller app uses a sidebar on desktop and a bottom tab bar on phones (this also removed the clipped-tab problem). New landing page, storefront with hero, photo cards, sold-out badges and a sticky cart bar.
+
+**Problems found and fixed:**
+1. `FORCE ROW LEVEL SECURITY` also applies inside `SECURITY DEFINER` functions, so image serving returned 404. A public read policy on `products` would have re-created the Phase 1 leak (seller list queries have no tenant filter), so the lookup function now elevates privileges only for its own query and restores the previous setting. A test proves the elevated flag cannot leak to later statements.
+2. The dev database lagged one migration behind the test database (tests build a fresh schema), which hid the problem above from the browser run. Lesson: run `npm run migrate` against the dev database after every migration.
+3. The Vite dev proxy forwarded `/api` but not `/media`.
+4. A link styled as a ghost button rendered as a solid button.
+
+**Known gaps:** no image resizing, thumbnails or CDN (originals are served, so large photos load slowly on mobile; add `sharp`-based variants before launch); no virus scanning; no alt text field; image order cannot be changed; import accepts CSV only (not .xlsx), has no attribute columns, and the 200-row preview limit is display-only; the landing page has no product imagery; no automated accessibility audit has been run; payments remain simulated.

@@ -28,31 +28,38 @@ export function Storefront() {
   const [products, setProducts] = useState<any[] | null>(null); const [sel, setSel] = useState<Record<string, string>>({});
   useEffect(() => { if (store) api(`/api/public/stores/${slug}/products?limit=100`).then(setProducts); }, [store, slug]);
   if (missing) return <div className="wrap"><h1>Store not found</h1><p>This store doesn't exist or isn't open yet.</p></div>;
-  if (!store) return <div className="wrap"><p>Loading…</p></div>;
+  if (!store) return <div className="wrap"><p className="muted">Loading…</p></div>;
   return <>
     <header className="top"><div className="wrap"><span className="logo">{store.name}</span>
-      <Link className="btn secondary" to={`/store/${slug}/checkout`}>Cart ({cart.count})</Link></div></header>
+      <Link className="btn secondary sm" to={`/store/${slug}/checkout`}>Cart · {cart.count}</Link></div></header>
+    <section className="shop-hero"><div className="wrap">
+      <h1>{store.name}</h1>{store.tagline && <p>{store.tagline}</p>}
+      <div className="pills">{store.fulfilment.pickup && <span className="pill">Pickup available</span>}
+        {store.fulfilment.delivery && <span className="pill">Delivery {store.deliveryFeeCents ? money(store.deliveryFeeCents, store.currency) : 'free'}</span>}<span className="pill">Secure checkout</span></div>
+    </div></section>
     <main className="wrap">
-      <div className="store-head"><h1>{store.name}</h1>{store.tagline && <p className="muted">{store.tagline}</p>}
-        <p className="muted small">{[store.fulfilment.pickup && 'Pickup available', store.fulfilment.delivery && `Delivery ${store.deliveryFeeCents ? money(store.deliveryFeeCents, store.currency) : 'free'}`].filter(Boolean).join(' · ')}</p></div>
-      {products && !products.length && <Empty title="No products yet">This store hasn't added products. Check back soon.</Empty>}
+      {products && !products.length && <Empty title="Nothing here yet">This store hasn't added products. Check back soon.</Empty>}
       <div className="products">
         {products?.map(p => {
           const vid = sel[p.id] ?? p.variants[0].id; const v = p.variants.find((x: any) => x.id === vid);
-          return <article className="card" key={p.id} style={{ margin: 0 }}>
-            <div className="pimg" aria-hidden="true">{p.name.slice(0, 1).toUpperCase()}</div>
-            <h3>{p.name}</h3>{p.brand && <div className="muted small">{p.brand}</div>}
-            {p.description && <p className="small muted">{p.description}</p>}
-            {p.variants.length > 1 && <Field label="Option">{id => <select id={id} value={vid} onChange={e => setSel({ ...sel, [p.id]: e.target.value })}>
-              {p.variants.map((x: any) => <option key={x.id} value={x.id}>{x.title} — {money(x.priceCents, store.currency)}{x.available ? '' : ' (sold out)'}</option>)}</select>}</Field>}
-            <p><b>{money(v.priceCents, store.currency)}</b></p>
+          return <article className="pcard" key={p.id}>
+            <div className="pmedia">
+              {p.images?.[0] ? <img src={p.images[0]} alt={p.name} loading="lazy" /> : <div className="ph" aria-hidden="true">{p.name.slice(0, 1).toUpperCase()}</div>}
+              {!v.available && <span className="sold">Sold out</span>}
+            </div>
+            {p.brand && <div className="brand">{p.brand}</div>}
+            <h3>{p.name}</h3>
+            {p.description && <p className="desc">{p.description}</p>}
+            {p.variants.length > 1 && <select aria-label={`Option for ${p.name}`} value={vid} onChange={e => setSel({ ...sel, [p.id]: e.target.value })}>
+              {p.variants.map((x: any) => <option key={x.id} value={x.id}>{x.title} · {money(x.priceCents, store.currency)}{x.available ? '' : ' (sold out)'}</option>)}</select>}
+            <div className="price">{money(v.priceCents, store.currency)}</div>
             <button disabled={!v.available} onClick={() => cart.add({ variantId: v.id, name: p.name, title: v.title, priceCents: v.priceCents })}>{v.available ? 'Add to cart' : 'Sold out'}</button>
           </article>;
         })}
       </div>
     </main>
-    {cart.count > 0 && <div className="cartbar"><div className="wrap row spread"><span>{cart.count} item(s) · <b>{money(cart.subtotal, store.currency)}</b></span>
-      <Link className="btn" to={`/store/${slug}/checkout`}>Checkout</Link></div></div>}
+    {cart.count > 0 && <div className="cartbar"><div className="wrap row spread"><span>{cart.count} item{cart.count > 1 ? 's' : ''} · <b>{money(cart.subtotal, store.currency)}</b></span>
+      <Link className="btn sm" to={`/store/${slug}/checkout`}>Checkout</Link></div></div>}
   </>;
 }
 
@@ -99,13 +106,15 @@ export function StoreCheckout() {
   return <>
     <header className="top"><div className="wrap"><Link to={`/store/${slug}`} className="logo">{store.name}</Link></div></header>
     <main className="wrap" style={{ maxWidth: 640 }}>
-      <h1>Your cart</h1>
+      <div className="eyebrow" style={{ marginTop: 28 }}>Checkout</div><h1>Your cart</h1>
       {!cart.lines.length ? <Empty title="Your cart is empty"><Link to={`/store/${slug}`}>Keep shopping</Link></Empty> : <>
         <section className="card"><ul className="list">{cart.lines.map(l => <li key={l.variantId} className="row spread">
           <span>{l.name}{l.title !== 'Default' ? ` (${l.title})` : ''}<br /><span className="muted small">{money(l.priceCents, store.currency)} each</span></span>
-          <span className="row"><button className="secondary" aria-label={`Decrease ${l.name}`} onClick={() => cart.setQty(l.variantId, l.qty - 1)}>−</button>
+          <span className="qty"><button className="secondary" aria-label={`Decrease ${l.name}`} onClick={() => cart.setQty(l.variantId, l.qty - 1)}>−</button>
             <span aria-live="polite">{l.qty}</span><button className="secondary" aria-label={`Increase ${l.name}`} onClick={() => cart.setQty(l.variantId, l.qty + 1)}>+</button></span></li>)}</ul>
-          <p>Subtotal: {money(cart.subtotal, store.currency)}<br />Delivery: {money(shipping, store.currency)}<br /><b>Total: {money(cart.subtotal + shipping, store.currency)}</b></p>
+          <div className="sumline"><span>Subtotal</span><span>{money(cart.subtotal, store.currency)}</span></div>
+          <div className="sumline"><span>Delivery</span><span>{money(shipping, store.currency)}</span></div>
+          <div className="sumline total"><span>Total</span><span>{money(cart.subtotal + shipping, store.currency)}</span></div>
           <p className="muted small">Final prices are confirmed by the store when you place the order. Taxes are not yet calculated.</p></section>
         <form className="card" onSubmit={submit}>
           {err && <Alert kind="err">{err}</Alert>}

@@ -19,6 +19,7 @@ const MESSAGES: Record<string, string> = {
   fulfilment_not_offered: 'This store does not offer that delivery option.', address_required: 'Please enter a delivery address.',
   payments_not_configured: 'Payments are not configured yet.', store_suspended: 'This store is suspended.',
   item_unavailable: 'An item in your cart is no longer available.', cross_origin_blocked: 'Request blocked.',
+  image_too_large: 'That image is over 5 MB. Please use a smaller photo.', unsupported_image_type: 'Use a JPG, PNG or WebP image.', too_many_images: 'A product can have up to 8 photos.',
   stock_below_reserved_or_negative: 'Stock cannot go below zero or below units reserved by open checkouts.',
 };
 export function errorText(e: unknown): string {

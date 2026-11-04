@@ -2,6 +2,7 @@ import { FormEvent, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api, errorText } from '../api';
 import { Alert, Field } from '../ui';
+import { IcoBox, IcoChart, IcoTag } from '../icons';
 
 export const Header = () => (
   <header className="top"><div className="wrap">
@@ -13,11 +14,20 @@ export const Header = () => (
 export function Landing() {
   return <>
     <Header />
-    <main className="wrap hero">
-      <h1>Open your online store in minutes.</h1>
-      <p>Add your products, share one link, and get paid. Track what you actually earn after costs and fees. No technical skills needed.</p>
-      <div className="row"><Link className="btn" to="/signup">Create your free store</Link></div>
-    </main>
+    <section className="hero"><div className="wrap">
+      <div className="eyebrow">For independent sellers</div>
+      <h1>Your own online store, open in minutes.</h1>
+      <p className="lead">Add your products, share one link on Instagram or WhatsApp, and get paid. See what you really earn after costs and fees, with no technical skills needed.</p>
+      <div className="row"><Link className="btn" to="/signup">Create your free store</Link><Link className="btn secondary" to="/login">Log in</Link></div>
+      <div className="proof"><div><b>Free</b>to start</div><div><b>One link</b>to sell anywhere</div><div><b>Real profit</b>not just sales</div></div>
+    </div></section>
+    <main className="wrap"><div className="features">
+      {[['Look professional', 'A clean, fast storefront that works beautifully on every phone, with your products and photos front and centre.', <IcoTag key="a" />],
+        ['Sell without overselling', 'Stock is held while a customer checks out, so you never promise what you do not have.', <IcoBox key="b" />],
+        ['Know your numbers', 'Sales, costs, fees and profit kept separate, so you can tell whether you are actually making money.', <IcoChart key="c" />]]
+        .map(([t, d, i]) => <article className="card feature" key={t as string}><div className="ico">{i}</div><h3>{t}</h3><p>{d}</p></article>)}
+    </div></main>
+    <footer className="footer"><div className="wrap">© EazyStores. Development build: payments are simulated.</div></footer>
   </>;
 }
 
@@ -37,7 +47,7 @@ export function Signup() {
   return <>
     <Header />
     <main className="wrap" style={{ maxWidth: 520 }}>
-      <h1>Create your store</h1>
+      <div className="eyebrow" style={{ marginTop: 28 }}>Get started</div><h1>Create your store</h1>
       <form className="card" onSubmit={submit}>
         {err && <Alert kind="err">{err}</Alert>}
         <Field label="Your name">{id => <input id={id} required autoComplete="name" value={f.fullName} onChange={e => set('fullName', e.target.value)} />}</Field>
@@ -72,7 +82,7 @@ export function Login() {
   return <>
     <Header />
     <main className="wrap" style={{ maxWidth: 520 }}>
-      <h1>Log in</h1>
+      <div className="eyebrow" style={{ marginTop: 28 }}>Welcome back</div><h1>Log in</h1>
       <form className="card" onSubmit={submit}>
         {err && <Alert kind="err">{err}</Alert>}
         <Field label="Email">{id => <input id={id} type="email" required autoComplete="email" value={email} onChange={e => setEmail(e.target.value)} />}</Field>

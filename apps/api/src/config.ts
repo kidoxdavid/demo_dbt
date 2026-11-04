@@ -7,3 +7,6 @@ export const config = {
   secureCookies: process.env.NODE_ENV === 'production',
   authRateLimitMax: Number(process.env.AUTH_RATE_LIMIT_MAX ?? 10),
 };
+// 'simulated' is the only provider implemented; it is NOT real payment processing.
+export const paymentProvider = process.env.PAYMENT_PROVIDER ?? (process.env.NODE_ENV === 'production' ? 'none' : 'simulated');
+export const reservationMinutes = Number(process.env.RESERVATION_MINUTES ?? 15);

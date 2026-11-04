@@ -86,6 +86,18 @@ describe('tenant isolation', () => {
   });
 });
 
+describe('regression: public store policy must not leak into seller views', () => {
+  it('a seller always sees their own store even when other tenants have published stores', async () => {
+    const a = await signup('leak-a'); const b = await signup('leak-b');
+    for (const x of [a, b]) {
+      await app.inject({ method: 'PATCH', url: '/api/seller/business', ...as(x.cookie), payload: { category: 'x', description: 'y' } });
+      await app.inject({ method: 'POST', url: '/api/seller/store/publish', ...as(x.cookie) });
+    }
+    expect((await app.inject({ method: 'GET', url: '/api/seller/business', ...as(a.cookie) })).json().store.slug).toBe('leak-a-store');
+    expect((await app.inject({ method: 'GET', url: '/api/seller/business', ...as(b.cookie) })).json().store.slug).toBe('leak-b-store');
+  });
+});
+
 describe('publishing & public storefront', () => {
   it('draft stores are invisible; incomplete profiles cannot publish; published stores are public', async () => {
     const a = await signup('pub');

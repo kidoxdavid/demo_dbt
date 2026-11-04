@@ -10,7 +10,8 @@ import { hashPassword, verifyPassword, newToken, sha256 } from './lib/security.j
 const COOKIE = 'eazy_sid';
 declare module 'fastify' { interface FastifyRequest { user?: { id: string; email: string; fullName: string } } }
 
-class HttpError extends Error { constructor(public status: number, msg: string) { super(msg); } }
+import { HttpError } from './lib/errors.js';
+import { registerCommerce } from './modules/commerce.js';
 const SLUG = /^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$/;
 
 const signupSchema = z.object({
@@ -142,7 +143,8 @@ export async function buildApp() {
     const t = await tenantCtx(req);
     return withTx(t, async c => {
       const biz = (await c.query('SELECT * FROM businesses').then(r => r.rows[0]));
-      const store = (await c.query('SELECT id,slug,name,tagline,status,published_at FROM stores').then(r => r.rows[0]));
+      // Explicit tenant filter is required: the public RLS policy also exposes other tenants' published stores.
+      const store = (await c.query('SELECT id,slug,name,tagline,status,published_at FROM stores WHERE tenant_id=$1', [t.tenantId]).then(r => r.rows[0]));
       return { business: biz, store, role: t.role };
     });
   });
@@ -251,6 +253,8 @@ export async function buildApp() {
       return row;
     });
   });
+
+  registerCommerce(app, { tenantCtx });
 
   return app;
 }

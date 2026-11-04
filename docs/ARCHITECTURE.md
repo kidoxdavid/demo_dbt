@@ -1,6 +1,6 @@
 # EazyStores: product and technical plan (living document)
 
-Status: Phase 1 (foundation) implemented. Everything below the "Built" markers is real and tested. Everything else is plan.
+Status: Phase 1 (foundation) and a thin Phase 3 commerce slice (API only) are implemented. Items marked Built are real and tested; everything else is plan.
 Last updated: 2026-11-04
 
 ## 0. Where I challenge the brief
@@ -117,7 +117,7 @@ Unit (pricing, ledger balance, shipping rules), integration against real Postgre
 | 1 Foundation | schema, auth, tenancy + RLS, signup/onboarding, publish, admin RBAC/audit/plans | **Built (API only)** |
 | 1b | web app shell, email verification/reset, MFA, admin UI | next |
 | 2 Store | templates, settings, categories, SEO pages | |
-| 3 Commerce | products, variants, inventory, cart, checkout, orders, payments (after provider validation), ledger | |
+| 3 Commerce | products, variants, inventory, cart, checkout, orders, payments (after provider validation), ledger | **Thin slice built (API, simulated payments)**; see report below |
 | 4 Marketplace | home, search, accounts, reviews | |
 | 5 Business | dashboard, profit reporting, CRM, notifications | |
 | 6 Differentiators | import assistant, Snap, Launch, Link, Custom, POS, Assist, Grow | |
@@ -135,3 +135,17 @@ Unit (pricing, ledger balance, shipping rules), integration against real Postgre
 **Decisions needed**: (1) payment provider shortlist and who validates it; (2) real plan prices and fees; (3) SSR strategy for storefronts; (4) whether Eazyfoods code can be shared for review; (5) hosting region/provider.
 
 **Next**: Phase 1b (web shell, verification/reset, MFA for staff) then Phase 2/3 thin vertical slice.
+
+## Phase 3 thin-slice report (commerce core)
+
+**Implemented and tested** (32 integration tests total, all passing): products with variants, custom attributes and plan-limit enforcement; stock adjustments with an append-only movement history; single-seller guest checkout with server-side pricing; stock reservation with a 15-minute expiry and sweeper; order state machine; seller order list/detail; public order lookup by unguessable token; a balanced, append-only double-entry ledger (platform fee from the seller's plan); a dashboard that separates gross sales, COGS, gross profit and fees and flags missing costs.
+
+Edge cases covered by tests: six buyers racing for one unit (exactly one wins); payment failure releases stock; abandoned checkouts expire; **payment succeeds after expiry with stock gone** (money kept, order not fulfilled, `needs_refund` flagged); webhook replay is idempotent; a DB CHECK refuses oversell even if app logic is bypassed; an unbalanced ledger group is rejected at commit.
+
+**Payments are SIMULATED.** `PaymentProvider` is a port; the only adapter moves no money and is labelled `simulated` in every checkout response. The simulate endpoint exists only when that adapter is active, and checkout returns 503 when no provider is configured. No real provider has been validated or integrated.
+
+**Bug found and fixed this phase (Phase 1 regression):** the seller business endpoint queried `stores` without a tenant filter, and the public-store RLS policy made other tenants' published stores visible to it. Lesson recorded: any table with a permissive public policy needs an explicit `tenant_id` filter in tenant-scoped queries. Regression test added.
+
+**Not built:** real payments, refunds (so orders cannot be cancelled after payment), taxes, shipping rules beyond a flat delivery fee, product images/uploads, bulk import, discounts, customer accounts, notifications (no emails are sent on orders), variant editing after creation, multi-location inventory, any UI.
+
+**Known gaps to decide:** `needs_refund` payments have no resolution workflow yet; the dashboard has no payment-processor fees, so no net profit is shown (deliberately); the order token endpoint relies on an unguessable token with no rate limit beyond defaults.

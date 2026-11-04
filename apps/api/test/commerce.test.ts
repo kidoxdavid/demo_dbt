@@ -178,6 +178,15 @@ describe('seller orders, isolation & reporting', () => {
     expect(d).toMatchObject({ orders: 2, grossSalesCents: 5000, cogsCents: 1600, grossProfitCents: 2400, grossProfitIsPartial: true, lineItemsMissingCost: 1, platformFeesCents: 150 });
     expect(d.notes.join(' ')).toMatch(/not profit/);
   });
+  it('dashboard reports COGS and profit as unknown (null), not zero, when no sold item has a cost', async () => {
+    const s = await seller('dash2'); const q = await product(s.cookie, { variants: [{ priceCents: 1000, stock: 5 }] });
+    const c = (await checkout(s.slug, q.variantId)).json();
+    await app.inject({ method: 'POST', url: `/api/public/payments/${c.paymentId}/simulate`, payload: { outcome: 'succeeded' } });
+    const d = (await app.inject({ method: 'GET', url: '/api/seller/dashboard', ...ck(s.cookie) })).json();
+    expect(d).toMatchObject({ grossSalesCents: 1000, cogsCents: null, grossProfitCents: null, grossProfitIsPartial: true });
+    const empty = (await app.inject({ method: 'GET', url: '/api/seller/dashboard', ...ck((await seller('dash3')).cookie) })).json();
+    expect(empty).toMatchObject({ orders: 0, cogsCents: 0, grossProfitCents: 0, grossProfitIsPartial: false });
+  });
   it('ledger and inventory history are immutable; DB refuses oversell even if app logic is bypassed', async () => {
     const s = await seller('imm1'); const p = await product(s.cookie);
     const c = (await checkout(s.slug, p.variantId)).json();
@@ -200,5 +209,17 @@ describe('seller orders, isolation & reporting', () => {
   });
   it('settlePayment on an unknown provider reference is a clean 404', async () => {
     await expect(settlePayment('sim_unknown', 'succeeded')).rejects.toMatchObject({ status: 404 });
+  });
+});
+
+describe('store settings', () => {
+  it('owner can set tagline and delivery fee; fee is used by checkout; strict validation', async () => {
+    const s = await seller('set1'); const p = await product(s.cookie);
+    const r = await app.inject({ method: 'PATCH', url: '/api/seller/store', ...ck(s.cookie), payload: { tagline: 'Hand made', deliveryFeeCents: 750 } });
+    expect(r.json()).toMatchObject({ tagline: 'Hand made', delivery_fee_cents: 750 });
+    const c = await checkout(s.slug, p.variantId, 1, { fulfilment: 'delivery', address: { line1: 'a', city: 'b', region: 'c', postalCode: 'T2T2T2', country: 'CA' } });
+    expect(c.json().shippingCents).toBe(750);
+    expect((await app.inject({ method: 'PATCH', url: '/api/seller/store', ...ck(s.cookie), payload: { slug: 'hijack' } })).statusCode).toBe(400);
+    expect((await app.inject({ method: 'PATCH', url: '/api/seller/store', ...ck(s.cookie), payload: { deliveryFeeCents: -1 } })).statusCode).toBe(400);
   });
 });

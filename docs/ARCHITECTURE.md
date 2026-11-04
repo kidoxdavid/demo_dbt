@@ -1,6 +1,6 @@
 # EazyStores: product and technical plan (living document)
 
-Status: Phase 1 (foundation) and a thin Phase 3 commerce slice (API only) are implemented. Items marked Built are real and tested; everything else is plan.
+Status: Phase 1 (foundation), a thin Phase 3 commerce slice, and a first web UI (seller dashboard, storefront, checkout) are implemented. Items marked Built are real and tested; everything else is plan.
 Last updated: 2026-11-04
 
 ## 0. Where I challenge the brief
@@ -149,3 +149,13 @@ Edge cases covered by tests: six buyers racing for one unit (exactly one wins); 
 **Not built:** real payments, refunds (so orders cannot be cancelled after payment), taxes, shipping rules beyond a flat delivery fee, product images/uploads, bulk import, discounts, customer accounts, notifications (no emails are sent on orders), variant editing after creation, multi-location inventory, any UI.
 
 **Known gaps to decide:** `needs_refund` payments have no resolution workflow yet; the dashboard has no payment-processor fees, so no net profit is shown (deliberately); the order token endpoint relies on an unguessable token with no rate limit beyond defaults.
+
+## Web UI report (apps/web)
+
+**Implemented:** React + Vite + TypeScript. Seller: signup, login, overview with get-started checklist and profit panel, products (multi-option create, stock +/-, publish/hide/archive), orders (detail, status progression), store settings (profile, fulfilment, delivery fee, publish, shareable link). Customer: public storefront, cart (localStorage), guest checkout, simulated-payment step, order status page by token.
+
+**Tested:** `apps/web/e2e/flow.cjs` drives the real UI against the real API and Postgres in headless Chromium, at 375px mobile and 1280px desktop: signup, blocked publish on incomplete profile, settings, publish, product with two options, stock adjustment, guest delivery checkout, simulated payment, order progression, dashboard. It asserts no horizontal overflow on every page. 34 API integration tests also pass. Screenshots were reviewed by eye.
+
+**Found and fixed:** dashboard showed COGS and gross profit as $0.00 when sold items had no cost recorded; the API now returns null and the UI shows "Unknown". Dev-proxy requests were rejected by the same-origin check; replaced with an explicit `ALLOWED_ORIGINS` allowlist (dev default only, empty in production).
+
+**Known UI gaps:** no product images (placeholder tile with initial), no search/filters, no pagination controls (lists load up to 100), seller nav tabs scroll horizontally on small phones and the active tab can clip the first one, no automated accessibility audit yet (labels, focus rings, 44px targets and 16px inputs are in place by design but unverified by axe), no password reset or email verification, no admin UI, no emails sent.

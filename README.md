@@ -14,3 +14,13 @@ npm test        # uses database eazystores_test, drops and recreates its public 
 ```
 
 Never commit credentials. The URLs above show the variable names; the defaults in `src/config.ts` are for local development only.
+
+## Run the web app
+
+```bash
+cd apps/web && npm install && npm run dev      # http://localhost:5173, proxies /api to :3000
+node e2e/flow.cjs ./shots                      # browser end-to-end test (needs API + web running, Playwright installed)
+```
+
+Payments are **simulated** in development (`PAYMENT_PROVIDER=simulated`, the default outside production). Nothing moves real money.
+In production set `ALLOWED_ORIGINS` to the public web origin.

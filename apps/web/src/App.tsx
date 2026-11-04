@@ -1,0 +1,19 @@
+import { Link, Route, Routes } from 'react-router-dom';
+import { Landing, Login, Signup } from './pages/Auth';
+import { SellerShell } from './pages/Seller';
+import { Storefront, StoreCheckout, OrderStatus } from './pages/Store';
+
+export default function App() {
+  return (
+    <Routes>
+      <Route path="/" element={<Landing />} />
+      <Route path="/signup" element={<Signup />} />
+      <Route path="/login" element={<Login />} />
+      <Route path="/dashboard/*" element={<SellerShell />} />
+      <Route path="/store/:slug" element={<Storefront />} />
+      <Route path="/store/:slug/checkout" element={<StoreCheckout />} />
+      <Route path="/order/:token" element={<OrderStatus />} />
+      <Route path="*" element={<div className="wrap"><h1>Page not found</h1><Link to="/">Go home</Link></div>} />
+    </Routes>
+  );
+}

@@ -3,7 +3,7 @@ import cookie from '@fastify/cookie';
 import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
 import { z, ZodError } from 'zod';
-import { config } from './config.js';
+import { config, allowedOrigins } from './config.js';
 import { withTx, audit } from './lib/db.js';
 import { hashPassword, verifyPassword, newToken, sha256 } from './lib/security.js';
 
@@ -46,7 +46,7 @@ export async function buildApp() {
   app.addHook('onRequest', async (req) => {
     if (['POST','PUT','PATCH','DELETE'].includes(req.method)) {
       const origin = req.headers.origin;
-      if (origin && new URL(origin).host !== req.headers.host) throw new HttpError(403, 'cross_origin_blocked');
+      if (origin && new URL(origin).host !== req.headers.host && !allowedOrigins.includes(origin)) throw new HttpError(403, 'cross_origin_blocked');
     }
   });
 
@@ -144,7 +144,7 @@ export async function buildApp() {
     return withTx(t, async c => {
       const biz = (await c.query('SELECT * FROM businesses').then(r => r.rows[0]));
       // Explicit tenant filter is required: the public RLS policy also exposes other tenants' published stores.
-      const store = (await c.query('SELECT id,slug,name,tagline,status,published_at FROM stores WHERE tenant_id=$1', [t.tenantId]).then(r => r.rows[0]));
+      const store = (await c.query('SELECT id,slug,name,tagline,status,published_at,delivery_fee_cents FROM stores WHERE tenant_id=$1', [t.tenantId]).then(r => r.rows[0]));
       return { business: biz, store, role: t.role };
     });
   });
@@ -164,6 +164,22 @@ export async function buildApp() {
       const vals = keys.map(k => (typeof p[k] === 'object' ? JSON.stringify(p[k]) : p[k]));
       const row = (await c.query(`UPDATE businesses SET ${sets.join(',')}, updated_at=now() WHERE tenant_id=$${keys.length + 1} RETURNING *`, [...vals, t.tenantId])).rows[0];
       await audit(c, { actor: t.userId, tenantId: t.tenantId, action: 'business.update', entityType: 'business', entityId: t.tenantId, prev, next: row });
+      return row;
+    });
+  });
+
+  app.patch('/api/seller/store', async (req) => {
+    const t = await tenantCtx(req);
+    if (!['owner','manager'].includes(t.role)) throw new HttpError(403, 'forbidden');
+    const b = z.object({ name: z.string().trim().min(1).max(120), tagline: z.string().max(200),
+      deliveryFeeCents: z.number().int().min(0).max(100000) }).partial().strict().parse(req.body);
+    return withTx(t, async c => {
+      const prev = (await c.query('SELECT name,tagline,delivery_fee_cents FROM stores WHERE tenant_id=$1', [t.tenantId])).rows[0];
+      const row = (await c.query(
+        `UPDATE stores SET name=coalesce($2,name), tagline=coalesce($3,tagline), delivery_fee_cents=coalesce($4,delivery_fee_cents)
+         WHERE tenant_id=$1 RETURNING id,slug,name,tagline,status,delivery_fee_cents`,
+        [t.tenantId, b.name ?? null, b.tagline ?? null, b.deliveryFeeCents ?? null])).rows[0];
+      await audit(c, { actor: t.userId, tenantId: t.tenantId, action: 'store.update', entityType: 'store', entityId: row.id, prev, next: row });
       return row;
     });
   });
@@ -188,9 +204,12 @@ export async function buildApp() {
   // ---- Public storefront lookup (RLS 'stores_public' only exposes published stores) ----
   app.get('/api/public/stores/:slug', async (req) => {
     const { slug } = z.object({ slug: z.string().regex(SLUG) }).parse(req.params);
-    const s = await withTx({}, async c => (await c.query('SELECT slug,name,tagline,published_at FROM stores WHERE slug=$1', [slug])).rows[0]);
+    const s = await withTx({}, async c => (await c.query('SELECT tenant_id,slug,name,tagline,published_at,delivery_fee_cents FROM stores WHERE slug=$1', [slug])).rows[0]);
     if (!s) throw new HttpError(404, 'not_found');
-    return s;
+    // Tenant context derived from the store row (never client input) to read the offered fulfilment options.
+    const f = await withTx({ tenantId: s.tenant_id }, async c => (await c.query('SELECT fulfilment, currency FROM businesses WHERE tenant_id=$1', [s.tenant_id])).rows[0]);
+    return { slug: s.slug, name: s.name, tagline: s.tagline, published_at: s.published_at, deliveryFeeCents: s.delivery_fee_cents,
+             fulfilment: { pickup: !!f.fulfilment?.pickup, delivery: !!f.fulfilment?.delivery }, currency: f.currency };
   });
 
   // ---- Admin foundation ----

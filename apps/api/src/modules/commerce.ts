@@ -221,19 +221,22 @@ export function registerCommerce(app: FastifyInstance, deps: { tenantCtx: (r: Fa
       const k = (await c.query(
         `SELECT coalesce(sum(i.quantity*i.unit_cost_cents) FILTER (WHERE i.unit_cost_cents IS NOT NULL),0)::bigint cogs_known,
                 coalesce(sum(i.quantity*i.unit_price_cents) FILTER (WHERE i.unit_cost_cents IS NOT NULL),0)::bigint sales_with_cost,
-                count(*) FILTER (WHERE i.unit_cost_cents IS NULL)::int lines_missing_cost
+                count(*) FILTER (WHERE i.unit_cost_cents IS NULL)::int lines_missing_cost,
+                count(*) FILTER (WHERE i.unit_cost_cents IS NOT NULL)::int lines_with_cost
          FROM order_items i JOIN orders o ON o.id=i.order_id
          WHERE o.status IN ('paid','processing','ready','shipped','completed') AND o.created_at BETWEEN $1 AND $2`, args)).rows[0];
       const f = (await c.query(
         `SELECT coalesce(-sum(amount_cents) FILTER (WHERE account='platform_fee'),0)::bigint platform_fees,
                 coalesce(-sum(amount_cents) FILTER (WHERE account='seller_payable'),0)::bigint seller_earnings_before_processor_fees
          FROM ledger_entries WHERE at BETWEEN $1 AND $2`, args)).rows[0];
-      const grossProfit = Number(k.sales_with_cost) - Number(k.cogs_known);
+      // If nothing sold has a known cost, COGS and profit are UNKNOWN (null), never reported as zero.
+      const costKnown = k.lines_with_cost > 0 || k.lines_missing_cost === 0;
+      const grossProfit = costKnown ? Number(k.sales_with_cost) - Number(k.cogs_known) : null;
       return {
         currency: 'CAD', orders: o.orders,
         grossSalesCents: Number(o.gross_sales), shippingCollectedCents: Number(o.shipping_collected),
         discountsCents: 0, refundsCents: 0,
-        cogsCents: Number(k.cogs_known), grossProfitCents: grossProfit,
+        cogsCents: costKnown ? Number(k.cogs_known) : null, grossProfitCents: grossProfit,
         grossProfitIsPartial: k.lines_missing_cost > 0, lineItemsMissingCost: k.lines_missing_cost,
         platformFeesCents: Number(f.platform_fees), sellerEarningsBeforeProcessorFeesCents: Number(f.seller_earnings_before_processor_fees),
         notes: ['Gross sales exclude shipping and are not profit.', 'Payment-processor fees and taxes are not included: not yet integrated.',

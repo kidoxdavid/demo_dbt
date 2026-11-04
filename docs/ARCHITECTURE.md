@@ -1,6 +1,6 @@
 # EazyStores: product and technical plan (living document)
 
-Status: Phase 1 (foundation), a thin Phase 3 commerce slice, a web UI, product images, and CSV import are implemented. Payments are still simulated. Items marked Built are real and tested; everything else is plan.
+Status: Phase 1 (foundation), a thin Phase 3 commerce slice, a web UI, product images, CSV import, a customer marketplace, and per-store theming are implemented. Payments are still simulated. Items marked Built are real and tested; everything else is plan.
 Last updated: 2026-11-04
 
 ## 0. Where I challenge the brief
@@ -174,3 +174,18 @@ Edge cases covered by tests: six buyers racing for one unit (exactly one wins); 
 4. A link styled as a ghost button rendered as a solid button.
 
 **Known gaps:** no image resizing, thumbnails or CDN (originals are served, so large photos load slowly on mobile; add `sharp`-based variants before launch); no virus scanning; no alt text field; image order cannot be changed; import accepts CSV only (not .xlsx), has no attribute columns, and the 200-row preview limit is display-only; the landing page has no product imagery; no automated accessibility audit has been run; payments remain simulated.
+
+## Customer marketplace and theming report
+
+**Implemented and tested** (56 API tests; browser E2E now covers a typo search, product page and add-to-cart at 375px and 1280px):
+- `/` is now the customer marketplace: search, category chips, featured stores (3-image mosaic in the store's accent colour), product grid with sort and "show more". The seller pitch moved to `/sell`.
+- Product pages: gallery, option buttons, price, made-to-order notice, delivery/pickup summary, description, and the seller's **custom attributes** as a details table. Because attributes are free-form, a perfume (concentration, family), a 3D print (material, print time) and a serum (skin type, ingredients) each show what matters for them without per-category code.
+- Search: name, brand, store and category, plus typo tolerance via `pg_trgm` word similarity; `%` and `_` are treated literally.
+- Store theming: accent colour (hex-validated), light/dark header, compact/spacious layout, saved per store and applied on the storefront and product pages.
+- Privacy: marketplace reads run with platform context but select only public columns; a test walks every key and value of the responses to prove no cost, stock counts, tenant ids or emails leak. Draft products, unpublished stores and suspended sellers never appear.
+
+**Found:** deleting a tenant that has order history is (correctly) blocked by the append-only ledger and inventory history. Account closure and privacy-erasure requests therefore need a purpose-built anonymise-and-retain procedure. Added to the risk list.
+
+**Honest limits:** demo products are generated placeholder illustrations, not photographs; the marketplace orders by newest, so one store's batch can dominate (needs ranking and mixing before launch); no per-category product templates (attributes are free-form and unsuggested); personalisation inputs at checkout (names, uploaded photos, quotes) are not built, so made-to-order products can only be sold as fixed options; there is no multi-store cart (each store checks out separately); no reviews, ratings, wishlists or customer accounts; no location-based "near me" filtering; store accent colours are not contrast-checked, so a very light accent could produce unreadable button text.
+
+**Demo data:** `node apps/web/e2e/seed-demo.cjs` seeds six stores (fragrance, 3D printing, jewellery, beauty, fashion, phone accessories) through the real API. Dev only.

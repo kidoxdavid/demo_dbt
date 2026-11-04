@@ -5,7 +5,7 @@ import { Alert, Badge, Empty, Field } from '../ui';
 
 type CartLine = { variantId: string; name: string; title: string; priceCents: number; qty: number };
 const key = (slug: string) => `eazy_cart_${slug}`;
-function useCart(slug: string) {
+export function useCart(slug: string) {
   const read = (): CartLine[] => { try { return JSON.parse(localStorage.getItem(key(slug)) ?? '[]'); } catch { return []; } };
   const [lines, setLines] = useState<CartLine[]>(read);
   const save = (l: CartLine[]) => { setLines(l); try { localStorage.setItem(key(slug), JSON.stringify(l)); } catch { /* storage unavailable: cart lives in memory */ } };
@@ -17,7 +17,7 @@ function useCart(slug: string) {
   };
 }
 
-function useStore(slug: string) {
+export function useStore(slug: string) {
   const [store, setStore] = useState<any>(null); const [missing, setMissing] = useState(false);
   useEffect(() => { api(`/api/public/stores/${slug}`).then(setStore).catch(e => { if (e instanceof ApiError && e.status === 404) setMissing(true); }); }, [slug]);
   return { store, missing };
@@ -29,10 +29,13 @@ export function Storefront() {
   useEffect(() => { if (store) api(`/api/public/stores/${slug}/products?limit=100`).then(setProducts); }, [store, slug]);
   if (missing) return <div className="wrap"><h1>Store not found</h1><p>This store doesn't exist or isn't open yet.</p></div>;
   if (!store) return <div className="wrap"><p className="muted">Loading…</p></div>;
-  return <>
-    <header className="top"><div className="wrap"><span className="logo">{store.name}</span>
+  const accent = /^#[0-9a-f]{6}$/i.test(store.theme?.accent ?? '') ? store.theme.accent : '#0b0b0c';
+  const dark = store.theme?.hero === 'dark'; const spacious = store.theme?.layout === 'spacious';
+  return <div className="shop" style={{ ['--btn' as any]: accent, ['--hero-accent' as any]: accent }}>
+    <header className="top"><div className="wrap"><span className="row"><Link to="/" className="back" aria-label="Back to marketplace">←</Link><span className="logo">{store.name}</span></span>
       <Link className="btn secondary sm" to={`/store/${slug}/checkout`}>Cart ({cart.count})</Link></div></header>
-    <section className="shop-hero"><div className="wrap">
+    <section className={`shop-hero${dark ? ' dark' : ''}`}><div className="wrap">
+      {store.category && <div className="eyebrow">{[store.category, store.city].filter(Boolean).join(' · ')}</div>}
       <h1>{store.name}</h1>{store.tagline && <p>{store.tagline}</p>}
       <div className="pills">{store.fulfilment.pickup && <span className="pill">Pickup available</span>}
         {store.fulfilment.delivery && <span className="pill">Delivery {store.deliveryFeeCents ? money(store.deliveryFeeCents, store.currency) : 'free'}</span>}<span className="pill">Secure checkout</span></div>
@@ -40,16 +43,16 @@ export function Storefront() {
     <main className="wrap">
       {products && products.length > 0 && <div className="section-title"><h2>All products</h2><span className="muted small">{products.length} item{products.length > 1 ? 's' : ''}</span></div>}
       {products && !products.length && <Empty title="Nothing here yet">This store hasn't added products. Check back soon.</Empty>}
-      <div className="products">
+      <div className={`products${spacious ? ' spacious' : ''}`}>
         {products?.map(p => {
           const vid = sel[p.id] ?? p.variants[0].id; const v = p.variants.find((x: any) => x.id === vid);
           return <article className="pcard" key={p.id}>
-            <div className="pmedia">
-              {p.images?.[0] ? <img src={p.images[0]} alt={p.name} loading="lazy" /> : <div className="ph" aria-hidden="true">{p.name.slice(0, 1).toUpperCase()}</div>}
-              {!v.available && <span className="sold">Sold out</span>}
+            <Link to={`/store/${slug}/p/${p.id}`} className="plink" aria-label={`View ${p.name}`}><div className="pmedia">
+              {p.images?.[0] ? <img src={p.images[0]} alt="" loading="lazy" /> : <div className="ph" aria-hidden="true">{p.name.slice(0, 1).toUpperCase()}</div>}
+              {!v.available ? <span className="sold">Sold out</span> : p.madeToOrder ? <span className="sold">Made to order</span> : null}
             </div>
             {p.brand && <div className="brand">{p.brand}</div>}
-            <h3>{p.name}</h3>
+            <h3>{p.name}</h3></Link>
             {p.description && <p className="desc">{p.description}</p>}
             {p.variants.length > 1 && <select aria-label={`Option for ${p.name}`} value={vid} onChange={e => setSel({ ...sel, [p.id]: e.target.value })}>
               {p.variants.map((x: any) => <option key={x.id} value={x.id}>{x.title} · {money(x.priceCents, store.currency)}{x.available ? '' : ' (sold out)'}</option>)}</select>}
@@ -61,7 +64,7 @@ export function Storefront() {
     </main>
     {cart.count > 0 && <div className="cartbar"><div className="wrap row spread"><span>{cart.count} item{cart.count > 1 ? 's' : ''} · <b>{money(cart.subtotal, store.currency)}</b></span>
       <Link className="btn sm" to={`/store/${slug}/checkout`}>Checkout</Link></div></div>}
-  </>;
+  </div>;
 }
 
 export function StoreCheckout() {

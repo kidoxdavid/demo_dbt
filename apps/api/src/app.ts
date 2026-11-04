@@ -13,6 +13,7 @@ declare module 'fastify' { interface FastifyRequest { user?: { id: string; email
 import { HttpError } from './lib/errors.js';
 import { registerCommerce } from './modules/commerce.js';
 import { registerImport } from './modules/import.js';
+import { registerMarketplace } from './modules/marketplace.js';
 const SLUG = /^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$/;
 
 const signupSchema = z.object({
@@ -145,7 +146,7 @@ export async function buildApp() {
     return withTx(t, async c => {
       const biz = (await c.query('SELECT * FROM businesses').then(r => r.rows[0]));
       // Explicit tenant filter is required: the public RLS policy also exposes other tenants' published stores.
-      const store = (await c.query('SELECT id,slug,name,tagline,status,published_at,delivery_fee_cents FROM stores WHERE tenant_id=$1', [t.tenantId]).then(r => r.rows[0]));
+      const store = (await c.query('SELECT id,slug,name,tagline,status,published_at,delivery_fee_cents,theme FROM stores WHERE tenant_id=$1', [t.tenantId]).then(r => r.rows[0]));
       return { business: biz, store, role: t.role };
     });
   });
@@ -173,13 +174,15 @@ export async function buildApp() {
     const t = await tenantCtx(req);
     if (!['owner','manager'].includes(t.role)) throw new HttpError(403, 'forbidden');
     const b = z.object({ name: z.string().trim().min(1).max(120), tagline: z.string().max(200),
-      deliveryFeeCents: z.number().int().min(0).max(100000) }).partial().strict().parse(req.body);
+      deliveryFeeCents: z.number().int().min(0).max(100000),
+      theme: z.object({ accent: z.string().regex(/^#[0-9a-fA-F]{6}$/), hero: z.enum(['light', 'dark']), layout: z.enum(['grid', 'spacious']) }).partial().strict() }).partial().strict().parse(req.body);
     return withTx(t, async c => {
-      const prev = (await c.query('SELECT name,tagline,delivery_fee_cents FROM stores WHERE tenant_id=$1', [t.tenantId])).rows[0];
+      const prev = (await c.query('SELECT name,tagline,delivery_fee_cents,theme FROM stores WHERE tenant_id=$1', [t.tenantId])).rows[0];
       const row = (await c.query(
-        `UPDATE stores SET name=coalesce($2,name), tagline=coalesce($3,tagline), delivery_fee_cents=coalesce($4,delivery_fee_cents)
-         WHERE tenant_id=$1 RETURNING id,slug,name,tagline,status,delivery_fee_cents`,
-        [t.tenantId, b.name ?? null, b.tagline ?? null, b.deliveryFeeCents ?? null])).rows[0];
+        `UPDATE stores SET name=coalesce($2,name), tagline=coalesce($3,tagline), delivery_fee_cents=coalesce($4,delivery_fee_cents),
+           theme = CASE WHEN $5::jsonb IS NULL THEN theme ELSE theme || $5::jsonb END
+         WHERE tenant_id=$1 RETURNING id,slug,name,tagline,status,delivery_fee_cents,theme`,
+        [t.tenantId, b.name ?? null, b.tagline ?? null, b.deliveryFeeCents ?? null, b.theme ? JSON.stringify(b.theme) : null])).rows[0];
       await audit(c, { actor: t.userId, tenantId: t.tenantId, action: 'store.update', entityType: 'store', entityId: row.id, prev, next: row });
       return row;
     });
@@ -205,11 +208,11 @@ export async function buildApp() {
   // ---- Public storefront lookup (RLS 'stores_public' only exposes published stores) ----
   app.get('/api/public/stores/:slug', async (req) => {
     const { slug } = z.object({ slug: z.string().regex(SLUG) }).parse(req.params);
-    const s = await withTx({}, async c => (await c.query('SELECT tenant_id,slug,name,tagline,published_at,delivery_fee_cents FROM stores WHERE slug=$1', [slug])).rows[0]);
+    const s = await withTx({}, async c => (await c.query('SELECT tenant_id,slug,name,tagline,published_at,delivery_fee_cents,theme FROM stores WHERE slug=$1', [slug])).rows[0]);
     if (!s) throw new HttpError(404, 'not_found');
     // Tenant context derived from the store row (never client input) to read the offered fulfilment options.
-    const f = await withTx({ tenantId: s.tenant_id }, async c => (await c.query('SELECT fulfilment, currency FROM businesses WHERE tenant_id=$1', [s.tenant_id])).rows[0]);
-    return { slug: s.slug, name: s.name, tagline: s.tagline, published_at: s.published_at, deliveryFeeCents: s.delivery_fee_cents,
+    const f = await withTx({ tenantId: s.tenant_id }, async c => (await c.query('SELECT fulfilment, currency, category, city, region FROM businesses WHERE tenant_id=$1', [s.tenant_id])).rows[0]);
+    return { slug: s.slug, name: s.name, tagline: s.tagline, published_at: s.published_at, deliveryFeeCents: s.delivery_fee_cents, theme: s.theme, category: f.category, city: f.city, region: f.region,
              fulfilment: { pickup: !!f.fulfilment?.pickup, delivery: !!f.fulfilment?.delivery }, currency: f.currency };
   });
 
@@ -276,6 +279,7 @@ export async function buildApp() {
 
   registerCommerce(app, { tenantCtx });
   registerImport(app, { tenantCtx });
+  registerMarketplace(app);
 
   return app;
 }

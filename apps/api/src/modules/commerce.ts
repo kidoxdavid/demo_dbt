@@ -310,7 +310,7 @@ export function registerCommerce(app: FastifyInstance, deps: { tenantCtx: (r: Fa
     const { limit, offset } = page.parse(req.query);
     const s = await publicStore(slug);
     return withTx({ tenantId: s.tenant_id }, async c => (await c.query(
-      `SELECT p.id,p.name,p.description,p.brand,p.attributes,
+      `SELECT p.id,p.name,p.description,p.brand,p.attributes,p.made_to_order AS "madeToOrder",
         (SELECT json_agg(json_build_object('id',v.id,'title',v.title,'options',v.options,'priceCents',v.price_cents,
            'available',(NOT v.track_inventory) OR (l.on_hand-l.reserved>0)))
          FROM product_variants v JOIN inventory_levels l ON l.variant_id=v.id WHERE v.product_id=p.id) AS variants,

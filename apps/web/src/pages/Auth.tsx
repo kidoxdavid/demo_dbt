@@ -7,7 +7,7 @@ import { IcoBox, IcoChart, IcoTag } from '../icons';
 export const Header = () => (
   <header className="top"><div className="wrap">
     <Link to="/" className="logo">Eazy<b>Stores</b></Link>
-    <div className="row"><Link className="btn ghost sm" to="/login">Log in</Link><Link className="btn sm" to="/signup">Start selling</Link></div>
+    <div className="row"><Link className="btn ghost sm" to="/">Browse stores</Link><Link className="btn ghost sm" to="/login">Log in</Link><Link className="btn sm" to="/signup">Start selling</Link></div>
   </div></header>
 );
 

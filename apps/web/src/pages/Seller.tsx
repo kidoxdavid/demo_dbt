@@ -323,6 +323,7 @@ function Settings({ data, reload }: { data: Biz; reload: () => void }) {
       {f.delivery && <Field label="Delivery fee ($)" hint="Flat fee per order.">{id => <input id={id} inputMode="decimal" pattern="\d+(\.\d{1,2})?" value={f.fee} onChange={e => setF({ ...f, fee: e.target.value })} />}</Field>}
       <p><button disabled={busy}>{busy ? 'Saving…' : 'Save changes'}</button></p>
     </form>
+    <Appearance data={data} reload={reload} />
     <section className="card">
       <div className="row spread"><h2 style={{ margin: 0 }}>Publish</h2><Badge s={s.status} /></div>
       {s.status === 'published' ? <>
@@ -333,4 +334,28 @@ function Settings({ data, reload }: { data: Biz; reload: () => void }) {
         : <><p className="muted">Save your details first, then publish. Customers can only see products you've made visible.</p><button onClick={publish}>Publish my store</button></>}
     </section>
   </>;
+}
+
+const SWATCHES = ['#0b0b0c', '#3347e0', '#5b1a2b', '#b0762f', '#1f6f5c', '#d1456f', '#7a3fd1', '#c2410c'];
+function Appearance({ data, reload }: { data: Biz; reload: () => void }) {
+  const t = data.store.theme ?? {};
+  const [accent, setAccent] = useState<string>(t.accent ?? '#0b0b0c'); const [hero, setHero] = useState<string>(t.hero ?? 'light'); const [layout, setLayout] = useState<string>(t.layout ?? 'grid');
+  const [msg, setMsg] = useState<{ k: 'err' | 'ok'; t: string } | null>(null);
+  async function save() {
+    setMsg(null);
+    try { await api('/api/seller/store', { method: 'PATCH', body: { theme: { accent, hero, layout } } }); setMsg({ k: 'ok', t: 'Appearance saved.' }); reload(); } catch (e) { setMsg({ k: 'err', t: errorText(e) }); }
+  }
+  return <section className="card">
+    <h2 style={{ marginTop: 0 }}>Appearance</h2>
+    <p className="muted small">Make your store feel like your brand. Buttons and highlights use your accent colour.</p>
+    {msg && <Alert kind={msg.k}>{msg.t}</Alert>}
+    <div role="radiogroup" aria-label="Accent colour" className="swatches">
+      {SWATCHES.map(c => <button key={c} type="button" role="radio" aria-checked={accent === c} aria-label={`Accent ${c}`} className={`sw${accent === c ? ' on' : ''}`} style={{ background: c }} onClick={() => setAccent(c)} />)}
+    </div>
+    <div className="row" style={{ alignItems: 'flex-start' }}>
+      <div style={{ flex: '1 1 180px' }}><Field label="Header style">{id => <select id={id} value={hero} onChange={e => setHero(e.target.value)}><option value="light">Light</option><option value="dark">Dark (uses accent)</option></select>}</Field></div>
+      <div style={{ flex: '1 1 180px' }}><Field label="Product layout">{id => <select id={id} value={layout} onChange={e => setLayout(e.target.value)}><option value="grid">Compact grid</option><option value="spacious">Spacious (larger photos)</option></select>}</Field></div>
+    </div>
+    <p><button onClick={save}>Save appearance</button></p>
+  </section>;
 }

@@ -160,6 +160,17 @@ async function noHScroll(page, label) {
     await p.getByRole('heading', { name: 'Silk Scarf' }).waitFor();
     assert.equal(await p.getByRole('heading', { name: 'Oud Noir' }).count(), 1, 'existing product must not be duplicated or overwritten');
     await p.screenshot({ path: `${out}/${name}-11-products.png`, fullPage: true });
+    // 9. Customer discovery: marketplace shows the new store, search finds the product (typo tolerant), product page adds to the right cart
+    await g.goto(`${BASE}/?q=oud%20noirr`);
+    await g.getByRole('link', { name: /Oud Noir/ }).first().waitFor();
+    await noHScroll(g, `${name} marketplace search`);
+    await g.getByRole('link', { name: /Oud Noir/ }).first().click();
+    await g.waitForURL('**/p/**');
+    await g.locator('h1', { hasText: 'Oud Noir' }).waitFor();
+    await g.getByRole('button', { name: 'Add to cart' }).click();
+    await g.getByRole('link', { name: /View cart and check out/ }).waitFor();
+    await noHScroll(g, `${name} product page`);
+    await g.screenshot({ path: `${out}/${name}-12-product-page.png`, fullPage: true });
     await seller.close(); await guest.close();
     console.log(`✓ ${name}: full flow passed`);
   }

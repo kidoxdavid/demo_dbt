@@ -20,7 +20,7 @@ const put = (cookie: string, url: string, payload: object) => app.inject({ metho
 describe('admin identity and overview', () => {
   it('/api/admin/me reports role and permissions; non-staff and anonymous are refused', async () => {
     const mod = await staff('ad1', 'moderator'); const plain = await k.seller('ad2');
-    expect((await get(mod, '/api/admin/me')).json()).toMatchObject({ role: 'moderator', permissions: ['sellers.read', 'sellers.suspend'] });
+    expect((await get(mod, '/api/admin/me')).json()).toMatchObject({ role: 'moderator', permissions: ['reviews.write', 'sellers.read', 'sellers.suspend'] });
     expect((await get(plain.cookie, '/api/admin/me')).statusCode).toBe(403);
     expect((await get(undefined, '/api/admin/me')).statusCode).toBe(401);
     expect((await get(plain.cookie, '/api/admin/overview')).statusCode).toBe(403);

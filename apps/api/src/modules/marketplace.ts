@@ -24,6 +24,12 @@ export function registerMarketplace(app: FastifyInstance) {
     const order = q.sort === 'price_asc' ? 'price_from ASC, p.id' : q.sort === 'price_desc' ? 'price_from DESC, p.id' : 'p.created_at DESC, p.id';
 
     return withTx({ platform: true }, async c => {
+      // Exact matches win. Typo-tolerant matching is only a fallback, otherwise a search for "Item 07" would also return Item 17, Item 27...
+      const exactExists = !like || (await c.query(
+        `SELECT 1 FROM products p JOIN stores s ON s.tenant_id=p.tenant_id JOIN tenants t ON t.id=p.tenant_id JOIN businesses b ON b.tenant_id=p.tenant_id
+         WHERE ${VISIBLE} AND ($1::text IS NULL OR lower(b.category)=lower($1))
+           AND (p.name ILIKE $2 ESCAPE '\\' OR p.brand ILIKE $2 ESCAPE '\\' OR s.name ILIKE $2 ESCAPE '\\' OR b.category ILIKE $2 ESCAPE '\\') LIMIT 1`, [q.category ?? null, like])).rowCount! > 0;
+      const fuzzy = !exactExists;
       const products = (await c.query(
         `SELECT p.id, p.name, p.brand, p.made_to_order AS "madeToOrder", s.slug AS "storeSlug", s.name AS "storeName",
                 b.category, b.currency,
@@ -38,11 +44,11 @@ export function registerMarketplace(app: FastifyInstance) {
          WHERE ${VISIBLE}
            AND ($1::text IS NULL OR lower(b.category)=lower($1))
            AND ($2::text IS NULL OR p.name ILIKE $2 ESCAPE '\\' OR p.brand ILIKE $2 ESCAPE '\\' OR s.name ILIKE $2 ESCAPE '\\' OR b.category ILIKE $2 ESCAPE '\\'
-                OR word_similarity($3, p.name) > 0.45)
-         ORDER BY ${order} LIMIT $4 OFFSET $5`, [q.category ?? null, like, q.q ?? '', q.limit, q.offset])).rows;
+                OR ($6::boolean AND word_similarity($3, p.name) > 0.45))
+         ORDER BY ${order} LIMIT $4 OFFSET $5`, [q.category ?? null, like, q.q ?? '', q.limit, q.offset, fuzzy])).rows;
 
       const stores = (await c.query(
-        `SELECT s.slug, s.name, s.tagline, s.theme, b.category, b.city, b.region,
+        `SELECT s.slug, s.name, s.tagline, s.theme, b.category, b.city, b.region, (b.verification_status='verified') AS verified,
                 (SELECT count(*)::int FROM products p WHERE p.tenant_id=s.tenant_id AND p.status='active') AS "productCount",
                 (SELECT coalesce(json_agg(img), '[]'::json) FROM (
                    SELECT '/media/'||m.storage_key AS img FROM product_media m JOIN products p ON p.id=m.product_id
@@ -60,7 +66,7 @@ export function registerMarketplace(app: FastifyInstance) {
         if (slug) {
           let f = stores.find(s => s.slug === slug);
           if (!f) f = (await c.query(
-            `SELECT s.slug, s.name, s.tagline, s.theme, b.category, b.city, b.region,
+            `SELECT s.slug, s.name, s.tagline, s.theme, b.category, b.city, b.region, (b.verification_status='verified') AS verified,
                     (SELECT count(*)::int FROM products p WHERE p.tenant_id=s.tenant_id AND p.status='active') AS "productCount",
                     (SELECT coalesce(json_agg(img), '[]'::json) FROM (SELECT '/media/'||m.storage_key AS img FROM product_media m JOIN products p ON p.id=m.product_id
                        WHERE p.tenant_id=s.tenant_id AND p.status='active' ORDER BY p.created_at DESC, m.position LIMIT 3) x) AS covers

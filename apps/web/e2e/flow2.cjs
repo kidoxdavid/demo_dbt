@@ -73,9 +73,10 @@ async function noHScroll(page, label) {
     await p.goto(`${BASE}/signup`);
     await p.getByLabel('Your name').fill('Maker'); await p.getByLabel('Email').fill(`${slug}@example.test`); await p.getByLabel('Password').fill('correct-horse-battery');
     await p.getByLabel('Business name').fill(`Custom ${slug}`); await p.getByLabel('Store address').fill(slug);
+    await p.getByRole('checkbox', { name: /I agree to the/ }).check();
     await p.getByRole('button', { name: 'Create store' }).click(); await p.waitForURL('**/dashboard');
     await p.getByRole('link', { name: 'Settings' }).click();
-    await p.getByLabel('What do you sell? (category)').fill('Personalised gifts'); await p.getByLabel('About your business').fill('Made to order gifts.');
+    await p.getByLabel('What do you sell? (category)').fill('Personalised gifts'); await p.getByLabel('About your business', { exact: true }).fill('Made to order gifts.');
     await p.getByLabel('Customer pickup').check(); await p.getByRole('button', { name: 'Save changes' }).click();
     await p.getByText('Saved.').waitFor(); await p.getByRole('button', { name: 'Publish my store' }).click(); await p.getByText('Your store is live!').waitFor();
 

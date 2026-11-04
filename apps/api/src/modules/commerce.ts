@@ -9,7 +9,8 @@ import { reservationMinutes, uploadDir, maxImageBytes, uploadRateLimitMax } from
 import { taxFor } from '../lib/tax.js';
 import { enqueue, ownerEmail, url as mailUrl } from '../lib/mail.js';
 import { customFieldsIn, withKeys, validateCustom, isUuid, type Field } from '../lib/custom.js';
-import { localStorageAdapter, sniffImage, isValidKey } from '../lib/storage.js';
+import { localStorageAdapter, sniffImage, isValidKey, thumbKey } from '../lib/storage.js';
+import { processImage } from '../lib/images.js';
 
 type TenantCtx = { tenantId: string; role: string; userId: string };
 const SLUG = /^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$/;
@@ -140,9 +141,9 @@ export function registerCommerce(app: FastifyInstance, deps: { tenantCtx: (r: Fa
     const body = req.body as Buffer;
     if (!Buffer.isBuffer(body) || !body.length) throw new HttpError(400, 'empty_upload');
     if (body.length > maxImageBytes) throw new HttpError(413, 'image_too_large');
-    const kind = sniffImage(body);
-    if (!kind) throw new HttpError(415, 'unsupported_image_type');
-    const key = await storage.put(kind.ext, body);
+    if (!sniffImage(body)) throw new HttpError(415, 'unsupported_image_type');
+    const img = await processImage(body, { thumb: true });          // decode, strip metadata, resize, thumbnail
+    const key = await storage.put('webp', img.main); await storage.putAs(thumbKey(key), img.thumb!);
     try {
       const row = await withTx(t, async c => {
         const p = (await c.query('SELECT 1 FROM products WHERE id=$1', [id])).rowCount;
@@ -151,7 +152,7 @@ export function registerCommerce(app: FastifyInstance, deps: { tenantCtx: (r: Fa
         if (n.n >= 8) throw new HttpError(409, 'too_many_images');
         return (await c.query(
           `INSERT INTO product_media(tenant_id,product_id,storage_key,content_type,bytes,position) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id,position`,
-          [t.tenantId, id, key, kind.type, body.length, n.pos])).rows[0];
+          [t.tenantId, id, key, 'image/webp', img.main.length, n.pos])).rows[0];
       });
       return reply.code(201).send({ id: row.id, url: `/media/${key}`, position: row.position });
     } catch (e) { await storage.remove(key); throw e; } // never orphan a file when the DB write is rejected
@@ -172,7 +173,9 @@ export function registerCommerce(app: FastifyInstance, deps: { tenantCtx: (r: Fa
     if (!isValidKey(key)) throw new HttpError(404, 'not_found');
     const type = await withTx({}, async c => (await c.query('SELECT media_content_type($1) t', [key])).rows[0].t as string | null);
     if (!type) throw new HttpError(404, 'not_found');
-    const data = await storage.get(key);
+    const w = Number((req.query as { w?: string }).w);
+    const wantThumb = Number.isFinite(w) && w > 0 && w <= 480;       // grids ask for ?w=480 and get the small file
+    const data = (wantThumb ? await storage.get(thumbKey(key)) : null) ?? await storage.get(key);
     if (!data) throw new HttpError(404, 'not_found');
     return reply.header('content-type', type).header('x-content-type-options', 'nosniff').header('cross-origin-resource-policy', 'cross-origin')
       .header('cache-control', 'public, max-age=3600').send(data);
@@ -214,7 +217,7 @@ export function registerCommerce(app: FastifyInstance, deps: { tenantCtx: (r: Fa
     const t = await tenantCtx(req);
     const { limit, offset } = page.parse(req.query);
     return withTx(t, async c => (await c.query(
-      `SELECT p.id,p.name,p.status,p.brand,p.attributes,p.custom_fields AS "customFields",
+      `SELECT p.id,p.name,p.status,p.brand,p.attributes,p.custom_fields AS "customFields",p.moderation_reason AS "moderationReason",
         (SELECT json_agg(json_build_object('id',v.id,'title',v.title,'sku',v.sku,'priceCents',v.price_cents,'costCents',v.cost_cents,
            'onHand',l.on_hand,'reserved',l.reserved,'trackInventory',v.track_inventory,'lowStock',(v.track_inventory AND l.on_hand-l.reserved <= v.low_stock_threshold)))
          FROM product_variants v JOIN inventory_levels l ON l.variant_id=v.id WHERE v.product_id=p.id) AS variants,
@@ -229,6 +232,7 @@ export function registerCommerce(app: FastifyInstance, deps: { tenantCtx: (r: Fa
     return withTx(t, async c => {
       const prev = (await c.query('SELECT * FROM products WHERE id=$1 FOR UPDATE', [id])).rows[0];
       if (!prev) throw new HttpError(404, 'not_found');
+      if (prev.status === 'removed') throw new HttpError(409, 'removed_by_moderator');          // only staff can restore a removed product
       if (b.status === 'active' && prev.status !== 'active') await assertProductLimit(c, t.tenantId, 1);
       const row = (await c.query(
         `UPDATE products SET name=coalesce($2,name), description=coalesce($3,description), status=coalesce($4,status), custom_fields=coalesce($5::jsonb,custom_fields), updated_at=now() WHERE id=$1 RETURNING *`,
@@ -346,17 +350,27 @@ export function registerCommerce(app: FastifyInstance, deps: { tenantCtx: (r: Fa
     return s as { id: string; tenant_id: string; name: string; delivery_fee_cents: number };
   }
 
-  app.get('/api/public/stores/:slug/products', async (req) => {
+  app.get('/api/public/stores/:slug/products', async (req, reply) => {
     const { slug } = z.object({ slug: z.string().regex(SLUG) }).parse(req.params);
-    const { limit, offset } = page.parse(req.query);
+    const q = page.extend({ q: z.string().trim().max(80).optional(), sort: z.enum(['new', 'price_asc', 'price_desc']).default('new') }).parse(req.query);
+    const like = q.q ? `%${q.q.replace(/[\\%_]/g, ch => '\\' + ch)}%` : null;
+    const order = q.sort === 'price_asc' ? 'price_from ASC, p.id' : q.sort === 'price_desc' ? 'price_from DESC, p.id' : 'p.created_at DESC, p.id';
     const s = await publicStore(slug);
-    return withTx({ tenantId: s.tenant_id }, async c => (await c.query(
+    const { rows, total } = await withTx({ tenantId: s.tenant_id }, async c => {
+      const exactExists = !like || (await c.query(`SELECT 1 FROM products p WHERE p.status='active' AND (p.name ILIKE $1 ESCAPE '\\' OR p.brand ILIKE $1 ESCAPE '\\' OR p.description ILIKE $1 ESCAPE '\\') LIMIT 1`, [like])).rowCount! > 0;
+      const fuzzy = !exactExists;                                  // typo tolerance only when nothing matches exactly
+      const rows = (await c.query(
       `SELECT p.id,p.name,p.description,p.brand,p.attributes,p.made_to_order AS "madeToOrder",p.custom_fields AS "customFields",
+        (SELECT min(v.price_cents) FROM product_variants v WHERE v.product_id=p.id) AS price_from,
         (SELECT json_agg(json_build_object('id',v.id,'title',v.title,'options',v.options,'priceCents',v.price_cents,
            'available',(NOT v.track_inventory) OR (l.on_hand-l.reserved>0)))
          FROM product_variants v JOIN inventory_levels l ON l.variant_id=v.id WHERE v.product_id=p.id) AS variants,
         (SELECT coalesce(json_agg('/media/'||m.storage_key ORDER BY m.position),'[]'::json) FROM product_media m WHERE m.product_id=p.id) AS images
-       FROM products p WHERE p.status='active' ORDER BY p.created_at DESC LIMIT $1 OFFSET $2`, [limit, offset])).rows);
+       FROM products p WHERE p.status='active' AND ($3::text IS NULL OR p.name ILIKE $3 ESCAPE '\\' OR p.brand ILIKE $3 ESCAPE '\\' OR p.description ILIKE $3 ESCAPE '\\' OR ($5::boolean AND word_similarity($4, p.name) > 0.45))
+       ORDER BY ${order} LIMIT $1 OFFSET $2`, [q.limit, q.offset, like, q.q ?? '', fuzzy])).rows;
+      const total = Number((await c.query(`SELECT count(*) n FROM products p WHERE p.status='active' AND ($1::text IS NULL OR p.name ILIKE $1 ESCAPE '\\' OR p.brand ILIKE $1 ESCAPE '\\' OR p.description ILIKE $1 ESCAPE '\\' OR ($3::boolean AND word_similarity($2, p.name) > 0.45))`, [like, q.q ?? '', fuzzy])).rows[0].n);
+      return { rows, total }; });
+    return reply.header('x-total-count', String(total)).send(rows);
   });
 
   const checkoutIn = z.object({
@@ -455,12 +469,13 @@ export function registerCommerce(app: FastifyInstance, deps: { tenantCtx: (r: Fa
     const body = req.body as Buffer;
     if (!Buffer.isBuffer(body) || !body.length) throw new HttpError(400, 'empty_upload');
     if (body.length > maxImageBytes) throw new HttpError(413, 'image_too_large');
-    const kind = sniffImage(body); if (!kind) throw new HttpError(415, 'unsupported_image_type');
+    if (!sniffImage(body)) throw new HttpError(415, 'unsupported_image_type');
+    const img = await processImage(body, { thumb: false });        // customers' photos lose location metadata too
     const s = await publicStore(slug);
-    const key = await storage.put(kind.ext, body);
+    const key = await storage.put('webp', img.main);
     try {
       const row = await withTx({ tenantId: s.tenant_id }, async c => (await c.query(
-        'INSERT INTO custom_uploads(tenant_id,storage_key,content_type,bytes) VALUES ($1,$2,$3,$4) RETURNING id', [s.tenant_id, key, kind.type, body.length])).rows[0]);
+        'INSERT INTO custom_uploads(tenant_id,storage_key,content_type,bytes) VALUES ($1,$2,$3,$4) RETURNING id', [s.tenant_id, key, 'image/webp', img.main.length])).rows[0]);
       return reply.code(201).send({ id: row.id });
     } catch (e) { await storage.remove(key); throw e; }
   });

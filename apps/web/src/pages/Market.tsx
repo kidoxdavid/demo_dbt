@@ -4,6 +4,8 @@ import { api, ApiError, errorText, money } from '../api';
 import { Empty } from '../ui';
 import { useCart, useStore, usePub, rememberSource } from './Store';
 
+/** Grids ask for the small thumbnail the server makes; full-size images are for the product page and hero. */
+const thumb = (u: string) => (u.startsWith('/media/') ? `${u}?w=480` : u);
 export const accentOf = (t: any) => (t?.accent && /^#[0-9a-f]{6}$/i.test(t.accent) ? t.accent : '#141414');
 
 /** Quiet header: wordmark, categories as plain text links, search that opens on demand. No giant search bar. */
@@ -31,8 +33,8 @@ export function PCard({ p }: { p: any }) {
   const price = p.priceTo && p.priceTo !== p.priceFrom ? `From ${money(p.priceFrom, p.currency)}` : money(p.priceFrom, p.currency);
   return <Link className="pc" to={`/store/${p.storeSlug}/p/${p.id}`} aria-label={`${p.name}, ${price}${p.available ? '' : ', sold out'}`}>
     <div className="pc-img">
-      {p.image ? <img className="a" src={p.image} alt="" loading="lazy" /> : <div className="ph" aria-hidden>{p.name.slice(0, 1)}</div>}
-      {p.image2 && <img className="b" src={p.image2} alt="" loading="lazy" />}
+      {p.image ? <img className="a" src={thumb(p.image)} alt="" loading="lazy" /> : <div className="ph" aria-hidden>{p.name.slice(0, 1)}</div>}
+      {p.image2 && <img className="b" src={thumb(p.image2)} alt="" loading="lazy" />}
       {!p.available ? <span className="tag">Sold out</span> : p.madeToOrder ? <span className="tag">Made to order</span> : null}
     </div>
     <div className="pc-meta"><span className="pc-store">{p.storeName}</span><span className="pc-name">{p.name}</span><span className="pc-price">{price}</span></div>
@@ -59,12 +61,12 @@ function Home({ data, items, onAll }: { data: any; items: any[]; onAll: () => vo
     <div className="wrap">
       <section className="band2" aria-labelledby="cats"><div className="band2-head"><h2 id="cats">Shop by category</h2></div>
         <div className="tiles">{tiles.map((t: any) => <Link key={t.name} className="tile2" to={`/?category=${encodeURIComponent(t.name)}`}>
-          <img src={t.store.covers[0]} alt="" loading="lazy" /><span className="tile2-label"><b>{t.name}</b><small>{t.stores} {t.stores === 1 ? 'maker' : 'makers'}</small></span></Link>)}</div></section>
+          <img src={thumb(t.store.covers[0])} alt="" loading="lazy" /><span className="tile2-label"><b>{t.name}</b><small>{t.stores} {t.stores === 1 ? 'maker' : 'makers'}</small></span></Link>)}</div></section>
       <section className="band2" aria-labelledby="makers"><div className="band2-head"><h2 id="makers">The makers</h2><span className="muted small">{data.stores.length} independent {data.stores.length === 1 ? 'brand' : 'brands'}</span></div>
         <ul className="makers">{data.stores.map((s: any) => <li key={s.slug}><Link to={`/store/${s.slug}`} className="maker">
-          <span className="maker-name"><i className="dot" style={{ background: accentOf(s.theme) }} aria-hidden />{s.name}</span>
+          <span className="maker-name"><i className="dot" style={{ background: accentOf(s.theme) }} aria-hidden />{s.name}{s.verified && <span className="vtick" title="Verified seller: EazyStores staff reviewed their registration details">✓ Verified</span>}</span>
           <span className="maker-meta">{[s.category, s.city].filter(Boolean).join(' · ')}</span>
-          <span className="maker-imgs" aria-hidden>{s.covers.slice(0, 3).map((u: string) => <img key={u} src={u} alt="" loading="lazy" />)}</span></Link></li>)}</ul></section>
+          <span className="maker-imgs" aria-hidden>{s.covers.slice(0, 3).map((u: string) => <img key={u} src={thumb(u)} alt="" loading="lazy" />)}</span></Link></li>)}</ul></section>
       {perStore.length > 0 && <section className="band2" aria-labelledby="new"><div className="band2-head"><h2 id="new">New this week</h2><button className="textbtn" onClick={onAll}>View all products →</button></div>
         <div className="pgrid four">{perStore.map(p => <PCard key={p.id} p={p} />)}</div></section>}
     </div>
@@ -99,7 +101,8 @@ export function Marketplace() {
     </main>}
     <footer className="pfoot"><div className="wrap pfoot-grid"><div><div className="plogo">Eazy<i>Stores</i></div><p className="muted small">A home for independent brands.</p></div>
       <div className="small"><b>Sellers</b><br /><Link to="/sell">Open your store</Link><br /><Link to="/login">Log in</Link></div>
-      <div className="small muted">Development build. Payments are simulated.</div></div></footer>
+      <div className="small"><b>Policies</b><br /><Link to="/terms">Terms</Link> · <Link to="/privacy">Privacy</Link> · <Link to="/rules">Prohibited items</Link></div>
+      </div></footer>
   </>;
 }
 

@@ -3,12 +3,12 @@ import cookie from '@fastify/cookie';
 import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
 import { z, ZodError } from 'zod';
-import { config, allowedOrigins, requireVerifiedEmail, requireStaffMfa } from './config.js';
+import { config, allowedOrigins, requireVerifiedEmail, requireStaffMfa, requireTerms, TERMS_VERSION } from './config.js';
 import { withTx, audit } from './lib/db.js';
 import { hashPassword, verifyPassword, newToken, sha256 } from './lib/security.js';
 
 const COOKIE = 'eazy_sid';
-declare module 'fastify' { interface FastifyRequest { user?: { id: string; email: string; fullName: string; sid: string; mfaAt: Date | null; mfaEnabledAt: Date | null; emailVerified: boolean } } }
+declare module 'fastify' { interface FastifyRequest { user?: { id: string; email: string; fullName: string; sid: string; mfaAt: Date | null; mfaEnabledAt: Date | null; emailVerified: boolean; termsAccepted: boolean } } }
 
 import { HttpError } from './lib/errors.js';
 import { registerCommerce } from './modules/commerce.js';
@@ -17,6 +17,7 @@ import { registerMarketplace } from './modules/marketplace.js';
 import { registerRefunds } from './modules/refunds.js';
 import { registerShare } from './modules/share.js';
 import { registerAccount, createMfaChallenge } from './modules/account.js';
+import { registerGovernance } from './modules/governance.js';
 import { issueToken } from './lib/tokens.js';
 import { enqueue, url as mailUrl } from './lib/mail.js';
 const SLUG = /^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$/;
@@ -25,6 +26,7 @@ const signupSchema = z.object({
   email: z.string().email().max(254), password: z.string().min(10).max(200), fullName: z.string().trim().min(1).max(120),
   businessName: z.string().trim().min(1).max(120), storeSlug: z.string().regex(SLUG),
   legalType: z.enum(['individual','sole_proprietorship','registered_business','partnership','creator']).default('individual'),
+  acceptTerms: z.boolean().optional(),
 });
 const businessPatch = z.object({
   description: z.string().max(2000), category: z.string().max(80), contactEmail: z.string().email(),
@@ -37,7 +39,12 @@ const businessPatch = z.object({
 }).partial().strict();
 
 export async function buildApp() {
-  const app = Fastify({ logger: false, bodyLimit: 3_000_000 });
+  const app = Fastify({
+    // Structured JSON logs in production, with cookies and auth headers redacted so sessions never reach log storage.
+    logger: process.env.NODE_ENV === 'production' ? { level: 'info', redact: ['req.headers.cookie', 'req.headers.authorization', 'res.headers["set-cookie"]'] } : false,
+    bodyLimit: 3_000_000,
+    trustProxy: process.env.TRUST_PROXY === 'true',   // set when behind a load balancer so rate limits see real client addresses
+  });
   await app.register(helmet);
   await app.register(cookie);
   await app.register(rateLimit, { global: false });
@@ -62,10 +69,10 @@ export async function buildApp() {
     const raw = req.cookies[COOKIE];
     if (!raw) throw new HttpError(401, 'unauthenticated');
     const u = await withTx({ platform: true }, async c => (await c.query(
-      `SELECT u.id,u.email,u.full_name,s.id AS sid,s.mfa_at,u.mfa_enabled_at,u.email_verified_at FROM sessions s JOIN users u ON u.id=s.user_id
+      `SELECT u.id,u.email,u.full_name,s.id AS sid,s.mfa_at,u.mfa_enabled_at,u.email_verified_at,u.terms_accepted_at FROM sessions s JOIN users u ON u.id=s.user_id
        WHERE s.token_hash=$1 AND s.expires_at>now() AND u.disabled_at IS NULL`, [sha256(raw)])).rows[0]);
     if (!u) throw new HttpError(401, 'unauthenticated');
-    req.user = { id: u.id, email: u.email, fullName: u.full_name, sid: u.sid, mfaAt: u.mfa_at, mfaEnabledAt: u.mfa_enabled_at, emailVerified: !!u.email_verified_at };
+    req.user = { id: u.id, email: u.email, fullName: u.full_name, sid: u.sid, mfaAt: u.mfa_at, mfaEnabledAt: u.mfa_enabled_at, emailVerified: !!u.email_verified_at, termsAccepted: !!u.terms_accepted_at };
   }
 
   /** Resolve membership for the tenant selected by the session user (never trusting a client tenant id). */
@@ -97,7 +104,10 @@ export async function buildApp() {
     reply.setCookie(COOKIE, token, { httpOnly: true, sameSite: 'lax', secure: config.secureCookies, path: '/', maxAge: config.sessionTtlHours * 3600 });
   };
 
-  app.get('/health', async () => ({ ok: true }));
+  app.get('/health', async () => ({ ok: true }));                       // process is up
+  app.get('/ready', async (_req, reply) => {                             // process can serve traffic: database reachable
+    try { await withTx({}, c => c.query('SELECT 1')); return { ok: true }; } catch { return reply.code(503).send({ ok: false }); }
+  });
 
   // ---- Seller signup: user + tenant + business + draft store in one transaction ----
   app.post('/api/auth/signup', { config: { rateLimit: { max: config.authRateLimitMax, timeWindow: '1 minute' } } }, async (req, reply) => {
@@ -111,7 +121,7 @@ export async function buildApp() {
       if (dupe.rowCount) throw new HttpError(409, 'email_in_use');
       const slugTaken = await c.query('SELECT 1 FROM stores WHERE slug=$1', [b.storeSlug]);
       if (slugTaken.rowCount) throw new HttpError(409, 'slug_unavailable');
-      const user = (await c.query('INSERT INTO users(email,password_hash,full_name) VALUES ($1,$2,$3) RETURNING id', [b.email, pwHash, b.fullName])).rows[0];
+      const user = (await c.query('INSERT INTO users(email,password_hash,full_name,terms_accepted_at,terms_version) VALUES ($1,$2,$3, CASE WHEN $4 THEN now() END, CASE WHEN $4 THEN $5 END) RETURNING id', [b.email, pwHash, b.fullName, !!b.acceptTerms, TERMS_VERSION])).rows[0];
       const plan = (await c.query(`SELECT id FROM plans WHERE code='starter'`)).rows[0];
       const t = (await c.query('INSERT INTO tenants(plan_id) VALUES ($1) RETURNING id', [plan.id])).rows[0];
       await c.query(`INSERT INTO memberships(tenant_id,user_id,role) VALUES ($1,$2,'owner')`, [t.id, user.id]);
@@ -151,9 +161,10 @@ export async function buildApp() {
     return { ok: true };
   });
 
-  app.get('/api/me', async (req) => { await authenticate(req); const u = req.user!; return { id: u.id, email: u.email, fullName: u.fullName, emailVerified: u.emailVerified, mfaEnabled: !!u.mfaEnabledAt }; });
+  app.get('/api/me', async (req) => { await authenticate(req); const u = req.user!; return { id: u.id, email: u.email, fullName: u.fullName, emailVerified: u.emailVerified, termsAccepted: u.termsAccepted, mfaEnabled: !!u.mfaEnabledAt }; });
 
   registerAccount(app, { authenticate, createSession: async (reply, userId, mfa) => { await setSession(reply, userId, mfa); } });
+  registerGovernance(app, { tenantCtx, platformPerm, authenticate });
 
   // ---- Seller: business & onboarding (tenant resolved server-side; RLS enforces isolation) ----
   app.get('/api/seller/business', async (req) => {
@@ -161,7 +172,7 @@ export async function buildApp() {
     return withTx(t, async c => {
       const biz = (await c.query('SELECT * FROM businesses').then(r => r.rows[0]));
       // Explicit tenant filter is required: the public RLS policy also exposes other tenants' published stores.
-      const store = (await c.query('SELECT id,slug,name,tagline,status,published_at,delivery_fee_cents,theme FROM stores WHERE tenant_id=$1', [t.tenantId]).then(r => r.rows[0]));
+      const store = (await c.query('SELECT id,slug,name,tagline,status,published_at,delivery_fee_cents,theme,review_note FROM stores WHERE tenant_id=$1', [t.tenantId]).then(r => r.rows[0]));
       return { business: biz, store, role: t.role };
     });
   });
@@ -218,11 +229,18 @@ export async function buildApp() {
     return withTx(t, async c => {
       const tenant = (await c.query('SELECT status FROM tenants').then(r => r.rows[0]));
       if (tenant.status !== 'active') throw new HttpError(403, 'tenant_suspended');
-      if (requireVerifiedEmail() && !(await c.query('SELECT email_verified_at FROM users WHERE id=$1', [t.userId])).rows[0]?.email_verified_at) throw new HttpError(403, 'email_not_verified');
+      const me = (await c.query('SELECT email_verified_at, terms_accepted_at FROM users WHERE id=$1', [t.userId])).rows[0];
+      if (requireVerifiedEmail() && !me?.email_verified_at) throw new HttpError(403, 'email_not_verified');
+      if (requireTerms() && !me?.terms_accepted_at) throw new HttpError(403, 'terms_not_accepted');
       const biz = (await c.query('SELECT * FROM businesses').then(r => r.rows[0]));
       const missing = [!biz.category && 'category', !biz.description && 'description', !biz.contact_email && 'contact_email'].filter(Boolean);
       if (missing.length) throw new HttpError(422, `incomplete_profile:${missing.join(',')}`);
-      const s = (await c.query(`UPDATE stores SET status='published', published_at=coalesce(published_at,now()) WHERE tenant_id=$1 AND status<>'suspended' RETURNING id,slug,status`, [t.tenantId])).rows[0];
+      // When the platform requires review, a new store waits for staff approval instead of going live; an already live store stays live.
+      const target = (await c.query(`SELECT value FROM platform_settings WHERE key='store_review_required'`)).rows[0]?.value === true ? 'pending_review' : 'published';
+      const s = (await c.query(`UPDATE stores SET status = CASE WHEN status='published' THEN 'published' ELSE $2 END,
+                                  published_at = CASE WHEN $2='published' THEN coalesce(published_at,now()) ELSE published_at END,
+                                  submitted_at = CASE WHEN $2='pending_review' AND status<>'published' THEN now() ELSE submitted_at END, review_note=NULL
+                                WHERE tenant_id=$1 AND status<>'suspended' RETURNING id,slug,status`, [t.tenantId, target])).rows[0];
       if (!s) throw new HttpError(409, 'store_suspended');
       await c.query('UPDATE businesses SET onboarding_completed_at=coalesce(onboarding_completed_at,now()) WHERE tenant_id=$1', [t.tenantId]);
       await audit(c, { actor: t.userId, tenantId: t.tenantId, action: 'store.publish', entityType: 'store', entityId: s.id });
@@ -236,8 +254,8 @@ export async function buildApp() {
     const s = await withTx({}, async c => (await c.query('SELECT tenant_id,slug,name,tagline,published_at,delivery_fee_cents,theme FROM stores WHERE slug=$1', [slug])).rows[0]);
     if (!s) throw new HttpError(404, 'not_found');
     // Tenant context derived from the store row (never client input) to read the offered fulfilment options.
-    const f = await withTx({ tenantId: s.tenant_id }, async c => (await c.query('SELECT fulfilment, currency, category, city, region, (tax_federal OR cardinality(tax_provincial) > 0) AS taxes FROM businesses WHERE tenant_id=$1', [s.tenant_id])).rows[0]);
-    return { slug: s.slug, name: s.name, tagline: s.tagline, published_at: s.published_at, deliveryFeeCents: s.delivery_fee_cents, theme: s.theme, category: f.category, city: f.city, region: f.region, chargesTax: f.taxes,
+    const f = await withTx({ tenantId: s.tenant_id }, async c => (await c.query('SELECT fulfilment, currency, category, city, region, verification_status, (tax_federal OR cardinality(tax_provincial) > 0) AS taxes FROM businesses WHERE tenant_id=$1', [s.tenant_id])).rows[0]);
+    return { slug: s.slug, name: s.name, tagline: s.tagline, published_at: s.published_at, deliveryFeeCents: s.delivery_fee_cents, theme: s.theme, category: f.category, city: f.city, region: f.region, chargesTax: f.taxes, verified: f.verification_status === 'verified',
              fulfilment: { pickup: !!f.fulfilment?.pickup, delivery: !!f.fulfilment?.delivery }, currency: f.currency };
   });
 

@@ -58,7 +58,7 @@ describe('email outbox and transport', () => {
     const m = (await outbox('victim@x.test'))[0];
     expect(m.html_body).not.toContain('<script>'); expect(m.html_body).toContain('&lt;script&gt;'); expect(m.html_body).not.toContain('<b>Bold</b>');
     expect(m.subject).not.toMatch(/[\r\n]/);
-    const r = await processOutbox(); expect(r.simulated).toBeGreaterThanOrEqual(1);
+    const r = await processOutbox(1000); expect(r.simulated).toBeGreaterThanOrEqual(1);
     expect((await outbox('victim@x.test'))[0].status).toBe('simulated');
   });
   it('really delivers over SMTP to a server, and marks the message sent', async () => {
@@ -67,7 +67,7 @@ describe('email outbox and transport', () => {
     await new Promise<void>(r => server.listen(0, '127.0.0.1', () => r()));
     process.env.SMTP_URL = `smtp://127.0.0.1:${(server.server.address() as any).port}`; resetTransportForTests();
     await withTx({ platform: true }, c => enqueue(c, { to: 'real@x.test', template: 'verify_email', data: { url: 'https://example.test/verify?token=abc' } }));
-    const r = await processOutbox(); expect(r.sent).toBeGreaterThanOrEqual(1);
+    const r = await processOutbox(1000); expect(r.sent).toBeGreaterThanOrEqual(1);
     await new Promise<void>(r2 => server.close(() => r2()));
     const qp = (x: string) => x.replace(/=\r?\n/g, '').replace(/=([0-9A-F]{2})/g, (_m, h) => String.fromCharCode(parseInt(h, 16)));   // undo quoted-printable
     expect(qp(received.join('\n'))).toContain('https://example.test/verify?token=abc'); expect(received.join('\n')).toMatch(/Subject: Confirm your email/);
@@ -78,11 +78,11 @@ describe('email outbox and transport', () => {
     await withTx({ platform: true }, c => enqueue(c, { to: 'dead@x.test', template: 'password_changed', data: {} }));
     for (let i = 1; i <= 5; i++) {
       await oq(`UPDATE email_outbox SET next_attempt_at = now() - interval '1 second' WHERE to_email='dead@x.test'`);
-      await processOutbox(); const m = (await outbox('dead@x.test'))[0];
+      await processOutbox(1000); const m = (await outbox('dead@x.test'))[0];
       expect(m.attempts).toBe(i); expect(m.last_error).toBeTruthy();
       expect(m.status).toBe(i < 5 ? 'pending' : 'failed');
     }
-    const before = (await outbox('dead@x.test'))[0].attempts; await processOutbox(); expect((await outbox('dead@x.test'))[0].attempts).toBe(before);
+    const before = (await outbox('dead@x.test'))[0].attempts; await processOutbox(1000); expect((await outbox('dead@x.test'))[0].attempts).toBe(before);
   });
 });
 

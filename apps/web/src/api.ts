@@ -21,6 +21,9 @@ const MESSAGES: Record<string, string> = {
   item_unavailable: 'An item in your cart is no longer available.', cross_origin_blocked: 'Request blocked.',
   custom_unknown_field: 'This product changed. Please remove it from your cart and add it again.', restock_requires_full_refund: 'Restocking is only available when refunding the whole order.', idempotency_key_reused: 'That refund request was already used for another order.',
   invalid_path: 'That page cannot be shared.', not_your_store: 'You can only share your own store.', store_not_publishable: 'That store is not live.',
+  terms_not_accepted: 'Please accept the seller agreement first.', removed_by_moderator: 'This product was removed by a moderator. Contact support if you think that was a mistake.',
+  verification_pending: 'Your verification request is already being reviewed.', verification_verified: 'You are already verified.', not_pending_review: 'That store is no longer waiting for review.',
+  unresolved_refunds: 'A customer is still owed a refund. Resolve it on your Overview page first.', no_orders_found: 'No orders were found for that email address.',
   invalid_code: 'That code is not right. Check your authenticator app and try again.', too_many_attempts: 'Too many wrong codes. Please sign in again.', invalid_challenge: 'That sign-in expired. Please sign in again.',
   invalid_or_expired_link: 'That link has expired or was already used. Request a new one.', email_not_verified: 'Please confirm your email address first. We sent you a link.',
   mfa_setup_required: 'Staff accounts need two-factor sign-in. Set it up to continue.', mfa_required: 'Please sign in again and enter your two-factor code.', mfa_required_for_staff: 'Two-factor sign-in cannot be turned off for staff accounts.',
@@ -38,6 +41,7 @@ export function errorText(e: unknown): string {
     if (code === 'custom_invalid_choice') return `Please choose a valid option for “${detail}”.`;
     if (code === 'custom_invalid_upload') return `The photo for “${detail || 'this item'}” could not be used. Please upload it again.`;
     if (code === 'exceeds_refundable') return `That is more than can be refunded. The most you can refund is $${(Number(detail) / 100).toFixed(2)}.`;
+    if (code === 'open_orders') return `You still have ${detail} open order(s). Finish or refund them first.`;
     if (code === 'no_provincial_tax') return `${detail} has no provincial sales tax to register for.`;
     if (code === 'not_refundable') return 'This order cannot be refunded in its current state.';
     if (e.code.startsWith('incomplete_profile:')) return `Before publishing, please fill in: ${e.code.split(':')[1].replace(/_/g, ' ')}.`;
@@ -45,6 +49,13 @@ export function errorText(e: unknown): string {
     return MESSAGES[e.code] ?? `Something went wrong (${e.code}).`;
   }
   return 'Network error. Please try again.';
+}
+/** Like api(), but also returns the X-Total-Count header (for paged lists). */
+export async function apiWithTotal<T = any>(path: string): Promise<{ data: T; total: number }> {
+  const res = await fetch(path, { credentials: 'same-origin' });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new ApiError(res.status, (data as any).error ?? 'request_failed', (data as any).issues);
+  return { data: data as T, total: Number(res.headers.get('x-total-count') ?? (Array.isArray(data) ? data.length : 0)) };
 }
 export const PROVINCES: [string, string][] = [['AB', 'Alberta'], ['BC', 'British Columbia'], ['MB', 'Manitoba'], ['NB', 'New Brunswick'], ['NL', 'Newfoundland and Labrador'],
   ['NS', 'Nova Scotia'], ['NT', 'Northwest Territories'], ['NU', 'Nunavut'], ['ON', 'Ontario'], ['PE', 'Prince Edward Island'], ['QC', 'Quebec'], ['SK', 'Saskatchewan'], ['YT', 'Yukon']];

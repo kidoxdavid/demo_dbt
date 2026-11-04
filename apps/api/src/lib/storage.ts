@@ -5,17 +5,20 @@ import { randomBytes } from 'node:crypto';
 /** Object storage port. Local disk for development; an S3-compatible adapter implements the same interface in production. */
 export interface Storage {
   put(ext: string, data: Buffer): Promise<string>;   // returns an unguessable key
+  putAs(key: string, data: Buffer): Promise<void>;   // store under a key derived from another (thumbnails)
   get(key: string): Promise<Buffer | null>;
-  remove(key: string): Promise<void>;
+  remove(key: string): Promise<void>;                // also removes the thumbnail sibling, if any
 }
-const KEY = /^[a-f0-9]{32}\.(jpg|png|webp)$/;
+const KEY = /^[a-f0-9]{32}(_t)?\.(jpg|png|webp)$/;
+export const thumbKey = (key: string) => key.replace(/\.(jpg|png|webp)$/, '_t.webp');
 export const isValidKey = (k: string) => KEY.test(k);
 
 export function localStorageAdapter(dir: string): Storage {
   return {
     async put(ext, data) { await mkdir(dir, { recursive: true }); const key = `${randomBytes(16).toString('hex')}.${ext}`; await writeFile(join(dir, key), data); return key; },
+    async putAs(key, data) { if (!isValidKey(key)) throw new Error('invalid storage key'); await mkdir(dir, { recursive: true }); await writeFile(join(dir, key), data); },
     async get(key) { if (!isValidKey(key)) return null; try { return await readFile(join(dir, key)); } catch { return null; } },
-    async remove(key) { if (isValidKey(key)) await rm(join(dir, key), { force: true }); },
+    async remove(key) { if (isValidKey(key)) { await rm(join(dir, key), { force: true }); await rm(join(dir, thumbKey(key)), { force: true }); } },
   };
 }
 

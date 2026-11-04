@@ -40,6 +40,7 @@ let browser, cur;
     await p.goto(`${BASE}/signup`);
     await p.getByLabel('Your name').fill('Tax Seller'); await p.getByLabel('Email').fill(email); await p.getByLabel('Password').fill(pw1);
     await p.getByLabel('Business name').fill(`Tax ${slug}`); await p.getByLabel('Store address').fill(slug);
+    await p.getByRole('checkbox', { name: /I agree to the/ }).check();
     await p.getByRole('button', { name: 'Create store' }).click(); await p.waitForURL('**/dashboard');
     await p.getByText(/Confirm your email address to publish/).waitFor();
     await noHScroll(p, `${name} dashboard with verification banner`); await p.screenshot({ path: `${out}/${name}-y1-verify-banner.png`, fullPage: true });
@@ -51,7 +52,7 @@ let browser, cur;
 
     // --- Settings: province, GST/HST, delivery; publish
     await p.getByRole('link', { name: 'Settings' }).click();
-    await p.getByLabel('What do you sell? (category)').fill('Gifts'); await p.getByLabel('About your business').fill('Gifts and candles.');
+    await p.getByLabel('What do you sell? (category)').fill('Gifts'); await p.getByLabel('About your business', { exact: true }).fill('Gifts and candles.');
     await p.getByLabel('Province', { exact: true }).selectOption('AB');
     await p.getByLabel('Customer pickup').check(); await p.getByLabel('Delivery', { exact: true }).check(); await p.getByLabel('Delivery fee ($)').fill('5.00');
     await p.getByLabel(/registered to collect GST\/HST/).check(); await p.getByLabel('GST/HST number').fill('123456789RT0001');

@@ -36,3 +36,13 @@ node e2e/flow.cjs ./shots               # seller + customer journey
 node e2e/flow2.cjs ./shots              # customisation, share/QR, refunds, admin (needs e2e-admin@eazystores.test staff user)
 ```
 Set `PUBLIC_URL` (share links and QR codes) and `ALLOWED_ORIGINS` in production.
+
+## More end-to-end tests and operations
+
+```bash
+node e2e/flow3.cjs ./shots              # email verification, sales tax, password reset, seller two-factor
+ONLY=desktop node e2e/flow4.cjs ./shots # store review, verification, moderation, search, legal pages, account closure (also ONLY=mobile)
+npm run build && npm run start:prod     # in apps/api: compiled production server (see docs/DEPLOY.md for required environment)
+ops/backup.sh and ops/restore-check.sh  # backup and a restore test that fails on a bad backup
+```
+See `docs/PAYMENTS.md` (provider research and plan) and `docs/DEPLOY.md` (operations). The legal pages in the app are **drafts that a lawyer must review**.

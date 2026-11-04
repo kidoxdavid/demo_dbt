@@ -3,6 +3,7 @@ import { Landing, Login, Signup, ForgotPassword, ResetPassword, VerifyEmail } fr
 import { Marketplace, ProductPage } from './pages/Market';
 import { SellerShell } from './pages/Seller';
 import { AdminShell } from './pages/Admin';
+import { TermsPage, SellerTermsPage, PrivacyPage, RulesPage } from './pages/Legal';
 import { Storefront, StoreCheckout, OrderStatus } from './pages/Store';
 
 export default function App() {
@@ -13,6 +14,10 @@ export default function App() {
       <Route path="/signup" element={<Signup />} />
       <Route path="/login" element={<Login />} />
       <Route path="/forgot" element={<ForgotPassword />} />
+      <Route path="/terms" element={<TermsPage />} />
+      <Route path="/seller-terms" element={<SellerTermsPage />} />
+      <Route path="/privacy" element={<PrivacyPage />} />
+      <Route path="/rules" element={<RulesPage />} />
       <Route path="/reset" element={<ResetPassword />} />
       <Route path="/verify" element={<VerifyEmail />} />
       <Route path="/dashboard/*" element={<SellerShell />} />

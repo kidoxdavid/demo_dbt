@@ -1,6 +1,6 @@
 # EazyStores: product and technical plan (living document)
 
-Status: Phase 1 (foundation), a thin Phase 3 commerce slice, a web UI, product images, CSV import, a customer marketplace, per-store theming, refunds, customer customisation, share links/QR and an admin area are implemented. Payments are still simulated. Items marked Built are real and tested; everything else is plan.
+Status: Phase 1 (foundation), a thin Phase 3 commerce slice, a web UI, product images, CSV import, a customer marketplace, per-store theming, refunds, customer customisation, share links/QR, an admin area, sales tax, transactional email, password reset, two-factor sign-in, store review and moderation are implemented. Payments are still simulated. Items marked Built are real and tested; everything else is plan.
 Last updated: 2026-11-04
 
 ## 0. Where I challenge the brief
@@ -249,3 +249,44 @@ Edge cases covered by tests: six buyers racing for one unit (exactly one wins); 
 - Public product detail did not include custom fields (only the store list did).
 - Test-quality fixes: a vacuous staff-role test was replaced with a real one; a helper that fired a stray extra checkout was removed; a tie in channel ordering made a result nondeterministic and is now deterministic.
 - Deleting a seller that has orders is blocked by the append-only ledger (by design); an anonymise-and-retain closure process is still needed.
+
+## Launch-readiness round: report
+
+**Tests:** 142 API integration tests (12 files) and four browser end-to-end flows (`flow.cjs`, `flow2.cjs`, `flow3.cjs`, `flow4.cjs`) at 375/390px and 1280px, all passing, with the strict phone overflow check. The two-factor and email tests run against real RFC 6238 vectors and a real local SMTP server.
+
+### Stage 1: make it real
+- **Sales tax** (`lib/tax.ts`, migration 009). Rates are rows in `tax_rates` (admin-editable with a reason, audited), not code. GST/HST follows the destination at the destination's rate; PST/QST/RST applies only where the seller says they are registered. Integer, half-up rounding per component. Collected tax goes to a `tax_payable` ledger account (a liability, never seller income). Refunds return tax and fee pro rata, and the final refund returns the exact remainder (no rounding residue). The cart shows the real total, including tax, before paying (one pricing code path serves both quote and checkout).
+  *Limits:* starting rates were entered by the developer and **have not been verified against CRA or provincial sources** (admin screen says so); every product is treated as taxable (no zero-rated or exempt goods); delivery fees are taxed; sellers outside Canada are not handled; the tool does not tell a seller whether they must register.
+- **Email** (`lib/mail.ts`, migration 010). Transactional outbox written in the same transaction as the event (rolled-back events send nothing), SMTP sending verified against a real local SMTP server, retry with backoff and a hard stop after 5 attempts, HTML escaping and header-injection protection. Templates: order confirmation, new order, status updates, refund, low stock (once, when crossing the threshold), verification, reset, password changed, store approved/rejected, verification decision, product removed, account closed.
+  *Limits:* templates live in code (not admin-editable); no marketing email, and no seller notification preferences; with no `SMTP_URL`, mail is recorded as "simulated" and not sent.
+- **Password reset and email verification.** One-time, hashed, expiring links; newest link wins; two simultaneous uses have one winner; reset signs out every session and does not bypass two-factor; the form does not reveal which emails have accounts. Publishing is blocked until the email is verified (production default).
+- **Two-factor sign-in** (`lib/totp.ts`, `modules/account.ts`). TOTP matching the RFC 6238 vectors, secrets encrypted at rest (AES-256-GCM), 10 single-use recovery codes, replay protection, a 5-attempt limit per challenge that cannot be bypassed, and **mandatory for platform staff**: admin screens show nothing but the enrolment prompt until a verified session exists. Sessions created before enrolment stay locked out.
+  *Limits:* no WebAuthn/passkeys, no SMS; recovery for a lost phone and codes is an operator action (`npm run reset-mfa`).
+- **Payments:** research and plan only (`docs/PAYMENTS.md`). Nothing real is integrated.
+
+### Stage 2: make it trustworthy
+- **Store review** (optional switch, staff-controlled, audited): new stores wait for approval, reviewers see the products and prices, a rejection needs a reason the seller sees, and the seller can resubmit. Already-live stores are unaffected when the switch is turned on.
+- **Verified badge** is requested by the owner and decided by staff with a reason. It is never granted by a plan (tested: an unverified seller on the top plan is still unverified).
+- **Product moderation:** staff remove or restore with a reason; removed products disappear everywhere, cannot be republished by the seller, and the seller is told why.
+- **Terms acceptance** recorded at signup (and via banner for older accounts) and required to publish in production.
+- **Draft legal pages** (terms, seller agreement, privacy, prohibited items), each carrying a banner that says it is a draft **not reviewed by a lawyer**. They must be reviewed and completed by Canadian counsel before launch.
+- **Account closure:** blocked while orders are open or a customer is owed money; deletes personal details and product photos, anonymises and disables the seller login, cancels unpaid checkouts and returns their stock, and keeps orders, refunds and the ledger.
+- **Customer erasure** (staff, `privacy.write`): replaces a customer's name, email, address, customisation answers and uploaded photos on past orders, redacts stored email history, keeps amounts and the ledger, refuses while any of their orders is in progress, and logs a hash of the address rather than the address.
+  *Limits:* **retention periods are undecided and need legal advice**; closure keeps customers' personal data on retained orders until the customer-erasure tool is used; there is no self-service export of a person's data.
+- **Images:** every upload is decoded and re-encoded (EXIF/GPS stripped, camera rotation applied, capped at 1600px, thumbnails for grids), disguised files, SVG and decompression bombs are refused, and storefronts search and page (24 at a time).
+- **Search:** exact matches win; typo tolerance applies only when nothing matches exactly (found when "Item 07" returned every numbered item).
+- **Operations:** production build, readiness check, structured logs with cookies redacted, production-mode behaviour verified, backup script and a restore check that fails on a bad backup (both exercised). See `docs/DEPLOY.md`. **Docker files are untested.**
+
+### Bugs found and fixed this round
+- A real UI race: the admin "store review" toggle appeared before its current value had loaded and sent the opposite of what the label said. It now waits for the value and sends the chosen value.
+- Search returned every near-match for numbered names; fixed as above.
+- A reviewer preview link pointed at a store that is not public yet; the queue now shows the products inline.
+- Mobile table-scroll overflow and the single-photo gallery (previous round, re-verified under the strict check).
+- Several test-quality problems (loose selectors, a timing race on the reset form, and an email batch limit) were fixed in the tests, not the product.
+
+### Not done (the recommendation list was longer than this round)
+- **Real payment provider** (needs the owner's decision and credentials; plan in `docs/PAYMENTS.md`).
+- **Subscription billing and plan changes**, weight/zone **shipping rules**, **discount codes**, **EazyPOS**, **customer accounts, reviews and wishlists**, and the **AI features** (photo-to-listing, business assistant).
+- S3-compatible storage, monitoring/alerting, load testing, tested container images.
+- Admin-editable email templates, seller notification preferences, a staff-management screen.
+- Lawyer-reviewed legal text and a decided retention policy.

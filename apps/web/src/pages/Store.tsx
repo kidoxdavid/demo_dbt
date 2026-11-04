@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { api, ApiError, errorText, money, PROVINCES } from '../api';
+import { api, apiWithTotal, ApiError, errorText, money, PROVINCES } from '../api';
 import { Alert, Badge, Empty, Field } from '../ui';
 import { PCard } from './Market';
 
@@ -35,8 +35,13 @@ export function useStore(slug: string) {
 export function Storefront() {
   usePub();
   const { slug = '' } = useParams(); const [sp] = useSearchParams(); useEffect(() => rememberSource(slug, sp.get('src')), [slug, sp]); const { store, missing } = useStore(slug); const cart = useCart(slug);
-  const [products, setProducts] = useState<any[] | null>(null);
-  useEffect(() => { if (store) api(`/api/public/stores/${slug}/products?limit=100`).then(setProducts); }, [store, slug]);
+  const [products, setProducts] = useState<any[] | null>(null); const [total, setTotal] = useState(0); const [q, setQ] = useState(''); const [sort, setSort] = useState('new'); const [everHad, setEverHad] = useState(false);
+  const qs = (offset: number) => new URLSearchParams({ limit: '24', offset: String(offset), sort, ...(q.trim() && { q: q.trim() }) }).toString();
+  useEffect(() => {
+    if (!store) return; const t = setTimeout(() => apiWithTotal(`/api/public/stores/${slug}/products?${qs(0)}`).then(r => { setProducts(r.data); setTotal(r.total); if (r.total > 0) setEverHad(true); }), q ? 250 : 0);
+    return () => clearTimeout(t);
+  }, [store, slug, q, sort]); // eslint-disable-line
+  const more = async () => { const r = await apiWithTotal(`/api/public/stores/${slug}/products?${qs(products?.length ?? 0)}`); setProducts(p => [...(p ?? []), ...r.data]); };
   if (missing) return <div className="wrap"><h1>Store not found</h1><p>This store doesn't exist or isn't open yet.</p></div>;
   if (!store) return <div className="wrap"><p className="muted">Loading…</p></div>;
   const accent = /^#[0-9a-f]{6}$/i.test(store.theme?.accent ?? '') ? store.theme.accent : '#141414';
@@ -48,12 +53,15 @@ export function Storefront() {
       <div className="pright"><Link className="plink" to={`/store/${slug}/checkout`}>Cart ({cart.count})</Link></div></div></header>
     <section className={`shero${dark ? ' dark' : ''}`}><div className="wrap">
       <span className="kicker">{[store.category, store.city].filter(Boolean).join(' · ')}</span>
-      <h1>{store.name}</h1>{store.tagline && <p className="lede">{store.tagline}</p>}
+      <h1>{store.name}</h1>{store.verified && <span className="vbadge" title="EazyStores staff reviewed this seller's registration details">✓ Verified seller</span>}{store.tagline && <p className="lede">{store.tagline}</p>}
       <p className="meta">{info}</p>
     </div></section>
     <main className="wrap">
-      {products && !products.length && <Empty title="Nothing here yet">This store hasn't added products. Check back soon.</Empty>}
-      {products && products.length > 0 && <div className="shead"><h2>Collection</h2><span className="muted small">{products.length} {products.length === 1 ? 'piece' : 'pieces'}</span></div>}
+      {products && !products.length && !everHad && <Empty title="Nothing here yet">This store hasn't added products. Check back soon.</Empty>}
+      {(everHad || (products && products.length > 0)) && <div className="shead"><h2>Collection</h2><span className="muted small">{total} {total === 1 ? 'piece' : 'pieces'}</span></div>}
+      {everHad && <div className="storetools"><input type="search" aria-label="Search this store" placeholder="Search this store" value={q} onChange={e => setQ(e.target.value)} />
+        <select aria-label="Sort" value={sort} onChange={e => setSort(e.target.value)}><option value="new">Newest</option><option value="price_asc">Price: low to high</option><option value="price_desc">Price: high to low</option></select></div>}
+      {products && !products.length && everHad && <Empty title="No matches">Try a different word, or clear the search.</Empty>}
       <div className={`pgrid${spacious ? ' wide' : ''}`}>
         {products?.map(p => {
           const prices = p.variants.map((x: any) => x.priceCents); const lo = Math.min(...prices), hi = Math.max(...prices);
@@ -61,6 +69,7 @@ export function Storefront() {
             image: p.images?.[0], image2: p.images?.[1], available: p.variants.some((x: any) => x.available), madeToOrder: p.madeToOrder }} />;
         })}
       </div>
+      {products && products.length < total && <p style={{ textAlign: 'center', padding: '0 0 90px' }}><button className="secondary" onClick={more}>Show more</button></p>}
     </main>
     {cart.count > 0 && <div className="cartbar"><div className="wrap row spread"><span>{cart.count} item{cart.count > 1 ? 's' : ''} · <b>{money(cart.subtotal, store.currency)}</b></span>
       <Link className="btn sm" to={`/store/${slug}/checkout`}>Checkout</Link></div></div>}

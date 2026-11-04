@@ -40,7 +40,7 @@ export function Landing() {
       <section className="lcta"><h2>Open your store today.</h2><p>It takes a few minutes and costs nothing to start.</p><Link className="btn" to="/signup">Get started</Link></section>
     </main>
     <footer className="pfoot"><div className="wrap pfoot-grid"><div><div className="plogo">Eazy<i>Stores</i></div><p className="muted small">A home for independent brands.</p></div>
-      <div className="small"><b>Shoppers</b><br /><Link to="/">Browse the marketplace</Link></div><div className="small muted">Development build. Payments are simulated.</div></div></footer>
+      <div className="small"><b>Shoppers</b><br /><Link to="/">Browse the marketplace</Link></div><div className="small"><b>Policies</b><br /><Link to="/terms">Terms</Link> · <Link to="/privacy">Privacy</Link> · <Link to="/seller-terms">Seller agreement</Link> · <Link to="/rules">Prohibited items</Link></div></div></footer>
   </>;
 }
 
@@ -55,7 +55,7 @@ export function Signup() {
   const set = (k: string, v: string) => setF(p => ({ ...p, [k]: v, ...(k === 'businessName' && !slugTouched ? { storeSlug: slugify(v) } : {}) }));
   async function submit(e: FormEvent) {
     e.preventDefault(); setErr(''); setBusy(true);
-    try { await api('/api/auth/signup', { body: f }); nav('/dashboard'); }
+    try { await api('/api/auth/signup', { body: { ...f, acceptTerms: true } }); nav('/dashboard'); }
     catch (x) { setErr(errorText(x)); } finally { setBusy(false); }
   }
   return <>
@@ -77,6 +77,8 @@ export function Signup() {
             <option value="individual">Individual</option><option value="sole_proprietorship">Sole proprietorship</option>
             <option value="registered_business">Registered business</option><option value="partnership">Partnership</option><option value="creator">Independent creator</option>
           </select>)}</Field>
+        <label className="check" style={{ alignItems: 'flex-start' }}><input type="checkbox" required style={{ marginTop: 3 }} />
+          <span>I agree to the <Link to="/seller-terms" target="_blank">seller agreement</Link>, the <Link to="/privacy" target="_blank">privacy policy</Link> and the <Link to="/rules" target="_blank">prohibited items rules</Link>.</span></label>
         <p><button disabled={busy}>{busy ? 'Creating…' : 'Create store'}</button></p>
         <p className="muted small">Already have an account? <Link to="/login">Log in</Link></p>
       </form>

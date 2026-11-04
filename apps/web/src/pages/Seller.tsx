@@ -41,7 +41,7 @@ export function SellerShell() {
     <div>
       <div className="mtop"><Link to="/dashboard" className="plogo">Eazy<i>Stores</i></Link><button className="ghost sm" onClick={logout}>Log out</button></div>
       <main className="main">
-        {me && !me.emailVerified && <VerifyBanner />}
+        {me && (!me.emailVerified || !me.termsAccepted) && <AccountBanner me={me} onDone={() => api('/api/me').then(setMe)} />}
         <Routes>
           <Route index element={<Overview data={data} />} />
           <Route path="products" element={<Products />} />
@@ -128,6 +128,7 @@ function Products() {
     {items?.map(p => (
       <section className="card" key={p.id}>
         <div className="row spread"><h3>{p.name}</h3><Badge s={p.status} /></div>
+        {p.status === 'removed' && <Alert kind="err"><b>Removed by a moderator.</b> {p.moderationReason} If you think this is a mistake, contact support.</Alert>}
         <div className="thumbs" aria-label={`Photos of ${p.name}`}>
           {p.images?.map((im: any) => <div className="thumb" key={im.id}><img src={im.url} alt="" loading="lazy" />
             <button aria-label="Remove photo" onClick={() => removeImage(im.id)}>×</button></div>)}
@@ -151,9 +152,9 @@ function Products() {
             </li>))}
         </ul>
         <div className="row" style={{ marginTop: 8 }}>
-          {p.status !== 'active' && <button className="sm" onClick={() => setStatus(p.id, 'active')}>Publish product</button>}
+          {p.status !== 'active' && p.status !== 'removed' && <button className="sm" onClick={() => setStatus(p.id, 'active')}>Publish product</button>}
           {p.status === 'active' && <button className="secondary sm" onClick={() => setStatus(p.id, 'draft')}>Hide (draft)</button>}
-          {p.status !== 'archived' && <button className="danger sm" onClick={() => setStatus(p.id, 'archived')}>Archive</button>}
+          {p.status !== 'archived' && p.status !== 'removed' && <button className="danger sm" onClick={() => setStatus(p.id, 'archived')}>Archive</button>}
         </div>
       </section>))}
   </>;
@@ -335,7 +336,10 @@ function Settings({ data, reload }: { data: Biz; reload: () => void }) {
   }
   async function publish() {
     setMsg(null);
-    try { await api('/api/seller/store/publish', { method: 'POST', body: {} }); setMsg({ k: 'ok', t: 'Your store is live!' }); reload(); } catch (x) { setMsg({ k: 'err', t: errorText(x) }); }
+    try {
+      const r = await api('/api/seller/store/publish', { method: 'POST', body: {} });
+      setMsg({ k: 'ok', t: r.status === 'pending_review' ? 'Submitted for review. A member of our team will check your store and email you the result.' : 'Your store is live!' }); reload();
+    } catch (x) { setMsg({ k: 'err', t: errorText(x) }); }
   }
   const link = `${window.location.origin}/store/${s.slug}`;
   return <>
@@ -373,9 +377,12 @@ function Settings({ data, reload }: { data: Biz; reload: () => void }) {
         <p>Share this link on Instagram, WhatsApp or anywhere:</p>
         <div className="row"><input readOnly value={link} aria-label="Store link" onFocus={e => e.currentTarget.select()} />
           <button className="secondary" onClick={() => navigator.clipboard?.writeText(link)}>Copy link</button><Link className="btn" to={`/store/${s.slug}`}>View store</Link></div></>
+        : s.status === 'pending_review' ? <Alert kind="warn"><b>Waiting for review.</b> A member of our team checks new stores before they go live. You will get an email when it is decided.</Alert>
         : s.status === 'suspended' ? <Alert kind="err">Your store is suspended. Contact support.</Alert>
-        : <><p className="muted">Save your details first, then publish. Customers can only see products you've made visible.</p><button onClick={publish}>Publish my store</button></>}
+        : <>{s.review_note && <Alert kind="err"><b>Not approved yet.</b> {s.review_note}</Alert>}<p className="muted">Save your details first, then publish. Customers can only see products you've made visible.</p><button onClick={publish}>Publish my store</button></>}
     </section>
+    <VerificationPanel data={data} reload={reload} />
+    <DangerZone />
   </>;
 }
 
@@ -464,8 +471,54 @@ function SharePage() {
   </>;
 }
 
-function VerifyBanner() {
+function AccountBanner({ me, onDone }: { me: any; onDone: () => void }) {
   const [msg, setMsg] = useState('');
   async function resend() { setMsg(''); try { await api('/api/auth/resend-verification', { method: 'POST', body: {} }); setMsg('Sent. Check your inbox.'); } catch (e) { setMsg(errorText(e)); } }
-  return <Alert kind="warn"><span>Confirm your email address to publish your store. We sent you a link when you signed up. </span><button className="textbtn" onClick={resend}>Resend the email</button>{msg && <span> {msg}</span>}</Alert>;
+  async function accept() { try { await api('/api/auth/accept-terms', { method: 'POST', body: {} }); onDone(); } catch (e) { setMsg(errorText(e)); } }
+  return <Alert kind="warn">
+    {!me.emailVerified && <div><span>Confirm your email address to publish your store. We sent you a link when you signed up. </span><button className="textbtn" onClick={resend}>Resend the email</button></div>}
+    {!me.termsAccepted && <div><span>Please accept the <Link to="/seller-terms" target="_blank">seller agreement</Link> and <Link to="/rules" target="_blank">prohibited items rules</Link> to publish. </span><button className="textbtn" onClick={accept}>I accept</button></div>}
+    {msg && <div>{msg}</div>}
+  </Alert>;
+}
+
+function VerificationPanel({ data, reload }: { data: Biz; reload: () => void }) {
+  const b = data.business; const [reg, setReg] = useState(b.registration_number ?? ''); const [note, setNote] = useState('');
+  const [msg, setMsg] = useState<{ k: 'err' | 'ok'; t: string } | null>(null); const [busy, setBusy] = useState(false);
+  async function submit(e: FormEvent) {
+    e.preventDefault(); setBusy(true); setMsg(null);
+    try { await api('/api/seller/verification/request', { body: { registrationNumber: reg || undefined, note } }); setMsg({ k: 'ok', t: 'Request sent. Our team will review it.' }); reload(); }
+    catch (x) { setMsg({ k: 'err', t: errorText(x) }); } finally { setBusy(false); }
+  }
+  const st = b.verification_status as string;
+  return <section className="card">
+    <div className="row spread"><h2 style={{ margin: 0 }}>Verified seller</h2><Badge s={st === 'verified' ? 'active' : st === 'pending' ? 'awaiting_payment' : st === 'rejected' ? 'cancelled' : 'draft'} /></div>
+    <p className="muted small">A "Verified" badge on your store means EazyStores staff reviewed the registration details you submit and found them consistent. It cannot be bought and is not included in any plan.</p>
+    {st === 'verified' && <Alert kind="ok">You are verified. The badge shows on your store and in the marketplace.</Alert>}
+    {st === 'pending' && <Alert kind="warn">Your request is being reviewed.</Alert>}
+    {st === 'rejected' && b.verification_decision_reason && <Alert kind="err"><b>Not approved.</b> {b.verification_decision_reason} You can update your details and ask again.</Alert>}
+    {msg && <Alert kind={msg.k}>{msg.t}</Alert>}
+    {(st === 'unverified' || st === 'rejected') && <form onSubmit={submit}>
+      <Field label="Business registration number (if you have one)">{id => <input id={id} maxLength={80} value={reg} onChange={e => setReg(e.target.value)} />}</Field>
+      <Field label="Tell us about your business" hint="For example: how you are registered, where you operate, and where customers can verify you.">{id => <textarea id={id} required minLength={10} maxLength={1000} value={note} onChange={e => setNote(e.target.value)} />}</Field>
+      <p><button disabled={busy || note.trim().length < 10}>{busy ? 'Sending…' : 'Request verification'}</button></p></form>}
+  </section>;
+}
+
+function DangerZone() {
+  const nav = useNavigate(); const [open, setOpen] = useState(false); const [pw, setPw] = useState(''); const [confirm, setConfirm] = useState('');
+  const [err, setErr] = useState(''); const [busy, setBusy] = useState(false);
+  async function close(e: FormEvent) {
+    e.preventDefault(); setBusy(true); setErr('');
+    try { await api('/api/seller/close-account', { body: { password: pw, confirm } }); nav('/'); } catch (x) { setErr(errorText(x)); } finally { setBusy(false); }
+  }
+  return <section className="card" style={{ borderColor: '#efc0bb' }}>
+    <h2 style={{ marginTop: 0 }}>Close my account</h2>
+    <p className="muted small">This closes your store for good. Your personal details and product photos are deleted and you are signed out. Orders, refunds and tax records are kept for the period the law requires. You can only close once your open orders are finished.</p>
+    {!open ? <button className="danger" onClick={() => setOpen(true)}>Close my account…</button> : <form onSubmit={close}>
+      {err && <Alert kind="err">{err}</Alert>}
+      <Field label="Your password">{id => <input id={id} type="password" autoComplete="current-password" required value={pw} onChange={e => setPw(e.target.value)} />}</Field>
+      <Field label="Type CLOSE to confirm">{id => <input id={id} required value={confirm} onChange={e => setConfirm(e.target.value)} />}</Field>
+      <div className="row" style={{ marginTop: 12 }}><button className="danger" disabled={busy || confirm !== 'CLOSE'}>{busy ? 'Closing…' : 'Permanently close my account'}</button><button type="button" className="ghost" onClick={() => setOpen(false)}>Cancel</button></div></form>}
+  </section>;
 }

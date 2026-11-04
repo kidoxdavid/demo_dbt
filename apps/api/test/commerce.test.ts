@@ -4,7 +4,10 @@ import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../src/app.js';
 import { pool } from '../src/lib/db.js';
 import { releaseExpiredReservations, settlePayment } from '../src/modules/commerce.js';
+import sharp from 'sharp';
+import { realPng } from './helpers.js';
 
+const REAL_PNG = await realPng(64, 48);
 let app: FastifyInstance;
 const owner = new pg.Pool({ connectionString: process.env.MIGRATION_DATABASE_URL });
 beforeAll(async () => { app = await buildApp(); });
@@ -225,7 +228,7 @@ describe('store settings', () => {
 });
 
 describe('product images', () => {
-  const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(64, 1)]);
+  const PNG = REAL_PNG;
   const up = (cookie: string, pid: string, body: Buffer, type = 'image/png') =>
     app.inject({ method: 'POST', url: `/api/seller/products/${pid}/images`, headers: { 'content-type': type }, cookies: { eazy_sid: cookie }, payload: body });
 
@@ -235,9 +238,9 @@ describe('product images', () => {
     expect(r.statusCode).toBe(201);
     const served = await app.inject({ method: 'GET', url: r.json().url });
     expect(served.statusCode).toBe(200);
-    expect(served.headers['content-type']).toBe('image/png');
+    expect(served.headers['content-type']).toBe('image/webp');          // re-encoded, never served as uploaded
     expect(served.headers['x-content-type-options']).toBe('nosniff');
-    expect(served.rawPayload.equals(PNG)).toBe(true);
+    const meta = await sharp(served.rawPayload).metadata(); expect(meta).toMatchObject({ format: 'webp', width: 64, height: 48 });
     const pub = (await app.inject({ method: 'GET', url: `/api/public/stores/${s.slug}/products` })).json();
     expect(pub[0].images).toEqual([r.json().url]);
   });

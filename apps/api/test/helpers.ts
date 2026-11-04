@@ -1,6 +1,7 @@
 import { expect } from 'vitest';
 import pg from 'pg';
 import type { FastifyInstance } from 'fastify';
+import sharp from 'sharp';
 
 export const owner = new pg.Pool({ connectionString: process.env.MIGRATION_DATABASE_URL });
 export async function oq(sql: string, params: unknown[] = []) {
@@ -41,3 +42,6 @@ export function kit(getApp: () => FastifyInstance) {
   const stock = async (variantId: string) => (await oq('SELECT on_hand, reserved FROM inventory_levels WHERE variant_id=$1', [variantId])).rows[0];
   return { seller, product, checkout, pay, paidOrder, stock };
 }
+
+/** A real, decodable PNG. Uploads are decoded and re-encoded, so fake image bytes are (rightly) rejected. */
+export const realPng = (w = 64, h = 48, bg = '#c8a05a') => sharp({ create: { width: w, height: h, channels: 3, background: bg } }).png().toBuffer();

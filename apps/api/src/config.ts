@@ -23,5 +23,8 @@ export const mailFrom = process.env.MAIL_FROM ?? 'EazyStores <no-reply@eazystore
 export const smtpUrl = () => process.env.SMTP_URL;   // e.g. smtp://user:pass@smtp.example.com:587 ; when unset, mail is recorded but NOT sent ("simulated")
 // Read at call time so tests can toggle them.
 export const requireVerifiedEmail = () => (process.env.REQUIRE_EMAIL_VERIFICATION ?? (process.env.NODE_ENV === 'production' ? 'true' : 'false')) === 'true';
+// Terms of service version a seller accepts. Bump when the (lawyer-reviewed) terms change.
+export const TERMS_VERSION = '2026-draft-1';
+export const requireTerms = () => (process.env.REQUIRE_TERMS ?? (process.env.NODE_ENV === 'production' ? 'true' : 'false')) === 'true';
 export const requireStaffMfa = () => (process.env.REQUIRE_STAFF_MFA ?? 'true') !== 'false';
 export const mfaKeyHex = () => process.env.MFA_ENC_KEY ?? (process.env.NODE_ENV === 'production' ? '' : '0'.repeat(63) + '1');   // dev-only fallback; production must set a real 32-byte hex key

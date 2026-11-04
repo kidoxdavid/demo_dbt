@@ -43,6 +43,7 @@ async function noHScroll(page, label) {
     await p.getByLabel('Store address').fill(s);
     await noHScroll(p, `${name} signup`);
     await p.screenshot({ path: `${out}/${name}-1-signup.png` });
+    await p.getByRole('checkbox', { name: /I agree to the/ }).check();
     await p.getByRole('button', { name: 'Create store' }).click();
     await p.waitForURL('**/dashboard');
     await p.getByRole('heading', { name: 'Overview' }).waitFor();
@@ -54,7 +55,7 @@ async function noHScroll(page, label) {
 
     // 3. Fill settings, save, publish
     await p.getByLabel('What do you sell? (category)').fill('Perfumes');
-    await p.getByLabel('About your business').fill('Handpicked fragrances, delivered in Calgary.');
+    await p.getByLabel('About your business', { exact: true }).fill('Handpicked fragrances, delivered in Calgary.');
     await p.getByLabel('Tagline').fill('Smell great, simply');
     await p.getByLabel('Customer pickup').check();
     await p.getByLabel('Delivery', { exact: true }).check();

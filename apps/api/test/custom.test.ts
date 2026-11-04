@@ -4,13 +4,14 @@ import { readdirSync } from 'node:fs';
 import { buildApp } from '../src/app.js';
 import { pool } from '../src/lib/db.js';
 import { cleanupOrphanUploads } from '../src/modules/commerce.js';
-import { owner, oq, ck, kit } from './helpers.js';
+import sharp from 'sharp';
+import { owner, oq, ck, kit, realPng } from './helpers.js';
 
 let app: FastifyInstance; const k = kit(() => app);
 beforeAll(async () => { app = await buildApp(); });
 afterAll(async () => { await app.close(); await pool.end(); await owner.end(); });
 
-const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(64, 7)]);
+const PNG = await realPng(64, 48);
 const FIELDS = [
   { label: 'Name on plate', type: 'text', required: true, maxLength: 12 },
   { label: 'Notes', type: 'textarea' },
@@ -88,7 +89,7 @@ describe('customer image uploads', () => {
     const photo = item.custom_values.find((v: any) => v.type === 'image');
     expect(photo.value).toBe(up.json().id);
     const img = await app.inject({ method: 'GET', url: `/api/seller/custom-uploads/${photo.value}`, ...ck(s.cookie) });
-    expect(img.statusCode).toBe(200); expect(img.headers['content-type']).toBe('image/png'); expect(img.headers['cache-control']).toContain('private'); expect(img.rawPayload.equals(PNG)).toBe(true);
+    expect(img.statusCode).toBe(200); expect(img.headers['content-type']).toBe('image/webp'); expect(img.headers['cache-control']).toContain('private'); expect((await sharp(img.rawPayload).metadata()).format).toBe('webp');
     expect((await app.inject({ method: 'GET', url: `/api/seller/custom-uploads/${photo.value}` })).statusCode).toBe(401);
     const other = await k.seller('cu5b');
     expect((await app.inject({ method: 'GET', url: `/api/seller/custom-uploads/${photo.value}`, ...ck(other.cookie) })).statusCode).toBe(404);

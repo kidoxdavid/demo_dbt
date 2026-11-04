@@ -22,6 +22,8 @@ import { registerPricing } from './modules/pricing.js';
 import { registerPos } from './modules/pos.js';
 import { registerCustomers } from './modules/customers.js';
 import { registerBilling } from './modules/billing.js';
+import { registerAssist } from './modules/assist.js';
+import { registerAi } from './modules/ai.js';
 import { issueToken } from './lib/tokens.js';
 import { enqueue, url as mailUrl } from './lib/mail.js';
 const SLUG = /^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$/;
@@ -411,6 +413,8 @@ export async function buildApp() {
   registerCommerce(app, { tenantCtx, optionalUserId });
   registerCustomers(app, { tenantCtx, authenticate, platformPerm, setSession });
   registerBilling(app, { tenantCtx, platformPerm });
+  registerAssist(app, { tenantCtx });
+  registerAi(app, { tenantCtx });
   registerImport(app, { tenantCtx });
   registerMarketplace(app);
   registerRefunds(app, { tenantCtx });

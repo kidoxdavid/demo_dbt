@@ -1,5 +1,5 @@
 import { Link, Route, Routes } from 'react-router-dom';
-import { Landing, Login, Signup } from './pages/Auth';
+import { Landing, Login, Signup, ForgotPassword, ResetPassword, VerifyEmail } from './pages/Auth';
 import { Marketplace, ProductPage } from './pages/Market';
 import { SellerShell } from './pages/Seller';
 import { AdminShell } from './pages/Admin';
@@ -12,6 +12,9 @@ export default function App() {
       <Route path="/sell" element={<Landing />} />
       <Route path="/signup" element={<Signup />} />
       <Route path="/login" element={<Login />} />
+      <Route path="/forgot" element={<ForgotPassword />} />
+      <Route path="/reset" element={<ResetPassword />} />
+      <Route path="/verify" element={<VerifyEmail />} />
       <Route path="/dashboard/*" element={<SellerShell />} />
       <Route path="/admin/*" element={<AdminShell />} />
       <Route path="/store/:slug" element={<Storefront />} />

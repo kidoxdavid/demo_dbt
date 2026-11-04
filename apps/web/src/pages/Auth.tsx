@@ -1,6 +1,6 @@
-import { FormEvent, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { api, errorText } from '../api';
+import { FormEvent, useEffect, useState } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { api, ApiError, errorText } from '../api';
 import { Alert, Field } from '../ui';
 import { usePub } from './Store';
 
@@ -88,28 +88,93 @@ export function Login() {
   usePub();
   const nav = useNavigate();
   const [email, setEmail] = useState(''); const [password, setPassword] = useState('');
+  const [challenge, setChallenge] = useState<string | null>(null); const [code, setCode] = useState(''); const [recovery, setRecovery] = useState(false);
   const [err, setErr] = useState(''); const [busy, setBusy] = useState(false);
+  async function finish() {
+    // Staff accounts have no business of their own: send them to the admin area.
+    const hasBusiness = await api('/api/seller/business').then(() => true).catch(() => false);
+    const isStaff = hasBusiness ? false : await api('/api/admin/me').then(() => true).catch(() => false);
+    nav(isStaff ? '/admin' : '/dashboard');
+  }
   async function submit(e: FormEvent) {
     e.preventDefault(); setErr(''); setBusy(true);
     try {
-      await api('/api/auth/login', { body: { email, password } });
-      // Staff accounts have no business of their own: send them to the admin area.
-      const hasBusiness = await api('/api/seller/business').then(() => true).catch(() => false);
-      const isStaff = hasBusiness ? false : await api('/api/admin/me').then(() => true).catch(() => false);
-      nav(isStaff ? '/admin' : '/dashboard');
-    }
-    catch (x) { setErr(errorText(x)); } finally { setBusy(false); }
+      const r = await api('/api/auth/login', { body: { email, password } });
+      if (r.mfaRequired) { setChallenge(r.challenge); setPassword(''); return; }
+      await finish();
+    } catch (x) { setErr(errorText(x)); } finally { setBusy(false); }
+  }
+  async function submitCode(e: FormEvent) {
+    e.preventDefault(); setErr(''); setBusy(true);
+    try { await api('/api/auth/mfa/verify', { body: { challenge, ...(recovery ? { recovery: code } : { code }) } }); await finish(); }
+    catch (x) {
+      setErr(errorText(x));
+      if (x instanceof ApiError && (x.code === 'too_many_attempts' || x.code === 'invalid_challenge')) { setChallenge(null); setCode(''); }
+    } finally { setBusy(false); }
   }
   return <>
     <Header />
     <main className="wrap" style={{ maxWidth: 520 }}>
-      <span className="kicker" style={{ marginTop: 44 }}>Sellers</span><h1 style={{ margin: '12px 0 8px' }}>Welcome back</h1>
-      <form className="card" onSubmit={submit}>
+      <span className="kicker" style={{ marginTop: 44 }}>{challenge ? 'Two-factor' : 'Sellers'}</span>
+      <h1 style={{ margin: '12px 0 8px' }}>{challenge ? 'Enter your code' : 'Welcome back'}</h1>
+      {!challenge ? <form className="card" onSubmit={submit}>
         {err && <Alert kind="err">{err}</Alert>}
         <Field label="Email">{id => <input id={id} type="email" required autoComplete="email" value={email} onChange={e => setEmail(e.target.value)} />}</Field>
         <Field label="Password">{id => <input id={id} type="password" required autoComplete="current-password" value={password} onChange={e => setPassword(e.target.value)} />}</Field>
         <p><button disabled={busy}>{busy ? 'Logging in…' : 'Log in'}</button></p>
-      </form>
+        <p className="muted small"><Link to="/forgot">Forgot your password?</Link></p>
+      </form> : <form className="card" onSubmit={submitCode}>
+        {err && <Alert kind="err">{err}</Alert>}
+        <p className="muted small" style={{ marginTop: 0 }}>{recovery ? 'Enter one of your saved recovery codes. Each works once.' : 'Open your authenticator app and enter the 6-digit code.'}</p>
+        <Field label={recovery ? 'Recovery code' : '6-digit code'}>{id => <input id={id} required autoFocus autoComplete="one-time-code" inputMode={recovery ? 'text' : 'numeric'} maxLength={recovery ? 20 : 6} value={code}
+          onChange={e => setCode(recovery ? e.target.value : e.target.value.replace(/\D/g, ''))} />}</Field>
+        <p><button disabled={busy || (!recovery && code.length !== 6)}>{busy ? 'Checking…' : 'Verify'}</button></p>
+        <p className="small"><button type="button" className="textbtn" onClick={() => { setRecovery(r => !r); setCode(''); setErr(''); }}>{recovery ? 'Use my authenticator app instead' : 'Use a recovery code instead'}</button></p>
+      </form>}
     </main>
   </>;
+}
+
+export function ForgotPassword() {
+  usePub();
+  const [email, setEmail] = useState(''); const [sent, setSent] = useState(false); const [err, setErr] = useState(''); const [busy, setBusy] = useState(false);
+  async function submit(e: FormEvent) { e.preventDefault(); setErr(''); setBusy(true); try { await api('/api/auth/forgot', { body: { email } }); setSent(true); } catch (x) { setErr(errorText(x)); } finally { setBusy(false); } }
+  return <><Header /><main className="wrap" style={{ maxWidth: 520 }}>
+    <span className="kicker" style={{ marginTop: 44 }}>Account</span><h1 style={{ margin: '12px 0 8px' }}>Reset your password</h1>
+    {sent ? <Alert kind="ok">If an account exists for <b>{email}</b>, we have emailed a link to choose a new password. It works once and expires in 60 minutes.</Alert>
+      : <form className="card" onSubmit={submit}>{err && <Alert kind="err">{err}</Alert>}
+        <Field label="Email">{id => <input id={id} type="email" required autoComplete="email" value={email} onChange={e => setEmail(e.target.value)} />}</Field>
+        <p><button disabled={busy}>{busy ? 'Sending…' : 'Email me a link'}</button></p></form>}
+    <p className="muted small"><Link to="/login">Back to log in</Link></p></main></>;
+}
+
+export function ResetPassword() {
+  usePub();
+  const [sp] = useSearchParams(); const token = sp.get('token') ?? '';
+  const [pw, setPw] = useState(''); const [pw2, setPw2] = useState(''); const [done, setDone] = useState(false); const [err, setErr] = useState(''); const [busy, setBusy] = useState(false);
+  async function submit(e: FormEvent) {
+    e.preventDefault(); setErr('');
+    if (pw !== pw2) { setErr('The two passwords do not match.'); return; }
+    setBusy(true); try { await api('/api/auth/reset', { body: { token, password: pw } }); setDone(true); } catch (x) { setErr(errorText(x)); } finally { setBusy(false); }
+  }
+  return <><Header /><main className="wrap" style={{ maxWidth: 520 }}>
+    <span className="kicker" style={{ marginTop: 44 }}>Account</span><h1 style={{ margin: '12px 0 8px' }}>Choose a new password</h1>
+    {done ? <><Alert kind="ok">Your password was changed and you were signed out everywhere.</Alert><p><Link className="btn" to="/login">Log in</Link></p></>
+      : <form className="card" onSubmit={submit}>{err && <Alert kind="err">{err} {err.includes('expired') && <Link to="/forgot">Request a new link</Link>}</Alert>}
+        <Field label="New password" hint="At least 10 characters.">{id => <input id={id} type="password" required minLength={10} autoComplete="new-password" value={pw} onChange={e => setPw(e.target.value)} />}</Field>
+        <Field label="Repeat the new password">{id => <input id={id} type="password" required minLength={10} autoComplete="new-password" value={pw2} onChange={e => setPw2(e.target.value)} />}</Field>
+        <p><button disabled={busy || !token}>{busy ? 'Saving…' : 'Change password'}</button></p></form>}
+  </main></>;
+}
+
+export function VerifyEmail() {
+  usePub();
+  const [sp] = useSearchParams(); const token = sp.get('token') ?? '';
+  const [state, setState] = useState<'working' | 'ok' | 'bad'>('working');
+  useEffect(() => { api('/api/auth/verify', { body: { token } }).then(() => setState('ok')).catch(() => setState('bad')); }, [token]);
+  return <><Header /><main className="wrap" style={{ maxWidth: 520 }}>
+    <span className="kicker" style={{ marginTop: 44 }}>Account</span><h1 style={{ margin: '12px 0 8px' }}>{state === 'ok' ? 'Email confirmed' : state === 'bad' ? 'That link did not work' : 'Confirming…'}</h1>
+    {state === 'ok' && <><Alert kind="ok">Thanks. Your email is confirmed, so you can publish your store.</Alert><p><Link className="btn" to="/dashboard">Go to my dashboard</Link></p></>}
+    {state === 'bad' && <Alert kind="err">This link has expired or was already used. Log in and use "Resend" on your dashboard to get a new one.</Alert>}
+  </main></>;
 }

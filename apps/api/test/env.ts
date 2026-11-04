@@ -3,3 +3,4 @@ process.env.MIGRATION_DATABASE_URL = 'postgres://eazy_owner:owner_pw@localhost:5
 process.env.AUTH_RATE_LIMIT_MAX = '1000';
 process.env.UPLOAD_DIR = '/tmp/eazy-test-uploads';
 process.env.UPLOAD_RATE_LIMIT_MAX = '1000';
+process.env.REQUIRE_STAFF_MFA = 'false';

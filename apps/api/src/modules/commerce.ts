@@ -6,6 +6,8 @@ import { withTx, audit, type Ctx } from '../lib/db.js';
 import { HttpError } from '../lib/errors.js';
 import { getProvider } from '../lib/payments.js';
 import { reservationMinutes, uploadDir, maxImageBytes, uploadRateLimitMax } from '../config.js';
+import { taxFor } from '../lib/tax.js';
+import { enqueue, ownerEmail, url as mailUrl } from '../lib/mail.js';
 import { customFieldsIn, withKeys, validateCustom, isUuid, type Field } from '../lib/custom.js';
 import { localStorageAdapter, sniffImage, isValidKey } from '../lib/storage.js';
 
@@ -57,6 +59,7 @@ export async function settlePayment(providerRef: string, outcome: 'succeeded' | 
     const o = (await c.query('SELECT * FROM orders WHERE id=$1 FOR UPDATE', [p.order_id])).rows[0];
     const items = (await c.query(
       `SELECT i.*, v.track_inventory FROM order_items i LEFT JOIN product_variants v ON v.id=i.variant_id WHERE i.order_id=$1`, [o.id])).rows;
+    const lowStock: { name: string; variant: string; available: number }[] = [];
     if (outcome === 'failed') {
       await c.query(`UPDATE payments SET status='failed' WHERE id=$1`, [p.id]);
       if (o.status === 'awaiting_payment') { await releaseReservation(c, o.id); await c.query(`UPDATE orders SET status='cancelled', updated_at=now() WHERE id=$1`, [o.id]); }
@@ -72,6 +75,8 @@ export async function settlePayment(providerRef: string, outcome: 'succeeded' | 
       if (!i.variant_id || !i.track_inventory) continue;
       await c.query('UPDATE inventory_levels SET on_hand = on_hand - $2, reserved = reserved - $2 WHERE variant_id=$1', [i.variant_id, i.quantity]);
       await c.query(`INSERT INTO inventory_movements(tenant_id,variant_id,delta,reason,order_id) VALUES ($1,$2,$3,'sale',$4)`, [o.tenant_id, i.variant_id, -i.quantity, o.id]);
+      const lv = (await c.query(`SELECT l.on_hand - l.reserved AS avail, v.low_stock_threshold AS th, v.title, p.name FROM inventory_levels l JOIN product_variants v ON v.id=l.variant_id JOIN products p ON p.id=v.product_id WHERE l.variant_id=$1`, [i.variant_id])).rows[0];
+      if (lv && lv.th > 0 && lv.avail <= lv.th && lv.avail + i.quantity > lv.th) lowStock.push({ name: lv.name, variant: lv.title, available: lv.avail });   // crossed the threshold with this sale
     }
     await c.query(`UPDATE orders SET status='paid', reservation_expires_at=NULL, updated_at=now() WHERE id=$1`, [o.id]);
     const fee = Math.floor((o.subtotal_cents * o.platform_fee_bps) / 10000);
@@ -79,8 +84,19 @@ export async function settlePayment(providerRef: string, outcome: 'succeeded' | 
     const ins = (acct: string, amt: number) => c.query(
       `INSERT INTO ledger_entries(tenant_id,group_id,order_id,account,amount_cents,currency,memo) VALUES ($1,$2,$3,$4,$5,$6,'order paid')`,
       [o.tenant_id, g, o.id, acct, amt, o.currency]);
-    await ins('cash_received', o.total_cents); await ins('platform_fee', -fee); await ins('seller_payable', -(o.total_cents - fee));
+    await ins('cash_received', o.total_cents); await ins('platform_fee', -fee);
+    if (o.tax_cents > 0) await ins('tax_payable', -o.tax_cents);       // collected tax is a liability to the tax authority
+    await ins('seller_payable', -(o.total_cents - fee - o.tax_cents));
     await audit(c, { tenantId: o.tenant_id, action: 'order.paid', entityType: 'order', entityId: o.id });
+    const storeName = (await c.query('SELECT name FROM stores WHERE id=$1', [o.store_id])).rows[0]?.name ?? 'the store';
+    const mailItems = items.map(i => ({ name: i.name, qty: i.quantity, unit: i.unit_price_cents }));
+    const common = { number: Number(o.number), currency: o.currency, items: mailItems, subtotal: o.subtotal_cents, shipping: o.shipping_cents, taxLines: o.tax_lines, total: o.total_cents };
+    await enqueue(c, { tenantId: o.tenant_id, to: o.customer_email, template: 'order_confirmation', data: { ...common, customerName: o.customer_name, storeName, url: mailUrl(`/order/${o.public_token}`) } });
+    const seller = await ownerEmail(c, o.tenant_id);
+    if (seller) {
+      await enqueue(c, { tenantId: o.tenant_id, to: seller, template: 'order_new', data: { ...common, customerName: o.customer_name, url: mailUrl('/dashboard/orders') } });
+      for (const l of lowStock) await enqueue(c, { tenantId: o.tenant_id, to: seller, template: 'low_stock', data: { ...l, url: mailUrl('/dashboard/products') } });
+    }
     return { status: 'succeeded', replay: false };
   });
 }
@@ -265,6 +281,11 @@ export function registerCommerce(app: FastifyInstance, deps: { tenantCtx: (r: Fa
       if (!o) throw new HttpError(404, 'not_found');
       if (!(TRANSITIONS[o.status] ?? []).includes(status)) throw new HttpError(409, `invalid_transition:${o.status}->${status}`);
       await c.query('UPDATE orders SET status=$2, updated_at=now() WHERE id=$1', [id, status]);
+      const label: Record<string, string> = { ready: 'ready for pickup', shipped: 'on its way', completed: 'complete' };
+      if (label[status]) {
+        const ord = (await c.query('SELECT o.number, o.customer_email, o.public_token, s.name AS store_name FROM orders o JOIN stores s ON s.id=o.store_id WHERE o.id=$1', [id])).rows[0];
+        await enqueue(c, { tenantId: t.tenantId, to: ord.customer_email, template: 'order_status', data: { number: Number(ord.number), storeName: ord.store_name, statusLabel: label[status], url: mailUrl(`/order/${ord.public_token}`) } });
+      }
       await audit(c, { actor: t.userId, tenantId: t.tenantId, action: 'order.status', entityType: 'order', entityId: id, prev: { status: o.status }, next: { status } });
       return { status };
     });
@@ -288,7 +309,8 @@ export function registerCommerce(app: FastifyInstance, deps: { tenantCtx: (r: Fa
          WHERE o.status IN ('paid','processing','ready','shipped','completed') AND o.created_at BETWEEN $1 AND $2`, args)).rows[0];
       const f = (await c.query(
         `SELECT coalesce(-sum(amount_cents) FILTER (WHERE account='platform_fee'),0)::bigint platform_fees,
-                coalesce(-sum(amount_cents) FILTER (WHERE account='seller_payable'),0)::bigint seller_earnings_before_processor_fees
+                coalesce(-sum(amount_cents) FILTER (WHERE account='seller_payable'),0)::bigint seller_earnings_before_processor_fees,
+                coalesce(-sum(amount_cents) FILTER (WHERE account='tax_payable'),0)::bigint tax_collected
          FROM ledger_entries WHERE at BETWEEN $1 AND $2`, args)).rows[0];
       // If nothing sold has a known cost, COGS and profit are UNKNOWN (null), never reported as zero.
       const costKnown = k.lines_with_cost > 0 || k.lines_missing_cost === 0;
@@ -308,8 +330,8 @@ export function registerCommerce(app: FastifyInstance, deps: { tenantCtx: (r: Fa
         discountsCents: 0, refundsCents: refundsOnCounted,
         cogsCents: costKnown ? Number(k.cogs_known) : null, grossProfitCents: grossProfit,
         grossProfitIsPartial: k.lines_missing_cost > 0, lineItemsMissingCost: k.lines_missing_cost,
-        platformFeesCents: Number(f.platform_fees), sellerEarningsBeforeProcessorFeesCents: Number(f.seller_earnings_before_processor_fees),
-        notes: ['Gross sales exclude shipping and are not profit.', 'Fully refunded orders are excluded from sales; partial refunds reduce profit.', 'Payment-processor fees and taxes are not included: not yet integrated.',
+        platformFeesCents: Number(f.platform_fees), taxCollectedCents: Number(f.tax_collected), sellerEarningsBeforeProcessorFeesCents: Number(f.seller_earnings_before_processor_fees),
+        notes: ['Gross sales exclude shipping and are not profit.', 'Fully refunded orders are excluded from sales; partial refunds reduce profit.', 'Payment-processor fees are not included: not yet integrated. Tax collected is money you owe the tax authority, not income.',
                 'Estimated net profit is unavailable until processor fees and operating expenses are recorded.'],
       };
     });
@@ -362,7 +384,7 @@ export function registerCommerce(app: FastifyInstance, deps: { tenantCtx: (r: Fa
 
     const result = await withTx({ tenantId: s.tenant_id }, async c => {
       const info = (await c.query(
-        `SELECT t.status tenant_status, b.fulfilment, b.currency, pl.transaction_fee_bps
+        `SELECT t.status tenant_status, b.fulfilment, b.currency, pl.transaction_fee_bps, b.region AS biz_region, b.tax_federal, b.tax_provincial
          FROM tenants t JOIN businesses b ON b.tenant_id=t.id JOIN plans pl ON pl.id=t.plan_id`)).rows[0];
       if (info.tenant_status !== 'active') throw new HttpError(403, 'store_unavailable');
       if (!info.fulfilment?.[b.fulfilment === 'pickup' ? 'pickup' : 'delivery']) throw new HttpError(422, 'fulfilment_not_offered');
@@ -382,12 +404,14 @@ export function registerCommerce(app: FastifyInstance, deps: { tenantCtx: (r: Fa
       const byId = byVariant;
       const subtotal = lines.reduce((n, l) => n + byId.get(l.variantId).price_cents * l.qty, 0);
       const shipping = b.fulfilment === 'delivery' ? s.delivery_fee_cents : 0;
+      const tax = await taxFor(c, { fulfilment: b.fulfilment, destRegion: b.address?.region, sellerRegion: info.biz_region, federal: info.tax_federal, provincial: info.tax_provincial, taxableCents: subtotal + shipping });
+      const total = subtotal + shipping + tax.cents;
       const token = randomBytes(24).toString('base64url');
       const o = (await c.query(
-        `INSERT INTO orders(tenant_id,store_id,public_token,customer_email,customer_name,fulfilment,delivery_address,currency,subtotal_cents,shipping_cents,total_cents,platform_fee_bps,reservation_expires_at,source)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12, now() + ($13 || ' minutes')::interval, $14) RETURNING id, number`,
+        `INSERT INTO orders(tenant_id,store_id,public_token,customer_email,customer_name,fulfilment,delivery_address,currency,subtotal_cents,shipping_cents,total_cents,platform_fee_bps,reservation_expires_at,source,tax_cents,tax_lines,tax_region)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12, now() + ($13 || ' minutes')::interval, $14, $15, $16, $17) RETURNING id, number`,
         [s.tenant_id, s.id, token, b.email, b.name, b.fulfilment, b.address ? JSON.stringify(b.address) : null, info.currency,
-         subtotal, shipping, subtotal + shipping, info.transaction_fee_bps, String(reservationMinutes), b.source ?? null])).rows[0];
+         subtotal, shipping, total, info.transaction_fee_bps, String(reservationMinutes), b.source ?? null, tax.cents, JSON.stringify(tax.lines), tax.region])).rows[0];
       for (const { l, snapshot } of checked) {
         const r = byId.get(l.variantId);
         await c.query(
@@ -398,14 +422,31 @@ export function registerCommerce(app: FastifyInstance, deps: { tenantCtx: (r: Fa
         const claimed = await c.query('UPDATE custom_uploads SET order_id=$1 WHERE id = ANY($2::uuid[]) AND order_id IS NULL', [o.id, allUploadIds]);
         if (claimed.rowCount !== allUploadIds.length) throw new HttpError(422, 'custom_invalid_upload');
       }
-      const intent = await provider.createIntent({ orderId: o.id, amountCents: subtotal + shipping, currency: info.currency, idempotencyKey: o.id });
+      const intent = await provider.createIntent({ orderId: o.id, amountCents: total, currency: info.currency, idempotencyKey: o.id });
       const pay = (await c.query(
         `INSERT INTO payments(tenant_id,order_id,provider,provider_ref,amount_cents,currency) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
-        [s.tenant_id, o.id, provider.name, intent.providerRef, subtotal + shipping, info.currency])).rows[0];
-      return { orderToken: token, orderNumber: Number(o.number), paymentId: pay.id as string, totalCents: subtotal + shipping, currency: info.currency as string,
-               shippingCents: shipping, paymentProvider: { name: provider.name, status: provider.status } };
+        [s.tenant_id, o.id, provider.name, intent.providerRef, total, info.currency])).rows[0];
+      return { orderToken: token, orderNumber: Number(o.number), paymentId: pay.id as string, totalCents: total, currency: info.currency as string,
+               shippingCents: shipping, taxCents: tax.cents, taxLines: tax.lines, paymentProvider: { name: provider.name, status: provider.status } };
     });
     return reply.code(201).send(result);
+  });
+
+  app.post('/api/public/stores/:slug/quote', async (req) => {
+    const { slug } = z.object({ slug: z.string().regex(SLUG) }).parse(req.params);
+    const b = z.object({ items: z.array(z.object({ variantId: z.string().uuid(), quantity: z.number().int().min(1).max(100) }).strict()).min(1).max(50),
+      fulfilment: z.enum(['pickup', 'delivery']), region: z.string().max(100).optional() }).strict().parse(req.body);
+    const s = await publicStore(slug);
+    const qty = new Map<string, number>(); for (const i of b.items) qty.set(i.variantId, (qty.get(i.variantId) ?? 0) + i.quantity);
+    return withTx({ tenantId: s.tenant_id }, async c => {
+      const info = (await c.query(`SELECT b.region AS biz_region, b.tax_federal, b.tax_provincial FROM businesses b`)).rows[0];
+      const rows = (await c.query(`SELECT v.id, v.price_cents FROM product_variants v JOIN products p ON p.id=v.product_id WHERE v.id = ANY($1::uuid[]) AND p.status='active'`, [[...qty.keys()]])).rows;
+      if (rows.length !== qty.size) throw new HttpError(422, 'item_unavailable');
+      const subtotal = rows.reduce((n, r) => n + r.price_cents * (qty.get(r.id) ?? 0), 0);
+      const shipping = b.fulfilment === 'delivery' ? s.delivery_fee_cents : 0;
+      const tax = await taxFor(c, { fulfilment: b.fulfilment, destRegion: b.region, sellerRegion: info.biz_region, federal: info.tax_federal, provincial: info.tax_provincial, taxableCents: subtotal + shipping });
+      return { subtotalCents: subtotal, shippingCents: shipping, taxCents: tax.cents, taxLines: tax.lines, totalCents: subtotal + shipping + tax.cents };
+    });
   });
 
   // Customer reference images for customisable products: private storage, size/type-checked, rate-limited, expire if never ordered.
@@ -437,7 +478,7 @@ export function registerCommerce(app: FastifyInstance, deps: { tenantCtx: (r: Fa
   app.get('/api/public/orders/:token', async (req) => {
     const { token } = z.object({ token: z.string().min(20).max(64) }).parse(req.params);
     const o = await withTx({ platform: true }, async c => { // lookup by unguessable capability token
-      const r = (await c.query('SELECT id,number,status,fulfilment,subtotal_cents,shipping_cents,total_cents,refunded_cents,currency,created_at FROM orders WHERE public_token=$1', [token])).rows[0];
+      const r = (await c.query('SELECT id,number,status,fulfilment,subtotal_cents,shipping_cents,tax_cents,tax_lines,total_cents,refunded_cents,currency,created_at FROM orders WHERE public_token=$1', [token])).rows[0];
       if (r) r.items = (await c.query('SELECT name,variant_title,quantity,unit_price_cents FROM order_items WHERE order_id=$1', [r.id])).rows;
       return r;
     });

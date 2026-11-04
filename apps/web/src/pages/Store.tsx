@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { api, ApiError, errorText, money } from '../api';
+import { api, ApiError, errorText, money, PROVINCES } from '../api';
 import { Alert, Badge, Empty, Field } from '../ui';
 import { PCard } from './Market';
 
@@ -73,6 +73,18 @@ export function StoreCheckout() {
   const [f, setF] = useState({ name: '', email: '', fulfilment: 'pickup', line1: '', city: '', region: '', postalCode: '' });
   const [err, setErr] = useState(''); const [busy, setBusy] = useState(false); const [placed, setPlaced] = useState<any>(null);
   useEffect(() => { if (store && !store.fulfilment.pickup && store.fulfilment.delivery) setF(p => ({ ...p, fulfilment: 'delivery' })); }, [store]);
+  // The cart shows exactly what checkout will charge, including tax, by asking the same pricing code the server uses.
+  const [quote, setQuote] = useState<any>(null); const [quoteErr, setQuoteErr] = useState('');
+  const quoteKey = JSON.stringify([cart.lines.map(l => [l.variantId, l.qty]), f.fulfilment, f.region]);
+  useEffect(() => {
+    if (!store || !cart.lines.length) { setQuote(null); return; }
+    const qty = new Map<string, number>(); for (const l of cart.lines) qty.set(l.variantId, (qty.get(l.variantId) ?? 0) + l.qty);
+    let cancelled = false;
+    api(`/api/public/stores/${slug}/quote`, { body: { items: [...qty].map(([variantId, quantity]) => ({ variantId, quantity })), fulfilment: f.fulfilment, ...(f.fulfilment === 'delivery' && f.region ? { region: f.region } : {}) } })
+      .then(q => { if (!cancelled) { setQuote(q); setQuoteErr(''); } })
+      .catch(e => { if (!cancelled) { setQuote(null); setQuoteErr(e instanceof ApiError && e.code === 'tax_region_unknown' ? 'Choose your province so we can work out tax.' : errorText(e)); } });
+    return () => { cancelled = true; };
+  }, [quoteKey, store]); // eslint-disable-line
   if (missing) return <div className="wrap"><h1>Store not found</h1></div>;
   if (!store) return <div className="wrap"><p>Loading…</p></div>;
   const shipping = f.fulfilment === 'delivery' ? store.deliveryFeeCents : 0;
@@ -118,10 +130,12 @@ export function StoreCheckout() {
             {l.customView?.map(v => <span key={v.label} className="muted small" style={{ display: 'block' }}>{v.label}: {v.type === 'image' ? 'photo attached' : v.value}</span>)}</span>
           <span className="qty"><button className="secondary" aria-label={`Decrease ${l.name}`} onClick={() => cart.setQty(l.key, l.qty - 1)}>−</button>
             <span aria-live="polite">{l.qty}</span><button className="secondary" aria-label={`Increase ${l.name}`} onClick={() => cart.setQty(l.key, l.qty + 1)}>+</button></span></li>)}</ul>
-          <div className="sumline"><span>Subtotal</span><span>{money(cart.subtotal, store.currency)}</span></div>
-          <div className="sumline"><span>Delivery</span><span>{money(shipping, store.currency)}</span></div>
-          <div className="sumline total"><span>Total</span><span>{money(cart.subtotal + shipping, store.currency)}</span></div>
-          <p className="muted small">Final prices are confirmed by the store when you place the order. Taxes are not yet calculated.</p></section>
+          <div className="sumline"><span>Subtotal</span><span>{money(quote?.subtotalCents ?? cart.subtotal, store.currency)}</span></div>
+          <div className="sumline"><span>Delivery</span><span>{money(quote?.shippingCents ?? shipping, store.currency)}</span></div>
+          {quote?.taxLines?.map((t: any) => <div className="sumline" key={t.name}><span>{t.name}</span><span>{money(t.cents, store.currency)}</span></div>)}
+          <div className="sumline total"><span>Total</span><span>{money(quote?.totalCents ?? cart.subtotal + shipping, store.currency)}</span></div>
+          {quoteErr && <p className="muted small" role="status">{quoteErr}</p>}
+          <p className="muted small">{store.chargesTax ? 'Tax is worked out for your province. Final prices are confirmed when you place the order.' : 'This seller does not charge sales tax. Final prices are confirmed when you place the order.'}</p></section>
         <form className="card" onSubmit={submit}>
           {err && <Alert kind="err">{err}</Alert>}
           <Field label="Name">{id => <input id={id} required autoComplete="name" value={f.name} onChange={e => setF({ ...f, name: e.target.value })} />}</Field>
@@ -131,9 +145,9 @@ export function StoreCheckout() {
           {f.fulfilment === 'delivery' && <>
             <Field label="Street address">{id => <input id={id} required autoComplete="address-line1" value={f.line1} onChange={e => setF({ ...f, line1: e.target.value })} />}</Field>
             <Field label="City">{id => <input id={id} required autoComplete="address-level2" value={f.city} onChange={e => setF({ ...f, city: e.target.value })} />}</Field>
-            <Field label="Province">{id => <input id={id} required autoComplete="address-level1" value={f.region} onChange={e => setF({ ...f, region: e.target.value })} />}</Field>
+            <Field label="Province">{id => <select id={id} required autoComplete="address-level1" value={f.region} onChange={e => setF({ ...f, region: e.target.value })}><option value="">Choose…</option>{PROVINCES.map(([c, n]) => <option key={c} value={c}>{n}</option>)}</select>}</Field>
             <Field label="Postal code">{id => <input id={id} required autoComplete="postal-code" value={f.postalCode} onChange={e => setF({ ...f, postalCode: e.target.value })} />}</Field></>}
-          <p><button disabled={busy || (!store.fulfilment.pickup && !store.fulfilment.delivery)}>{busy ? 'Placing order…' : 'Continue to payment'}</button></p>
+          <p><button disabled={busy || !!quoteErr || (!store.fulfilment.pickup && !store.fulfilment.delivery)}>{busy ? 'Placing order…' : 'Continue to payment'}</button></p>
           {!store.fulfilment.pickup && !store.fulfilment.delivery && <Alert kind="warn">This store hasn't set up delivery or pickup yet.</Alert>}
         </form></>}
     </main></>;
@@ -149,7 +163,7 @@ export function OrderStatus() {
       {o.status === 'paid' && <Alert kind="ok">Thank you! Your order is confirmed. (Simulated payment in this development build.)</Alert>}
       <section className="card"><div className="row spread"><b>Status</b><Badge s={o.status} /></div>
         <table><tbody>{o.items.map((i: any, n: number) => <tr key={n}><td>{i.name} × {i.quantity}</td><td>{money(i.unit_price_cents * i.quantity, o.currency)}</td></tr>)}
-          <tr><td>Delivery</td><td>{money(o.shipping_cents, o.currency)}</td></tr><tr><td><b>Total</b></td><td><b>{money(o.total_cents, o.currency)}</b></td></tr>
+          <tr><td>Delivery</td><td>{money(o.shipping_cents, o.currency)}</td></tr>{o.tax_lines?.map((t: any) => <tr key={t.name}><td>{t.name}</td><td>{money(t.cents, o.currency)}</td></tr>)}<tr><td><b>Total</b></td><td><b>{money(o.total_cents, o.currency)}</b></td></tr>
           {o.refunded_cents > 0 && <tr><td>Refunded</td><td>−{money(o.refunded_cents, o.currency)}</td></tr>}</tbody></table>
         <p className="muted small">Bookmark this page to follow your order.</p></section></>}
   </main>;

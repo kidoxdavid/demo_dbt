@@ -18,3 +18,10 @@ export const maxImageBytes = 5 * 1024 * 1024;
 export const uploadRateLimitMax = Number(process.env.UPLOAD_RATE_LIMIT_MAX ?? 20);
 // Public origin used to build share links and QR codes.
 export const publicUrl = (process.env.PUBLIC_URL ?? 'http://localhost:5173').replace(/\/$/, '');
+// ---- Email ----
+export const mailFrom = process.env.MAIL_FROM ?? 'EazyStores <no-reply@eazystores.local>';
+export const smtpUrl = () => process.env.SMTP_URL;   // e.g. smtp://user:pass@smtp.example.com:587 ; when unset, mail is recorded but NOT sent ("simulated")
+// Read at call time so tests can toggle them.
+export const requireVerifiedEmail = () => (process.env.REQUIRE_EMAIL_VERIFICATION ?? (process.env.NODE_ENV === 'production' ? 'true' : 'false')) === 'true';
+export const requireStaffMfa = () => (process.env.REQUIRE_STAFF_MFA ?? 'true') !== 'false';
+export const mfaKeyHex = () => process.env.MFA_ENC_KEY ?? (process.env.NODE_ENV === 'production' ? '' : '0'.repeat(63) + '1');   // dev-only fallback; production must set a real 32-byte hex key

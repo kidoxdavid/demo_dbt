@@ -8,6 +8,41 @@ const zlib = require('node:zlib');
 const BASE = process.env.BASE_URL ?? 'http://127.0.0.1:5173';
 const out = process.argv[2] ?? '.';
 const id = Date.now().toString(36);
+const { execFileSync } = require('node:child_process');
+const crypto = require('node:crypto');
+
+// TOTP (RFC 6238) so the test can act as an authenticator app.
+function b32decode(s) { const A = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'; let bits = 0, v = 0; const out = []; for (const ch of s.replace(/=+$/, '').toUpperCase()) { v = (v << 5) | A.indexOf(ch); bits += 5; if (bits >= 8) { out.push((v >>> (bits - 8)) & 255); bits -= 8; } } return Buffer.from(out); }
+function code(secret, offsetSteps = 0) {
+  const buf = Buffer.alloc(8); buf.writeBigUInt64BE(BigInt(Math.floor(Date.now() / 30000) + offsetSteps));
+  const h = crypto.createHmac('sha1', b32decode(secret)).update(buf).digest(); const o = h[19] & 15;
+  return String((((h[o] & 0x7f) << 24) | (h[o + 1] << 16) | (h[o + 2] << 8) | h[o + 3]) % 1000000).padStart(6, '0');
+}
+const ADMIN = { email: 'e2e-admin@eazystores.test', password: 'e2e-admin-password-1' };
+const admin = { secret: null, recovery: [] };
+async function passwordStep(a) {
+  await a.goto(`${BASE}/login`); await a.getByLabel('Email').fill(ADMIN.email); await a.getByLabel('Password').fill(ADMIN.password); await a.getByRole('button', { name: 'Log in' }).click();
+}
+/** First run enrols (QR secret read from the page, recovery codes saved); later sign-ins use a TOTP code or a one-time recovery code. */
+async function adminSignIn(a, how) {
+  await passwordStep(a);
+  if (!admin.secret) {
+    await a.waitForURL('**/admin');
+    await a.getByRole('heading', { name: 'Set up two-factor sign-in' }).waitFor();                            // nothing else loads until two-factor is on
+    await a.getByRole('button', { name: 'Set up two-factor' }).click();
+    admin.secret = (await a.locator('.secretkey').innerText()).trim();
+    await a.getByLabel('6-digit code').fill('000000'); await a.getByRole('button', { name: 'Turn on two-factor' }).click(); await a.getByRole('alert').filter({ hasText: 'not right' }).waitFor();
+    await a.getByLabel('6-digit code').fill(code(admin.secret)); await a.getByRole('button', { name: 'Turn on two-factor' }).click();
+    await a.getByRole('heading', { name: 'Save your recovery codes' }).waitFor();
+    admin.recovery = await a.getByLabel('Recovery codes').locator('code').allInnerTexts(); assert.equal(admin.recovery.length, 10);
+    await a.getByLabel('I have saved these codes').check(); await a.getByRole('button', { name: 'Continue' }).click();
+    await a.getByRole('heading', { name: 'Platform overview' }).waitFor(); return;
+  }
+  await a.getByRole('heading', { name: 'Enter your code' }).waitFor();
+  if (how === 'recovery') { await a.getByRole('button', { name: 'Use a recovery code instead' }).click(); await a.getByLabel('Recovery code').fill(admin.recovery.pop()); }
+  else await a.getByLabel('6-digit code').fill(code(admin.secret, 1));       // the enrolment code used this 30s step; the next step is valid immediately
+  await a.getByRole('button', { name: 'Verify' }).click(); await a.waitForURL('**/admin'); await a.getByRole('heading', { name: 'Platform overview' }).waitFor();
+}
 
 function png(w, h, c1, c2) { // minimal real PNG (gradient) so uploads are renderable
   const raw = Buffer.alloc((w * 3 + 1) * h);
@@ -27,6 +62,7 @@ async function noHScroll(page, label) {
 }
 
 (async () => {
+  execFileSync('npm', ['run', 'reset-mfa', '--silent', '--', ADMIN.email], { cwd: `${__dirname}/../../api`, stdio: 'pipe' });   // start from a known state
   const browser = await chromium.launch();
   for (const [name, vp, mobile] of [['desktop', { width: 1280, height: 860 }, false], ['mobile', { width: 390, height: 800 }, true]]) {
     const slug = `cx-${id}${name[0]}`;
@@ -115,9 +151,12 @@ async function noHScroll(page, label) {
   for (const [name, vp, mobile] of [['desktop', { width: 1280, height: 860 }, false], ['mobile', { width: 390, height: 800 }, true]]) {
     const target = `cx-${id}${name[0]}`;
     const ac = await browser.newContext({ viewport: vp, isMobile: mobile }); const a = await ac.newPage(); a.on('pageerror', e => { throw e; });
-    await a.goto(`${BASE}/login`); await a.getByLabel('Email').fill('e2e-admin@eazystores.test'); await a.getByLabel('Password').fill('e2e-admin-password-1');
-    await a.getByRole('button', { name: 'Log in' }).click(); await a.waitForURL('**/admin');                      // staff without a business land in admin
-    await a.getByRole('heading', { name: 'Platform overview' }).waitFor(); await a.getByText('Gross merchandise value').waitFor();
+    if (!mobile) {
+      await adminSignIn(a, 'enrol');                                                                               // first sign-in: forced two-factor setup
+      await a.getByRole('button', { name: 'Log out' }).first().click(); await a.waitForURL(BASE + '/');
+      await adminSignIn(a, 'totp');                                                                                // then a normal sign-in with an authenticator code
+    } else { await adminSignIn(a, 'recovery'); }                                                                   // phone run uses a one-time recovery code
+    await a.getByText('Gross merchandise value').waitFor();
     await noHScroll(a, `${name} admin overview`); await a.screenshot({ path: `${out}/${name}-x6-admin-overview.png`, fullPage: true });
     await a.getByRole('link', { name: 'Sellers' }).click(); await a.getByLabel(/Search by business name/).fill(target);
     await a.getByRole('cell', { name: new RegExp(`Custom ${target}`) }).waitFor();

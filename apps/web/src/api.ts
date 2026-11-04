@@ -21,6 +21,11 @@ const MESSAGES: Record<string, string> = {
   item_unavailable: 'An item in your cart is no longer available.', cross_origin_blocked: 'Request blocked.',
   custom_unknown_field: 'This product changed. Please remove it from your cart and add it again.', restock_requires_full_refund: 'Restocking is only available when refunding the whole order.', idempotency_key_reused: 'That refund request was already used for another order.',
   invalid_path: 'That page cannot be shared.', not_your_store: 'You can only share your own store.', store_not_publishable: 'That store is not live.',
+  invalid_code: 'That code is not right. Check your authenticator app and try again.', too_many_attempts: 'Too many wrong codes. Please sign in again.', invalid_challenge: 'That sign-in expired. Please sign in again.',
+  invalid_or_expired_link: 'That link has expired or was already used. Request a new one.', email_not_verified: 'Please confirm your email address first. We sent you a link.',
+  mfa_setup_required: 'Staff accounts need two-factor sign-in. Set it up to continue.', mfa_required: 'Please sign in again and enter your two-factor code.', mfa_required_for_staff: 'Two-factor sign-in cannot be turned off for staff accounts.',
+  mfa_already_enabled: 'Two-factor is already on.', tax_region_unknown: 'We cannot work out tax for that province. Please choose a province from the list.',
+  tax_needs_province: 'Choose your province in your business details before turning on sales tax.',
   image_too_large: 'That image is over 5 MB. Please use a smaller photo.', unsupported_image_type: 'Use a JPG, PNG or WebP image.', too_many_images: 'A product can have up to 8 photos.',
   stock_below_reserved_or_negative: 'Stock cannot go below zero or below units reserved by open checkouts.',
 };
@@ -33,6 +38,7 @@ export function errorText(e: unknown): string {
     if (code === 'custom_invalid_choice') return `Please choose a valid option for “${detail}”.`;
     if (code === 'custom_invalid_upload') return `The photo for “${detail || 'this item'}” could not be used. Please upload it again.`;
     if (code === 'exceeds_refundable') return `That is more than can be refunded. The most you can refund is $${(Number(detail) / 100).toFixed(2)}.`;
+    if (code === 'no_provincial_tax') return `${detail} has no provincial sales tax to register for.`;
     if (code === 'not_refundable') return 'This order cannot be refunded in its current state.';
     if (e.code.startsWith('incomplete_profile:')) return `Before publishing, please fill in: ${e.code.split(':')[1].replace(/_/g, ' ')}.`;
     if (e.code === 'validation_failed') return 'Please check the highlighted fields: ' + (e.issues ?? []).map(i => `${i.path.join('.')} ${i.message}`).join('; ');
@@ -40,5 +46,7 @@ export function errorText(e: unknown): string {
   }
   return 'Network error. Please try again.';
 }
+export const PROVINCES: [string, string][] = [['AB', 'Alberta'], ['BC', 'British Columbia'], ['MB', 'Manitoba'], ['NB', 'New Brunswick'], ['NL', 'Newfoundland and Labrador'],
+  ['NS', 'Nova Scotia'], ['NT', 'Northwest Territories'], ['NU', 'Nunavut'], ['ON', 'Ontario'], ['PE', 'Prince Edward Island'], ['QC', 'Quebec'], ['SK', 'Saskatchewan'], ['YT', 'Yukon']];
 export const money = (cents: number, cur = 'CAD') => new Intl.NumberFormat('en-CA', { style: 'currency', currency: cur }).format(cents / 100);
 export const toCents = (v: string) => Math.round(parseFloat(v || '0') * 100);

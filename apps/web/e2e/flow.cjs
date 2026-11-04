@@ -116,7 +116,7 @@ async function noHScroll(page, label) {
     await g.locator('.sumline.total').filter({ hasText: '$145.00' }).waitFor();
     await g.getByLabel('Street address').fill('1 Main St');
     await g.getByLabel('City').fill('Calgary');
-    await g.getByLabel('Province').fill('AB');
+    await g.getByLabel('Province').selectOption('AB');
     await g.getByLabel('Postal code').fill('T2T 2T2');
     await noHScroll(g, `${name} checkout`);
     await g.screenshot({ path: `${out}/${name}-5-checkout.png`, fullPage: true });

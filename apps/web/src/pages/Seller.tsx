@@ -1,7 +1,8 @@
 import { ChangeEvent, FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { Link, NavLink, Route, Routes, useNavigate } from 'react-router-dom';
-import { api, ApiError, errorText, money, toCents } from '../api';
+import { api, ApiError, errorText, money, toCents, PROVINCES } from '../api';
 import { Alert, Badge, Empty, Field } from '../ui';
+import { SecurityPanel } from './Security';
 import { IcoBox, IcoCog, IcoHome, IcoLink, IcoReceipt, IcoUpload } from '../icons';
 
 type Biz = { business: any; store: any; role: string };
@@ -16,6 +17,8 @@ export function SellerShell() {
   useEffect(() => { document.body.classList.add('seller'); return () => document.body.classList.remove('seller'); }, []);
   const [data, setData] = useState<Biz | null>(null);
   const [loadErr, setLoadErr] = useState('');
+  const [me, setMe] = useState<any>(null);
+  useEffect(() => { api('/api/me').then(setMe).catch(() => {}); }, []);
   const reload = useCallback(async () => {
     try { setData(await api('/api/seller/business')); }
     catch (e) { if (e instanceof ApiError && e.status === 401) nav('/login'); else setLoadErr(errorText(e)); }
@@ -38,6 +41,7 @@ export function SellerShell() {
     <div>
       <div className="mtop"><Link to="/dashboard" className="plogo">Eazy<i>Stores</i></Link><button className="ghost sm" onClick={logout}>Log out</button></div>
       <main className="main">
+        {me && !me.emailVerified && <VerifyBanner />}
         <Routes>
           <Route index element={<Overview data={data} />} />
           <Route path="products" element={<Products />} />
@@ -82,6 +86,7 @@ function Overview({ data }: { data: Biz }) {
         <div className="card stat">{unknown(d.grossProfitCents)}<div className="l">Gross profit{d.grossProfitIsPartial && d.grossProfitCents != null ? ' (partial)' : ''}</div></div>
         <div className="card stat"><div className="n">{money(d.platformFeesCents)}</div><div className="l">EazyStores fees</div></div>
         <div className="card stat"><div className="n">{money(d.shippingCollectedCents)}</div><div className="l">Delivery fees collected</div></div>
+        {d.taxCollectedCents > 0 && <div className="card stat"><div className="n">{money(d.taxCollectedCents)}</div><div className="l">Tax collected (owed to the tax authority)</div></div>}
         {d.refundsCents > 0 && <div className="card stat"><div className="n">{money(d.refundsCents)}</div><div className="l">Refunds on open sales</div></div>}
       </div>
       {d.bySource?.length > 0 && <section className="card"><h3>Sales by channel</h3><p className="muted small">Where your paid orders came from. Share links on the Share page are tagged automatically.</p>
@@ -304,7 +309,7 @@ function Orders() {
       <p>{open.customer_name} · {open.customer_email}<br />{open.fulfilment === 'delivery' && open.delivery_address ? `Deliver to: ${open.delivery_address.line1}, ${open.delivery_address.city} ${open.delivery_address.postalCode}` : 'Customer pickup'}</p>
       <div className="table-scroll"><table><tbody>{open.items.map((i: any, n: number) => <tr key={n}><td>{i.name}{i.variant_title !== 'Default' ? ` (${i.variant_title})` : ''} × {i.quantity}
         {i.custom_values?.length > 0 && <dl className="answers">{i.custom_values.map((v: any) => <div key={v.label}><dt>{v.label}</dt><dd>{v.type === 'image' ? <a href={`/api/seller/custom-uploads/${v.value}`} target="_blank" rel="noreferrer"><img src={`/api/seller/custom-uploads/${v.value}`} alt={`${v.label} from customer`} width="72" height="72" style={{ objectFit: 'cover', display: 'block' }} /></a> : v.value}</dd></div>)}</dl>}</td><td>{money(i.unit_price_cents * i.quantity)}</td></tr>)}
-        <tr><td>Delivery</td><td>{money(open.shipping_cents)}</td></tr><tr><td><b>Total</b></td><td><b>{money(open.total_cents)}</b></td></tr></tbody></table></div>
+        <tr><td>Delivery</td><td>{money(open.shipping_cents)}</td></tr>{open.tax_lines?.map((t: any) => <tr key={t.name}><td>{t.name}</td><td>{money(t.cents)}</td></tr>)}<tr><td><b>Total</b></td><td><b>{money(open.total_cents)}</b></td></tr></tbody></table></div>
       <div className="row" style={{ marginTop: 12 }}>{(NEXT[open.status] ?? []).map(n => <button key={n.to} onClick={() => move(open.id, n.to)}>{n.label}</button>)}</div>
       <RefundPanel order={open} onDone={() => { show(open.id); load(); }} onError={setErr} />
       {open.status === 'awaiting_payment' && <p className="muted small">Waiting for the customer to pay. Stock is held until the reservation expires.</p>}
@@ -315,12 +320,14 @@ function Orders() {
 function Settings({ data, reload }: { data: Biz; reload: () => void }) {
   const b = data.business, s = data.store;
   const [f, setF] = useState({ category: b.category ?? '', description: b.description ?? '', contactPhone: b.contact_phone ?? '', city: b.city ?? '', region: b.region ?? '',
-    pickup: !!b.fulfilment?.pickup, delivery: !!b.fulfilment?.delivery, name: s.name, tagline: s.tagline ?? '', fee: ((s.delivery_fee_cents ?? 0) / 100).toFixed(2) });
+    pickup: !!b.fulfilment?.pickup, delivery: !!b.fulfilment?.delivery, name: s.name, tagline: s.tagline ?? '', fee: ((s.delivery_fee_cents ?? 0) / 100).toFixed(2),
+    taxFederal: !!b.tax_federal, taxNumber: b.tax_number ?? '', taxProvincial: (b.tax_provincial ?? []) as string[] });
   const [msg, setMsg] = useState<{ k: 'err' | 'ok'; t: string } | null>(null); const [busy, setBusy] = useState(false);
   async function save(e: FormEvent) {
     e.preventDefault(); setBusy(true); setMsg(null);
     try {
       await api('/api/seller/business', { method: 'PATCH', body: { category: f.category, description: f.description, contactPhone: f.contactPhone, city: f.city, region: f.region,
+        taxFederal: f.taxFederal, taxNumber: f.taxNumber, taxProvincial: f.taxProvincial,
         fulfilment: { pickup: f.pickup, delivery: f.delivery, shipping: false } } });
       await api('/api/seller/store', { method: 'PATCH', body: { name: f.name, tagline: f.tagline, deliveryFeeCents: toCents(f.fee) } });
       setMsg({ k: 'ok', t: 'Saved.' }); reload();
@@ -341,13 +348,24 @@ function Settings({ data, reload }: { data: Biz; reload: () => void }) {
       <Field label="About your business">{id => <textarea id={id} value={f.description} onChange={e => setF({ ...f, description: e.target.value })} />}</Field>
       <Field label="Phone">{id => <input id={id} type="tel" autoComplete="tel" value={f.contactPhone} onChange={e => setF({ ...f, contactPhone: e.target.value })} />}</Field>
       <div className="row"><div style={{ flex: '1 1 160px' }}><Field label="City">{id => <input id={id} value={f.city} onChange={e => setF({ ...f, city: e.target.value })} />}</Field></div>
-        <div style={{ flex: '1 1 160px' }}><Field label="Province / state">{id => <input id={id} value={f.region} onChange={e => setF({ ...f, region: e.target.value })} />}</Field></div></div>
+        <div style={{ flex: '1 1 160px' }}><Field label="Province">{id => <select id={id} value={f.region} onChange={e => setF({ ...f, region: e.target.value })}><option value="">Choose…</option>{PROVINCES.map(([c, n]) => <option key={c} value={c}>{n}</option>)}</select>}</Field></div></div>
       <h3 style={{ marginTop: 16 }}>How customers get their order</h3>
       <label className="check"><input type="checkbox" checked={f.pickup} onChange={e => setF({ ...f, pickup: e.target.checked })} />Customer pickup</label>
       <label className="check"><input type="checkbox" checked={f.delivery} onChange={e => setF({ ...f, delivery: e.target.checked })} />Delivery</label>
       {f.delivery && <Field label="Delivery fee ($)" hint="Flat fee per order.">{id => <input id={id} inputMode="decimal" pattern="\d+(\.\d{1,2})?" value={f.fee} onChange={e => setF({ ...f, fee: e.target.value })} />}</Field>}
       <p><button disabled={busy}>{busy ? 'Saving…' : 'Save changes'}</button></p>
     </form>
+    <section className="card">
+      <h2 style={{ marginTop: 0 }}>Sales tax</h2>
+      <p className="muted small">Turn this on only for taxes you are registered to collect. We cannot tell you whether you must register: ask the CRA or an accountant. Tax is added at checkout from the platform's rate table, delivery fees are taxed, and every product is treated as taxable.</p>
+      <label className="check"><input type="checkbox" checked={f.taxFederal} onChange={e => setF({ ...f, taxFederal: e.target.checked })} />I am registered to collect GST/HST</label>
+      {f.taxFederal && <Field label="GST/HST number" hint="Shown to you for your records.">{id => <input id={id} maxLength={40} value={f.taxNumber} onChange={e => setF({ ...f, taxNumber: e.target.value })} />}</Field>}
+      <p className="small" style={{ marginBottom: 4 }}><b>Provincial taxes</b> (separate registrations):</p>
+      {[['BC', 'PST'], ['MB', 'RST'], ['SK', 'PST'], ['QC', 'QST']].map(([code, name]) => <label className="check" key={code}><input type="checkbox" checked={f.taxProvincial.includes(code)}
+        onChange={e => setF({ ...f, taxProvincial: e.target.checked ? [...f.taxProvincial, code] : f.taxProvincial.filter(c => c !== code) })} />I am registered for {name} in {PROVINCES.find(p => p[0] === code)?.[1]}</label>)}
+      <p className="muted small">Click "Save changes" above to apply. Your province (under business details) is required when tax is on.</p>
+    </section>
+    <SecurityPanel />
     <Appearance data={data} reload={reload} />
     <section className="card">
       <div className="row spread"><h2 style={{ margin: 0 }}>Publish</h2><Badge s={s.status} /></div>
@@ -444,4 +462,10 @@ function SharePage() {
           <a className="btn secondary sm" href={wa(p.path, p.name)} target="_blank" rel="noreferrer">WhatsApp</a>
           {live && <a className="btn secondary sm" href={qr(p.path)} target="_blank" rel="noreferrer">QR code</a>}</span></li>)}</ul></section>}
   </>;
+}
+
+function VerifyBanner() {
+  const [msg, setMsg] = useState('');
+  async function resend() { setMsg(''); try { await api('/api/auth/resend-verification', { method: 'POST', body: {} }); setMsg('Sent. Check your inbox.'); } catch (e) { setMsg(errorText(e)); } }
+  return <Alert kind="warn"><span>Confirm your email address to publish your store. We sent you a link when you signed up. </span><button className="textbtn" onClick={resend}>Resend the email</button>{msg && <span> {msg}</span>}</Alert>;
 }

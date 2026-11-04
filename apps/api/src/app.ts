@@ -3,12 +3,12 @@ import cookie from '@fastify/cookie';
 import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
 import { z, ZodError } from 'zod';
-import { config, allowedOrigins } from './config.js';
+import { config, allowedOrigins, requireVerifiedEmail, requireStaffMfa } from './config.js';
 import { withTx, audit } from './lib/db.js';
 import { hashPassword, verifyPassword, newToken, sha256 } from './lib/security.js';
 
 const COOKIE = 'eazy_sid';
-declare module 'fastify' { interface FastifyRequest { user?: { id: string; email: string; fullName: string } } }
+declare module 'fastify' { interface FastifyRequest { user?: { id: string; email: string; fullName: string; sid: string; mfaAt: Date | null; mfaEnabledAt: Date | null; emailVerified: boolean } } }
 
 import { HttpError } from './lib/errors.js';
 import { registerCommerce } from './modules/commerce.js';
@@ -16,6 +16,9 @@ import { registerImport } from './modules/import.js';
 import { registerMarketplace } from './modules/marketplace.js';
 import { registerRefunds } from './modules/refunds.js';
 import { registerShare } from './modules/share.js';
+import { registerAccount, createMfaChallenge } from './modules/account.js';
+import { issueToken } from './lib/tokens.js';
+import { enqueue, url as mailUrl } from './lib/mail.js';
 const SLUG = /^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$/;
 
 const signupSchema = z.object({
@@ -30,6 +33,7 @@ const businessPatch = z.object({
   fulfilment: z.object({ pickup: z.boolean(), delivery: z.boolean(), shipping: z.boolean() }),
   social: z.record(z.string(), z.string().url()),
   onboardingStep: z.enum(['business','location','fulfilment','products','review']),
+  taxFederal: z.boolean(), taxProvincial: z.array(z.string().length(2).toUpperCase()).max(13), taxNumber: z.string().trim().max(40),
 }).partial().strict();
 
 export async function buildApp() {
@@ -58,10 +62,10 @@ export async function buildApp() {
     const raw = req.cookies[COOKIE];
     if (!raw) throw new HttpError(401, 'unauthenticated');
     const u = await withTx({ platform: true }, async c => (await c.query(
-      `SELECT u.id,u.email,u.full_name FROM sessions s JOIN users u ON u.id=s.user_id
+      `SELECT u.id,u.email,u.full_name,s.id AS sid,s.mfa_at,u.mfa_enabled_at,u.email_verified_at FROM sessions s JOIN users u ON u.id=s.user_id
        WHERE s.token_hash=$1 AND s.expires_at>now() AND u.disabled_at IS NULL`, [sha256(raw)])).rows[0]);
     if (!u) throw new HttpError(401, 'unauthenticated');
-    req.user = { id: u.id, email: u.email, fullName: u.full_name };
+    req.user = { id: u.id, email: u.email, fullName: u.full_name, sid: u.sid, mfaAt: u.mfa_at, mfaEnabledAt: u.mfa_enabled_at, emailVerified: !!u.email_verified_at };
   }
 
   /** Resolve membership for the tenant selected by the session user (never trusting a client tenant id). */
@@ -79,13 +83,17 @@ export async function buildApp() {
       `SELECT 1 FROM platform_staff ps JOIN platform_role_permissions p ON p.role_key=ps.role_key
        WHERE ps.user_id=$1 AND p.permission=$2`, [req.user!.id, perm])).rowCount);
     if (!ok) throw new HttpError(403, 'forbidden');
+    if (requireStaffMfa()) {   // staff can change fees and suspend sellers: a password alone is not enough
+      if (!req.user!.mfaEnabledAt) throw new HttpError(403, 'mfa_setup_required');
+      if (!req.user!.mfaAt) throw new HttpError(403, 'mfa_required');
+    }
   }
 
-  const setSession = async (reply: FastifyReply, userId: string) => {
+  const setSession = async (reply: FastifyReply, userId: string, mfa = false) => {
     const token = newToken();
     await withTx({ platform: true }, c => c.query(
-      `INSERT INTO sessions(user_id,token_hash,expires_at) VALUES ($1,$2,now()+($3||' hours')::interval)`,
-      [userId, sha256(token), String(config.sessionTtlHours)]));
+      `INSERT INTO sessions(user_id,token_hash,expires_at,mfa_at) VALUES ($1,$2,now()+($3||' hours')::interval, CASE WHEN $4 THEN now() END)`,
+      [userId, sha256(token), String(config.sessionTtlHours), mfa]));
     reply.setCookie(COOKIE, token, { httpOnly: true, sameSite: 'lax', secure: config.secureCookies, path: '/', maxAge: config.sessionTtlHours * 3600 });
   };
 
@@ -110,6 +118,8 @@ export async function buildApp() {
       await c.query('INSERT INTO businesses(tenant_id,legal_type,business_name,contact_email) VALUES ($1,$2,$3,$4)', [t.id, b.legalType, b.businessName, b.email]);
       await c.query('INSERT INTO stores(tenant_id,slug,name) VALUES ($1,$2,$3)', [t.id, b.storeSlug, b.businessName]);
       await audit(c, { actor: user.id, tenantId: t.id, action: 'seller.signup', entityType: 'tenant', entityId: t.id, ip: req.ip });
+      const vtoken = await issueToken(c, user.id, 'verify', 60 * 24);
+      await enqueue(c, { tenantId: t.id, to: b.email, template: 'verify_email', data: { url: mailUrl(`/verify?token=${vtoken}`) } });
       return { userId: user.id as string, tenantId: t.id as string };
     });
     await setSession(reply, out.userId);
@@ -129,6 +139,7 @@ export async function buildApp() {
       return deny();
     }
     await withTx({ platform: true }, c => c.query('UPDATE users SET failed_logins=0, locked_until=NULL WHERE id=$1', [u.id]));
+    if (u.mfa_enabled_at) return { mfaRequired: true, challenge: await createMfaChallenge(u.id) };   // no session until the code is verified
     await setSession(reply, u.id);
     return { ok: true };
   });
@@ -140,7 +151,9 @@ export async function buildApp() {
     return { ok: true };
   });
 
-  app.get('/api/me', async (req) => { await authenticate(req); return req.user; });
+  app.get('/api/me', async (req) => { await authenticate(req); const u = req.user!; return { id: u.id, email: u.email, fullName: u.fullName, emailVerified: u.emailVerified, mfaEnabled: !!u.mfaEnabledAt }; });
+
+  registerAccount(app, { authenticate, createSession: async (reply, userId, mfa) => { await setSession(reply, userId, mfa); } });
 
   // ---- Seller: business & onboarding (tenant resolved server-side; RLS enforces isolation) ----
   app.get('/api/seller/business', async (req) => {
@@ -159,14 +172,23 @@ export async function buildApp() {
     const p = businessPatch.parse(req.body);
     const cols: Record<string,string> = { description:'description', category:'category', contactEmail:'contact_email', contactPhone:'contact_phone',
       city:'city', region:'region', country:'country', currency:'currency', registrationNumber:'registration_number',
-      fulfilment:'fulfilment', social:'social', onboardingStep:'onboarding_step' };
+      fulfilment:'fulfilment', social:'social', onboardingStep:'onboarding_step', taxFederal:'tax_federal', taxProvincial:'tax_provincial', taxNumber:'tax_number' };
     const keys = Object.keys(p) as (keyof typeof p)[];
     if (!keys.length) throw new HttpError(400, 'nothing_to_update');
     return withTx(t, async c => {
       const prev = (await c.query('SELECT * FROM businesses').then(r => r.rows[0]));
       const sets = keys.map((k, i) => `${cols[k]}=$${i + 1}`);
-      const vals = keys.map(k => (typeof p[k] === 'object' ? JSON.stringify(p[k]) : p[k]));
+      const vals = keys.map(k => (typeof p[k] === 'object' && !Array.isArray(p[k]) ? JSON.stringify(p[k]) : p[k]));
       const row = (await c.query(`UPDATE businesses SET ${sets.join(',')}, updated_at=now() WHERE tenant_id=$${keys.length + 1} RETURNING *`, [...vals, t.tenantId])).rows[0];
+      // Tax settings only make sense with a province whose rates we know; provincial registrations must name a province that has a provincial tax.
+      if (row.tax_federal || row.tax_provincial.length) {
+        const reg = String(row.region ?? '').toUpperCase();
+        if (!(await c.query(`SELECT 1 FROM tax_rates WHERE country='CA' AND region=$1`, [reg])).rowCount) throw new HttpError(422, 'tax_needs_province');
+        for (const code of row.tax_provincial) {
+          const ok = (await c.query(`SELECT 1 FROM tax_rates WHERE country='CA' AND region=$1 AND components @> '[{"kind":"provincial"}]'::jsonb`, [code])).rowCount;
+          if (!ok) throw new HttpError(422, `no_provincial_tax:${code}`);
+        }
+      }
       await audit(c, { actor: t.userId, tenantId: t.tenantId, action: 'business.update', entityType: 'business', entityId: t.tenantId, prev, next: row });
       return row;
     });
@@ -196,6 +218,7 @@ export async function buildApp() {
     return withTx(t, async c => {
       const tenant = (await c.query('SELECT status FROM tenants').then(r => r.rows[0]));
       if (tenant.status !== 'active') throw new HttpError(403, 'tenant_suspended');
+      if (requireVerifiedEmail() && !(await c.query('SELECT email_verified_at FROM users WHERE id=$1', [t.userId])).rows[0]?.email_verified_at) throw new HttpError(403, 'email_not_verified');
       const biz = (await c.query('SELECT * FROM businesses').then(r => r.rows[0]));
       const missing = [!biz.category && 'category', !biz.description && 'description', !biz.contact_email && 'contact_email'].filter(Boolean);
       if (missing.length) throw new HttpError(422, `incomplete_profile:${missing.join(',')}`);
@@ -213,8 +236,8 @@ export async function buildApp() {
     const s = await withTx({}, async c => (await c.query('SELECT tenant_id,slug,name,tagline,published_at,delivery_fee_cents,theme FROM stores WHERE slug=$1', [slug])).rows[0]);
     if (!s) throw new HttpError(404, 'not_found');
     // Tenant context derived from the store row (never client input) to read the offered fulfilment options.
-    const f = await withTx({ tenantId: s.tenant_id }, async c => (await c.query('SELECT fulfilment, currency, category, city, region FROM businesses WHERE tenant_id=$1', [s.tenant_id])).rows[0]);
-    return { slug: s.slug, name: s.name, tagline: s.tagline, published_at: s.published_at, deliveryFeeCents: s.delivery_fee_cents, theme: s.theme, category: f.category, city: f.city, region: f.region,
+    const f = await withTx({ tenantId: s.tenant_id }, async c => (await c.query('SELECT fulfilment, currency, category, city, region, (tax_federal OR cardinality(tax_provincial) > 0) AS taxes FROM businesses WHERE tenant_id=$1', [s.tenant_id])).rows[0]);
+    return { slug: s.slug, name: s.name, tagline: s.tagline, published_at: s.published_at, deliveryFeeCents: s.delivery_fee_cents, theme: s.theme, category: f.category, city: f.city, region: f.region, chargesTax: f.taxes,
              fulfilment: { pickup: !!f.fulfilment?.pickup, delivery: !!f.fulfilment?.delivery }, currency: f.currency };
   });
 
@@ -267,7 +290,8 @@ export async function buildApp() {
       `SELECT ps.role_key AS role, coalesce(array_agg(p.permission ORDER BY p.permission) FILTER (WHERE p.permission IS NOT NULL), '{}') AS permissions
        FROM platform_staff ps LEFT JOIN platform_role_permissions p ON p.role_key=ps.role_key WHERE ps.user_id=$1 GROUP BY ps.role_key`, [req.user!.id])).rows[0]);
     if (!r) throw new HttpError(403, 'forbidden');
-    return { ...r, email: req.user!.email };
+    const mfaOk = !requireStaffMfa() || (!!req.user!.mfaEnabledAt && !!req.user!.mfaAt);
+    return { role: r.role, email: req.user!.email, permissions: mfaOk ? r.permissions : [], mfaEnabled: !!req.user!.mfaEnabledAt, mfaSatisfied: mfaOk };
   });
 
   app.get('/api/admin/overview', async (req) => {
@@ -308,6 +332,27 @@ export async function buildApp() {
       else await c.query(`DELETE FROM platform_settings WHERE key='featured_store'`);
       await audit(c, { actor: req.user!.id, action: 'marketplace.featured', entityType: 'setting', entityId: 'featured_store', prev, next: b.slug ? { slug: b.slug } : null, reason: b.reason, ip: req.ip });
       return { slug: b.slug };
+    });
+  });
+
+  app.get('/api/admin/tax-rates', async (req) => {
+    await platformPerm(req, 'sellers.read');
+    return withTx({ platform: true }, async c => (await c.query(`SELECT country, region, name, components, notes, updated_at FROM tax_rates ORDER BY country, region`)).rows);
+  });
+
+  // Tax rates are data. Every change needs a reason and records the old and new values.
+  app.patch('/api/admin/tax-rates/:country/:region', async (req) => {
+    await platformPerm(req, 'tax.write');
+    const { country, region } = z.object({ country: z.string().length(2), region: z.string().min(1).max(10) }).parse(req.params);
+    const b = z.object({ reason: z.string().trim().min(5).max(300), components: z.array(z.object({
+      name: z.string().trim().min(1).max(20), kind: z.enum(['federal', 'provincial']), ppm: z.number().int().min(0).max(300000) }).strict()).min(1).max(4) }).strict().parse(req.body);
+    return withTx({ platform: true }, async c => {
+      const prev = (await c.query('SELECT * FROM tax_rates WHERE country=$1 AND region=$2 FOR UPDATE', [country.toUpperCase(), region.toUpperCase()])).rows[0];
+      if (!prev) throw new HttpError(404, 'not_found');
+      const row = (await c.query(`UPDATE tax_rates SET components=$3, notes=NULL, updated_at=now() WHERE country=$1 AND region=$2 RETURNING *`,
+        [country.toUpperCase(), region.toUpperCase(), JSON.stringify(b.components)])).rows[0];
+      await audit(c, { actor: req.user!.id, action: 'tax_rate.update', entityType: 'tax_rate', entityId: `${row.country}-${row.region}`, prev: { components: prev.components }, next: { components: row.components }, reason: b.reason, ip: req.ip });
+      return row;
     });
   });
 

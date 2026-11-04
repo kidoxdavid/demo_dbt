@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { withTx, audit } from '../lib/db.js';
 import { HttpError } from '../lib/errors.js';
 import { getProvider } from '../lib/payments.js';
+import { enqueue, url as mailUrl } from '../lib/mail.js';
 
 type TenantCtx = { tenantId: string; role: string; userId: string };
 const REFUNDABLE = ['paid', 'processing', 'ready', 'shipped', 'completed', 'refunded'];
@@ -46,11 +47,18 @@ export function registerRefunds(app: FastifyInstance, deps: { tenantCtx: (r: Fas
 
       // Platform fee is returned pro rata so the seller is not charged a fee on money that went back to the customer.
       const origFee = Math.floor((o.subtotal_cents * o.platform_fee_bps) / 10000);
-      const feeBack = Math.floor((origFee * b.amountCents) / o.total_cents);
+      const doneNow = b.amountCents === remaining;
+      const returned = (await c.query(`SELECT coalesce(sum(amount_cents) FILTER (WHERE account='platform_fee'),0)::int AS fee, coalesce(sum(amount_cents) FILTER (WHERE account='tax_payable'),0)::int AS tax
+                                       FROM ledger_entries WHERE order_id=$1 AND memo='refund'`, [id])).rows[0];
+      // Pro rata, rounded down; the final refund returns whatever is left so fee and tax come back exactly, with no rounding residue.
+      const feeBack = doneNow ? origFee - returned.fee : Math.floor((origFee * b.amountCents) / o.total_cents);
+      const taxBack = doneNow ? o.tax_cents - returned.tax : Math.floor((o.tax_cents * b.amountCents) / o.total_cents);
       const g = (await c.query('SELECT gen_random_uuid() id')).rows[0].id;
       const led = (acct: string, amt: number) => c.query(
         `INSERT INTO ledger_entries(tenant_id,group_id,order_id,account,amount_cents,currency,memo) VALUES ($1,$2,$3,$4,$5,$6,'refund')`, [t.tenantId, g, id, acct, amt, o.currency]);
-      await led('cash_received', -b.amountCents); await led('platform_fee', feeBack); await led('seller_payable', b.amountCents - feeBack);
+      await led('cash_received', -b.amountCents); await led('platform_fee', feeBack);
+      if (taxBack > 0) await led('tax_payable', taxBack);
+      await led('seller_payable', b.amountCents - feeBack - taxBack);
 
       if (b.restock) {
         const items = (await c.query(`SELECT i.variant_id, i.quantity FROM order_items i JOIN product_variants v ON v.id=i.variant_id WHERE i.order_id=$1 AND v.track_inventory`, [id])).rows;
@@ -62,7 +70,8 @@ export function registerRefunds(app: FastifyInstance, deps: { tenantCtx: (r: Fas
       const done = b.amountCents === remaining;
       await c.query(`UPDATE orders SET refunded_cents = refunded_cents + $2, status = CASE WHEN $3 THEN 'refunded' ELSE status END, updated_at=now() WHERE id=$1`, [id, b.amountCents, done]);
       await audit(c, { actor: t.userId, tenantId: t.tenantId, action: 'order.refund', entityType: 'order', entityId: id, next: { amountCents: b.amountCents, restocked: b.restock, full: done }, reason: b.reason });
-      void full;
+      const st = (await c.query('SELECT name FROM stores WHERE id=$1', [o.store_id])).rows[0]?.name ?? 'the store';
+      await enqueue(c, { tenantId: t.tenantId, to: o.customer_email, template: 'refund_issued', data: { number: Number(o.number), amount: b.amountCents, currency: o.currency, storeName: st, url: mailUrl(`/order/${o.public_token}`) } });
       return { id: r.id as string, replay: false, refundedCents: o.refunded_cents + b.amountCents, status: done ? 'refunded' : o.status };
     });
     return reply.code(out.replay ? 200 : 201).send(out);
@@ -95,6 +104,8 @@ export function registerRefunds(app: FastifyInstance, deps: { tenantCtx: (r: Fas
                      VALUES ($1,$2,$3,$4,'Order could not be fulfilled (stock unavailable)','unfulfilled',$5,$6,$7,$8)`,
         [t.tenantId, p.order_id, id, p.amount_cents, provider.name, pr.providerRef, `unfulfilled:${id}`, t.userId]);
       await c.query('UPDATE payments SET refund_resolved_at=now() WHERE id=$1', [id]);
+      const uo = (await c.query('SELECT o.number, o.customer_email, o.public_token, o.currency, s.name AS store_name FROM orders o JOIN stores s ON s.id=o.store_id WHERE o.id=$1', [p.order_id])).rows[0];
+      await enqueue(c, { tenantId: t.tenantId, to: uo.customer_email, template: 'refund_issued', data: { number: Number(uo.number), amount: p.amount_cents, currency: uo.currency, storeName: uo.store_name, url: mailUrl(`/order/${uo.public_token}`) } });
       await audit(c, { actor: t.userId, tenantId: t.tenantId, action: 'payment.refund_unfulfilled', entityType: 'payment', entityId: id, next: { amountCents: p.amount_cents } });
       return { ok: true };
     });

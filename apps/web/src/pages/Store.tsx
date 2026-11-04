@@ -31,13 +31,14 @@ export function Storefront() {
   if (!store) return <div className="wrap"><p className="muted">Loading…</p></div>;
   return <>
     <header className="top"><div className="wrap"><span className="logo">{store.name}</span>
-      <Link className="btn secondary sm" to={`/store/${slug}/checkout`}>Cart · {cart.count}</Link></div></header>
+      <Link className="btn secondary sm" to={`/store/${slug}/checkout`}>Cart ({cart.count})</Link></div></header>
     <section className="shop-hero"><div className="wrap">
       <h1>{store.name}</h1>{store.tagline && <p>{store.tagline}</p>}
       <div className="pills">{store.fulfilment.pickup && <span className="pill">Pickup available</span>}
         {store.fulfilment.delivery && <span className="pill">Delivery {store.deliveryFeeCents ? money(store.deliveryFeeCents, store.currency) : 'free'}</span>}<span className="pill">Secure checkout</span></div>
     </div></section>
     <main className="wrap">
+      {products && products.length > 0 && <div className="section-title"><h2>All products</h2><span className="muted small">{products.length} item{products.length > 1 ? 's' : ''}</span></div>}
       {products && !products.length && <Empty title="Nothing here yet">This store hasn't added products. Check back soon.</Empty>}
       <div className="products">
         {products?.map(p => {
@@ -106,7 +107,7 @@ export function StoreCheckout() {
   return <>
     <header className="top"><div className="wrap"><Link to={`/store/${slug}`} className="logo">{store.name}</Link></div></header>
     <main className="wrap" style={{ maxWidth: 640 }}>
-      <div className="eyebrow" style={{ marginTop: 28 }}>Checkout</div><h1>Your cart</h1>
+      <h1 style={{ marginTop: 32 }}>Your cart</h1>
       {!cart.lines.length ? <Empty title="Your cart is empty"><Link to={`/store/${slug}`}>Keep shopping</Link></Empty> : <>
         <section className="card"><ul className="list">{cart.lines.map(l => <li key={l.variantId} className="row spread">
           <span>{l.name}{l.title !== 'Default' ? ` (${l.title})` : ''}<br /><span className="muted small">{money(l.priceCents, store.currency)} each</span></span>

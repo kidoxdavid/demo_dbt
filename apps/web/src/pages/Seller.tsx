@@ -63,7 +63,7 @@ function Overview({ data }: { data: Biz }) {
   ];
   const unknown = (v: number | null) => v == null ? <div className="n unknown">Unknown</div> : <div className="n">{money(v)}</div>;
   return <>
-    <div className="pagehead"><div><div className="eyebrow">Overview</div><h1>Good to see you, {data.business.business_name}</h1></div></div>
+    <div className="pagehead"><div><h1>Overview</h1><p>{data.business.business_name}</p></div></div>
     {!steps.every(s => s.done) && <section className="card"><div className="eyebrow">Get started</div><ol style={{ margin: '10px 0 0', paddingLeft: 20, lineHeight: 2 }}>
       {steps.map(s => <li key={s.label}>{s.done ? <span className="muted"><s>{s.label}</s> ✓</span> : <Link to={s.to}>{s.label}</Link>}</li>)}</ol></section>}
     {published && <Alert kind="ok">Your store is live at <Link to={`/store/${data.store.slug}`}>/store/{data.store.slug}</Link>. Share it anywhere.</Alert>}

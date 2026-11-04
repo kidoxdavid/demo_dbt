@@ -42,7 +42,7 @@ async function noHScroll(page, label) {
     await p.screenshot({ path: `${out}/${name}-1-signup.png` });
     await p.getByRole('button', { name: 'Create store' }).click();
     await p.waitForURL('**/dashboard');
-    await p.getByRole('heading', { name: /Good to see you/ }).waitFor();
+    await p.getByRole('heading', { name: 'Overview' }).waitFor();
 
     // 2. Publishing is blocked until the profile is complete (real validation)
     await p.getByRole('link', { name: 'Settings' }).click();

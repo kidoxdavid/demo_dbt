@@ -7,7 +7,7 @@ import { IcoBox, IcoChart, IcoTag } from '../icons';
 export const Header = () => (
   <header className="top"><div className="wrap">
     <Link to="/" className="logo">Eazy<b>Stores</b></Link>
-    <div className="row"><Link to="/login">Log in</Link><Link className="btn" to="/signup">Start selling</Link></div>
+    <div className="row"><Link className="btn ghost sm" to="/login">Log in</Link><Link className="btn sm" to="/signup">Start selling</Link></div>
   </div></header>
 );
 
@@ -15,19 +15,33 @@ export function Landing() {
   return <>
     <Header />
     <section className="hero"><div className="wrap">
-      <div className="eyebrow">For independent sellers</div>
-      <h1>Your own online store, open in minutes.</h1>
-      <p className="lead">Add your products, share one link on Instagram or WhatsApp, and get paid. See what you really earn after costs and fees, with no technical skills needed.</p>
-      <div className="row"><Link className="btn" to="/signup">Create your free store</Link><Link className="btn secondary" to="/login">Log in</Link></div>
-      <div className="proof"><div><b>Free</b>to start</div><div><b>One link</b>to sell anywhere</div><div><b>Real profit</b>not just sales</div></div>
+      <div className="eyebrow">Free to start · No technical skills needed</div>
+      <h1>Sell online like the big brands.</h1>
+      <p className="lead">Launch a beautiful store in minutes, share one link anywhere, and see what you really earn after costs and fees.</p>
+      <div className="row"><Link className="btn lg" to="/signup">Create your store</Link><Link className="btn secondary lg" to="/login">Log in</Link></div>
+      <div className="mock" aria-hidden="true">
+        <div className="frame">
+          <div className="bar"><i /><i /><i /><span className="url">eazystores.ca/store/your-brand</span></div>
+          <div className="body">
+            <div><div className="tile a"><span><b>Oud Noir</b><b>$80</b></span></div></div>
+            <div><div className="tile b"><span><b>Rose Water</b><b>$25</b></span></div></div>
+            <div><div className="tile c"><span><b>Amber Candle</b><b>$32</b></span></div></div>
+          </div>
+        </div>
+        <div className="float"><small>This month</small><b>$4,280</b><small>Gross profit · $1,940</small></div>
+      </div>
     </div></section>
-    <main className="wrap"><div className="features">
-      {[['Look professional', 'A clean, fast storefront that works beautifully on every phone, with your products and photos front and centre.', <IcoTag key="a" />],
-        ['Sell without overselling', 'Stock is held while a customer checks out, so you never promise what you do not have.', <IcoBox key="b" />],
-        ['Know your numbers', 'Sales, costs, fees and profit kept separate, so you can tell whether you are actually making money.', <IcoChart key="c" />]]
-        .map(([t, d, i]) => <article className="card feature" key={t as string}><div className="ico">{i}</div><h3>{t}</h3><p>{d}</p></article>)}
-    </div></main>
-    <footer className="footer"><div className="wrap">© EazyStores. Development build: payments are simulated.</div></footer>
+    <main className="wrap">
+      <div className="band"><h2>Everything you need to run your business.</h2><p className="sub">One simple place to sell, manage stock and understand your numbers.</p></div>
+      <div className="features">
+        {[['A store that looks the part', 'Clean, fast, mobile-first pages that put your products and photos front and centre.', <IcoTag key="a" />],
+          ['Never oversell', 'Stock is held while a customer checks out, so you never promise what you do not have.', <IcoBox key="b" />],
+          ['Know what you earn', 'Sales, costs, fees and profit kept apart, so you can tell if you are really making money.', <IcoChart key="c" />]]
+          .map(([t, d, i]) => <article className="card feature" key={t as string}><div className="ico">{i}</div><h3>{t}</h3><p>{d}</p></article>)}
+      </div>
+      <section className="cta"><h2>Open your store today.</h2><p>It takes a few minutes and costs nothing to start.</p><Link className="btn lg" to="/signup">Get started free</Link></section>
+    </main>
+    <footer className="footer"><div className="wrap">© EazyStores · Development build: payments are simulated.</div></footer>
   </>;
 }
 
@@ -47,7 +61,7 @@ export function Signup() {
   return <>
     <Header />
     <main className="wrap" style={{ maxWidth: 520 }}>
-      <div className="eyebrow" style={{ marginTop: 28 }}>Get started</div><h1>Create your store</h1>
+      <h1 style={{ marginTop: 40 }}>Create your store</h1><p className="muted" style={{ marginTop: -6 }}>Free to start. You can change everything later.</p>
       <form className="card" onSubmit={submit}>
         {err && <Alert kind="err">{err}</Alert>}
         <Field label="Your name">{id => <input id={id} required autoComplete="name" value={f.fullName} onChange={e => set('fullName', e.target.value)} />}</Field>
@@ -82,7 +96,7 @@ export function Login() {
   return <>
     <Header />
     <main className="wrap" style={{ maxWidth: 520 }}>
-      <div className="eyebrow" style={{ marginTop: 28 }}>Welcome back</div><h1>Log in</h1>
+      <h1 style={{ marginTop: 40 }}>Welcome back</h1>
       <form className="card" onSubmit={submit}>
         {err && <Alert kind="err">{err}</Alert>}
         <Field label="Email">{id => <input id={id} type="email" required autoComplete="email" value={email} onChange={e => setEmail(e.target.value)} />}</Field>

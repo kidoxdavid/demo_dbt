@@ -15,6 +15,7 @@ export function kit(getApp: () => FastifyInstance) {
   const app = () => getApp();
   async function seller(n: string, opts: { category?: string } = {}) {
     const r = await app().inject({ method: 'POST', url: '/api/auth/signup', payload: { email: `${n}@k.test`, password: 'correct-horse-battery', fullName: n, businessName: `${n} Biz`, storeSlug: `${n}-shop` } });
+    if (!r.cookies.find(c => c.name === 'eazy_sid')) throw new Error('signup failed: ' + r.statusCode + ' ' + r.body);
     const cookie = r.cookies.find(c => c.name === 'eazy_sid')!.value;
     await app().inject({ method: 'PATCH', url: '/api/seller/business', ...ck(cookie), payload: { category: opts.category ?? 'gifts', description: 'x', fulfilment: { pickup: true, delivery: true, shipping: false } } });
     await app().inject({ method: 'POST', url: '/api/seller/store/publish', ...ck(cookie) });

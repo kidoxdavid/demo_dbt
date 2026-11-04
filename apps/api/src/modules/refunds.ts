@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { withTx, audit } from '../lib/db.js';
@@ -23,8 +24,6 @@ export function registerRefunds(app: FastifyInstance, deps: { tenantCtx: (r: Fas
     const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
     const b = z.object({ amountCents: z.number().int().min(1).max(100_000_000), reason: z.string().trim().min(3).max(300),
       restock: z.boolean().default(false), key: z.string().min(8).max(100).optional() }).strict().parse(req.body);
-    const provider = getProvider(); if (!provider) throw new HttpError(503, 'payments_not_configured');
-
     const out = await withTx(t, async c => {
       if (b.key) { const prior = (await c.query('SELECT id, amount_cents, order_id FROM refunds WHERE idempotency_key=$1', [b.key])).rows[0];
         if (prior) { if (prior.order_id !== id) throw new HttpError(409, 'idempotency_key_reused'); return { id: prior.id as string, replay: true }; } }
@@ -39,14 +38,20 @@ export function registerRefunds(app: FastifyInstance, deps: { tenantCtx: (r: Fas
       const pay = (await c.query(`SELECT * FROM payments WHERE order_id=$1 AND status='succeeded' ORDER BY created_at LIMIT 1`, [id])).rows[0];
       if (!pay) throw new HttpError(409, 'no_captured_payment');
 
-      const pr = await provider.refund({ paymentRef: pay.provider_ref, amountCents: b.amountCents, idempotencyKey: b.key ?? `${id}:${o.refunded_cents}:${b.amountCents}` });
+      // In-person (POS) sales were paid at the counter: the refund is handed back by the seller, so no payment provider is involved.
+      let pr: { providerRef: string }; let provider: { name: string };
+      if (pay.provider === 'pos') { provider = { name: 'pos' }; pr = { providerRef: `pos-manual-${randomUUID()}` }; }
+      else {
+        const real = getProvider(); if (!real) throw new HttpError(503, 'payments_not_configured');
+        provider = real; pr = await real.refund({ paymentRef: pay.provider_ref, amountCents: b.amountCents, idempotencyKey: b.key ?? `${id}:${o.refunded_cents}:${b.amountCents}` });
+      }
       const r = (await c.query(
         `INSERT INTO refunds(tenant_id,order_id,payment_id,amount_cents,reason,restocked,provider,provider_ref,idempotency_key,actor_user_id)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
         [t.tenantId, id, pay.id, b.amountCents, b.reason, b.restock, provider.name, pr.providerRef, b.key ?? null, t.userId])).rows[0];
 
       // Platform fee is returned pro rata so the seller is not charged a fee on money that went back to the customer.
-      const origFee = Math.floor((o.subtotal_cents * o.platform_fee_bps) / 10000);
+      const origFee = Math.floor(((o.subtotal_cents - o.discount_cents) * o.platform_fee_bps) / 10000);
       const doneNow = b.amountCents === remaining;
       const returned = (await c.query(`SELECT coalesce(sum(amount_cents) FILTER (WHERE account='platform_fee'),0)::int AS fee, coalesce(sum(amount_cents) FILTER (WHERE account='tax_payable'),0)::int AS tax
                                        FROM ledger_entries WHERE order_id=$1 AND memo='refund'`, [id])).rows[0];
@@ -71,7 +76,7 @@ export function registerRefunds(app: FastifyInstance, deps: { tenantCtx: (r: Fas
       await c.query(`UPDATE orders SET refunded_cents = refunded_cents + $2, status = CASE WHEN $3 THEN 'refunded' ELSE status END, updated_at=now() WHERE id=$1`, [id, b.amountCents, done]);
       await audit(c, { actor: t.userId, tenantId: t.tenantId, action: 'order.refund', entityType: 'order', entityId: id, next: { amountCents: b.amountCents, restocked: b.restock, full: done }, reason: b.reason });
       const st = (await c.query('SELECT name FROM stores WHERE id=$1', [o.store_id])).rows[0]?.name ?? 'the store';
-      await enqueue(c, { tenantId: t.tenantId, to: o.customer_email, template: 'refund_issued', data: { number: Number(o.number), amount: b.amountCents, currency: o.currency, storeName: st, url: mailUrl(`/order/${o.public_token}`) } });
+      if (!String(o.customer_email).endsWith('@invalid.example')) await enqueue(c, { tenantId: t.tenantId, to: o.customer_email, template: 'refund_issued', data: { number: Number(o.number), amount: b.amountCents, currency: o.currency, storeName: st, url: mailUrl(`/order/${o.public_token}`) } });
       return { id: r.id as string, replay: false, refundedCents: o.refunded_cents + b.amountCents, status: done ? 'refunded' : o.status };
     });
     return reply.code(out.replay ? 200 : 201).send(out);

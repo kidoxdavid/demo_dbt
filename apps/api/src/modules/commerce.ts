@@ -6,7 +6,7 @@ import { withTx, audit, type Ctx } from '../lib/db.js';
 import { HttpError } from '../lib/errors.js';
 import { getProvider } from '../lib/payments.js';
 import { reservationMinutes, uploadDir, maxImageBytes, uploadRateLimitMax } from '../config.js';
-import { taxFor } from '../lib/tax.js';
+import { priceCart } from '../lib/pricing.js';
 import { enqueue, ownerEmail, url as mailUrl } from '../lib/mail.js';
 import { customFieldsIn, withKeys, validateCustom, isUuid, type Field } from '../lib/custom.js';
 import { localStorageAdapter, sniffImage, isValidKey, thumbKey } from '../lib/storage.js';
@@ -22,6 +22,7 @@ const variantIn = z.object({
   options: z.record(z.string(), z.string().max(100)).default({}),
   priceCents: z.number().int().min(0).max(100_000_000), costCents: z.number().int().min(0).optional(),
   stock: z.number().int().min(0).max(1_000_000).default(0), trackInventory: z.boolean().default(true),
+  weightGrams: z.number().int().min(0).max(1_000_000).optional(), barcode: z.string().trim().min(1).max(64).optional(),
   lowStockThreshold: z.number().int().min(0).default(0),
 }).strict();
 const productIn = z.object({
@@ -80,7 +81,7 @@ export async function settlePayment(providerRef: string, outcome: 'succeeded' | 
       if (lv && lv.th > 0 && lv.avail <= lv.th && lv.avail + i.quantity > lv.th) lowStock.push({ name: lv.name, variant: lv.title, available: lv.avail });   // crossed the threshold with this sale
     }
     await c.query(`UPDATE orders SET status='paid', reservation_expires_at=NULL, updated_at=now() WHERE id=$1`, [o.id]);
-    const fee = Math.floor((o.subtotal_cents * o.platform_fee_bps) / 10000);
+    const fee = Math.floor(((o.subtotal_cents - o.discount_cents) * o.platform_fee_bps) / 10000);     // no fee on money given away as a discount
     const g = (await c.query('SELECT gen_random_uuid() id')).rows[0].id;
     const ins = (acct: string, amt: number) => c.query(
       `INSERT INTO ledger_entries(tenant_id,group_id,order_id,account,amount_cents,currency,memo) VALUES ($1,$2,$3,$4,$5,$6,'order paid')`,
@@ -91,7 +92,7 @@ export async function settlePayment(providerRef: string, outcome: 'succeeded' | 
     await audit(c, { tenantId: o.tenant_id, action: 'order.paid', entityType: 'order', entityId: o.id });
     const storeName = (await c.query('SELECT name FROM stores WHERE id=$1', [o.store_id])).rows[0]?.name ?? 'the store';
     const mailItems = items.map(i => ({ name: i.name, qty: i.quantity, unit: i.unit_price_cents }));
-    const common = { number: Number(o.number), currency: o.currency, items: mailItems, subtotal: o.subtotal_cents, shipping: o.shipping_cents, taxLines: o.tax_lines, total: o.total_cents };
+    const common = { number: Number(o.number), currency: o.currency, items: mailItems, subtotal: o.subtotal_cents, shipping: o.shipping_cents, discount: o.discount_cents, taxLines: o.tax_lines, total: o.total_cents };
     await enqueue(c, { tenantId: o.tenant_id, to: o.customer_email, template: 'order_confirmation', data: { ...common, customerName: o.customer_name, storeName, url: mailUrl(`/order/${o.public_token}`) } });
     const seller = await ownerEmail(c, o.tenant_id);
     if (seller) {
@@ -192,11 +193,11 @@ export function registerCommerce(app: FastifyInstance, deps: { tenantCtx: (r: Fa
         [t.tenantId, b.name, b.description ?? null, b.brand ?? null, JSON.stringify(b.attributes), b.madeToOrder, b.status, JSON.stringify(withKeys(b.customFields))])).rows[0];
       for (const v of b.variants) {
         const row = await c.query(
-          `INSERT INTO product_variants(tenant_id,product_id,title,sku,options,price_cents,cost_cents,track_inventory,low_stock_threshold)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
+          `INSERT INTO product_variants(tenant_id,product_id,title,sku,options,price_cents,cost_cents,track_inventory,low_stock_threshold,weight_grams,barcode)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`,
           [t.tenantId, p.id, v.title, v.sku ?? null, JSON.stringify(v.options), v.priceCents, v.costCents ?? null,
-           b.madeToOrder ? false : v.trackInventory, v.lowStockThreshold]).catch(e => {
-            if (e.code === '23505') throw new HttpError(409, 'duplicate_sku'); throw e; });
+           b.madeToOrder ? false : v.trackInventory, v.lowStockThreshold, v.weightGrams ?? null, v.barcode ?? null]).catch(e => {
+            if (e.code === '23505') throw new HttpError(409, e.constraint === 'product_variants_barcode' ? 'duplicate_barcode' : 'duplicate_sku'); throw e; });
         await c.query('INSERT INTO inventory_levels(variant_id,tenant_id,on_hand) VALUES ($1,$2,$3)', [row.rows[0].id, t.tenantId, v.stock]);
         if (v.stock) await c.query(`INSERT INTO inventory_movements(tenant_id,variant_id,delta,reason,actor_user_id) VALUES ($1,$2,$3,'initial',$4)`, [t.tenantId, row.rows[0].id, v.stock, t.userId]);
       }
@@ -218,7 +219,7 @@ export function registerCommerce(app: FastifyInstance, deps: { tenantCtx: (r: Fa
     const { limit, offset } = page.parse(req.query);
     return withTx(t, async c => (await c.query(
       `SELECT p.id,p.name,p.status,p.brand,p.attributes,p.custom_fields AS "customFields",p.moderation_reason AS "moderationReason",
-        (SELECT json_agg(json_build_object('id',v.id,'title',v.title,'sku',v.sku,'priceCents',v.price_cents,'costCents',v.cost_cents,
+        (SELECT json_agg(json_build_object('id',v.id,'title',v.title,'sku',v.sku,'barcode',v.barcode,'weightGrams',v.weight_grams,'priceCents',v.price_cents,'costCents',v.cost_cents,
            'onHand',l.on_hand,'reserved',l.reserved,'trackInventory',v.track_inventory,'lowStock',(v.track_inventory AND l.on_hand-l.reserved <= v.low_stock_threshold)))
          FROM product_variants v JOIN inventory_levels l ON l.variant_id=v.id WHERE v.product_id=p.id) AS variants,
         (SELECT coalesce(json_agg(json_build_object('id',m.id,'url','/media/'||m.storage_key) ORDER BY m.position),'[]'::json) FROM product_media m WHERE m.product_id=p.id) AS images
@@ -260,7 +261,7 @@ export function registerCommerce(app: FastifyInstance, deps: { tenantCtx: (r: Fa
     const t = await tenantCtx(req);
     const q = page.extend({ status: z.string().optional() }).parse(req.query);
     return withTx(t, async c => (await c.query(
-      `SELECT id,number,status,customer_name,customer_email,fulfilment,total_cents,currency,created_at FROM orders
+      `SELECT id,number,status,customer_name,customer_email,fulfilment,total_cents,currency,channel,discount_code,created_at FROM orders
        WHERE ($1::text IS NULL OR status=$1) ORDER BY created_at DESC LIMIT $2 OFFSET $3`, [q.status ?? null, q.limit, q.offset])).rows);
   });
 
@@ -302,7 +303,7 @@ export function registerCommerce(app: FastifyInstance, deps: { tenantCtx: (r: Fa
     return withTx(t, async c => {
       const args = [q.from ?? '1970-01-01T00:00:00Z', q.to ?? '2999-01-01T00:00:00Z'];
       const o = (await c.query(
-        `SELECT count(*)::int orders, coalesce(sum(subtotal_cents),0)::bigint gross_sales, coalesce(sum(shipping_cents),0)::bigint shipping_collected
+        `SELECT count(*)::int orders, coalesce(sum(subtotal_cents),0)::bigint gross_sales, coalesce(sum(shipping_cents),0)::bigint shipping_collected, coalesce(sum(discount_cents),0)::bigint discounts
          FROM orders WHERE status IN ('paid','processing','ready','shipped','completed') AND created_at BETWEEN $1 AND $2`, args)).rows[0];
       const k = (await c.query(
         `SELECT coalesce(sum(i.quantity*i.unit_cost_cents) FILTER (WHERE i.unit_cost_cents IS NOT NULL),0)::bigint cogs_known,
@@ -327,11 +328,11 @@ export function registerCommerce(app: FastifyInstance, deps: { tenantCtx: (r: Fa
       const refundsOnCounted = Number((await c.query(
         `SELECT coalesce(sum(r.amount_cents),0)::bigint n FROM refunds r JOIN orders o ON o.id=r.order_id
          WHERE o.status IN ('paid','processing','ready','shipped','completed') AND o.created_at BETWEEN $1 AND $2`, args)).rows[0].n);
-      const grossProfit = costKnown ? Number(k.sales_with_cost) - Number(k.cogs_known) - refundsOnCounted : null;
+      const grossProfit = costKnown ? Number(k.sales_with_cost) - Number(k.cogs_known) - refundsOnCounted - Number(o.discounts) : null;
       return {
         currency: 'CAD', orders: o.orders, bySource,
         grossSalesCents: Number(o.gross_sales), shippingCollectedCents: Number(o.shipping_collected),
-        discountsCents: 0, refundsCents: refundsOnCounted,
+        discountsCents: Number(o.discounts), refundsCents: refundsOnCounted,
         cogsCents: costKnown ? Number(k.cogs_known) : null, grossProfitCents: grossProfit,
         grossProfitIsPartial: k.lines_missing_cost > 0, lineItemsMissingCost: k.lines_missing_cost,
         platformFeesCents: Number(f.platform_fees), taxCollectedCents: Number(f.tax_collected), sellerEarningsBeforeProcessorFeesCents: Number(f.seller_earnings_before_processor_fees),
@@ -375,7 +376,7 @@ export function registerCommerce(app: FastifyInstance, deps: { tenantCtx: (r: Fa
 
   const checkoutIn = z.object({
     items: z.array(z.object({ variantId: z.string().uuid(), quantity: z.number().int().min(1).max(100), customizations: z.record(z.string().max(40), z.string().max(1000)).optional() }).strict()).min(1).max(50),
-    source: z.string().regex(/^[a-z0-9_-]{1,40}$/).optional(),
+    source: z.string().regex(/^[a-z0-9_-]{1,40}$/).optional(), discountCode: z.string().trim().max(40).optional(),
     email: z.string().email().max(254), name: z.string().trim().min(1).max(120),
     fulfilment: z.enum(['pickup', 'delivery']),
     address: z.object({ line1: z.string().min(1).max(200), city: z.string().min(1).max(100), region: z.string().max(100), postalCode: z.string().min(3).max(12), country: z.string().length(2) }).optional(),
@@ -404,7 +405,7 @@ export function registerCommerce(app: FastifyInstance, deps: { tenantCtx: (r: Fa
       if (!info.fulfilment?.[b.fulfilment === 'pickup' ? 'pickup' : 'delivery']) throw new HttpError(422, 'fulfilment_not_offered');
       // Price comes from the database, never the client.
       const rows = (await c.query(
-        `SELECT v.id, v.title, v.price_cents, v.cost_cents, p.name, p.custom_fields FROM product_variants v JOIN products p ON p.id=v.product_id
+        `SELECT v.id, v.title, v.price_cents, v.cost_cents, v.weight_grams, p.name, p.custom_fields FROM product_variants v JOIN products p ON p.id=v.product_id
          WHERE v.id = ANY($1::uuid[]) AND p.status='active'`, [reserveLines.map(l => l.variantId)])).rows;
       if (rows.length !== reserveLines.length) throw new HttpError(422, 'item_unavailable');
       // Customer answers are validated against the product's CURRENT fields; uploaded images must be unattached and belong to this store.
@@ -416,22 +417,24 @@ export function registerCommerce(app: FastifyInstance, deps: { tenantCtx: (r: Fa
       if (new Set(allUploadIds).size !== allUploadIds.length) throw new HttpError(422, 'custom_invalid_upload');
       if (!(await reserve(c, reserveLines))) throw new HttpError(409, 'out_of_stock');
       const byId = byVariant;
-      const subtotal = lines.reduce((n, l) => n + byId.get(l.variantId).price_cents * l.qty, 0);
-      const shipping = b.fulfilment === 'delivery' ? s.delivery_fee_cents : 0;
-      const tax = await taxFor(c, { fulfilment: b.fulfilment, destRegion: b.address?.region, sellerRegion: info.biz_region, federal: info.tax_federal, provincial: info.tax_provincial, taxableCents: subtotal + shipping });
-      const total = subtotal + shipping + tax.cents;
+      const priced = await priceCart(c, { fulfilment: b.fulfilment, destRegion: b.address?.region, sellerRegion: info.biz_region, federal: info.tax_federal, provincial: info.tax_provincial,
+        flatDeliveryFeeCents: s.delivery_fee_cents, code: b.discountCode, email: b.email, lockDiscount: true,
+        lines: reserveLines.map(l => ({ variantId: l.variantId, qty: l.qty, priceCents: byId.get(l.variantId).price_cents, weightGrams: byId.get(l.variantId).weight_grams })) });
+      const subtotal = priced.subtotalCents; const shipping = priced.shippingCents; const total = priced.totalCents;
+      const tax = { cents: priced.taxCents, lines: priced.taxLines, region: priced.taxRegion };
       const token = randomBytes(24).toString('base64url');
       const o = (await c.query(
-        `INSERT INTO orders(tenant_id,store_id,public_token,customer_email,customer_name,fulfilment,delivery_address,currency,subtotal_cents,shipping_cents,total_cents,platform_fee_bps,reservation_expires_at,source,tax_cents,tax_lines,tax_region)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12, now() + ($13 || ' minutes')::interval, $14, $15, $16, $17) RETURNING id, number`,
+        `INSERT INTO orders(tenant_id,store_id,public_token,customer_email,customer_name,fulfilment,delivery_address,currency,subtotal_cents,shipping_cents,total_cents,platform_fee_bps,reservation_expires_at,source,tax_cents,tax_lines,tax_region,discount_cents,discount_code)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12, now() + ($13 || ' minutes')::interval, $14, $15, $16, $17, $18, $19) RETURNING id, number`,
         [s.tenant_id, s.id, token, b.email, b.name, b.fulfilment, b.address ? JSON.stringify(b.address) : null, info.currency,
-         subtotal, shipping, total, info.transaction_fee_bps, String(reservationMinutes), b.source ?? null, tax.cents, JSON.stringify(tax.lines), tax.region])).rows[0];
+         subtotal, shipping, total, info.transaction_fee_bps, String(reservationMinutes), b.source ?? null, tax.cents, JSON.stringify(tax.lines), tax.region, priced.discountCents, priced.discountCode])).rows[0];
       for (const { l, snapshot } of checked) {
         const r = byId.get(l.variantId);
         await c.query(
           `INSERT INTO order_items(tenant_id,order_id,variant_id,name,variant_title,quantity,unit_price_cents,unit_cost_cents,custom_values) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
           [s.tenant_id, o.id, l.variantId, r.name, r.title, l.qty, r.price_cents, r.cost_cents, JSON.stringify(snapshot)]);
       }
+      if (priced.discountId) await c.query('INSERT INTO discount_redemptions(tenant_id,discount_id,order_id,email,amount_cents) VALUES ($1,$2,$3,$4,$5)', [s.tenant_id, priced.discountId, o.id, b.email, priced.discountCents]);
       if (allUploadIds.length) { // atomically claim the uploads: a concurrent checkout using the same image loses
         const claimed = await c.query('UPDATE custom_uploads SET order_id=$1 WHERE id = ANY($2::uuid[]) AND order_id IS NULL', [o.id, allUploadIds]);
         if (claimed.rowCount !== allUploadIds.length) throw new HttpError(422, 'custom_invalid_upload');
@@ -441,7 +444,7 @@ export function registerCommerce(app: FastifyInstance, deps: { tenantCtx: (r: Fa
         `INSERT INTO payments(tenant_id,order_id,provider,provider_ref,amount_cents,currency) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
         [s.tenant_id, o.id, provider.name, intent.providerRef, total, info.currency])).rows[0];
       return { orderToken: token, orderNumber: Number(o.number), paymentId: pay.id as string, totalCents: total, currency: info.currency as string,
-               shippingCents: shipping, taxCents: tax.cents, taxLines: tax.lines, paymentProvider: { name: provider.name, status: provider.status } };
+               shippingCents: shipping, taxCents: tax.cents, taxLines: tax.lines, discountCents: priced.discountCents, discountCode: priced.discountCode, paymentProvider: { name: provider.name, status: provider.status } };
     });
     return reply.code(201).send(result);
   });
@@ -449,17 +452,17 @@ export function registerCommerce(app: FastifyInstance, deps: { tenantCtx: (r: Fa
   app.post('/api/public/stores/:slug/quote', async (req) => {
     const { slug } = z.object({ slug: z.string().regex(SLUG) }).parse(req.params);
     const b = z.object({ items: z.array(z.object({ variantId: z.string().uuid(), quantity: z.number().int().min(1).max(100) }).strict()).min(1).max(50),
-      fulfilment: z.enum(['pickup', 'delivery']), region: z.string().max(100).optional() }).strict().parse(req.body);
+      fulfilment: z.enum(['pickup', 'delivery']), region: z.string().max(100).optional(), discountCode: z.string().trim().max(40).optional(), email: z.string().email().max(254).optional() }).strict().parse(req.body);
     const s = await publicStore(slug);
     const qty = new Map<string, number>(); for (const i of b.items) qty.set(i.variantId, (qty.get(i.variantId) ?? 0) + i.quantity);
     return withTx({ tenantId: s.tenant_id }, async c => {
       const info = (await c.query(`SELECT b.region AS biz_region, b.tax_federal, b.tax_provincial FROM businesses b`)).rows[0];
-      const rows = (await c.query(`SELECT v.id, v.price_cents FROM product_variants v JOIN products p ON p.id=v.product_id WHERE v.id = ANY($1::uuid[]) AND p.status='active'`, [[...qty.keys()]])).rows;
+      const rows = (await c.query(`SELECT v.id, v.price_cents, v.weight_grams FROM product_variants v JOIN products p ON p.id=v.product_id WHERE v.id = ANY($1::uuid[]) AND p.status='active'`, [[...qty.keys()]])).rows;
       if (rows.length !== qty.size) throw new HttpError(422, 'item_unavailable');
-      const subtotal = rows.reduce((n, r) => n + r.price_cents * (qty.get(r.id) ?? 0), 0);
-      const shipping = b.fulfilment === 'delivery' ? s.delivery_fee_cents : 0;
-      const tax = await taxFor(c, { fulfilment: b.fulfilment, destRegion: b.region, sellerRegion: info.biz_region, federal: info.tax_federal, provincial: info.tax_provincial, taxableCents: subtotal + shipping });
-      return { subtotalCents: subtotal, shippingCents: shipping, taxCents: tax.cents, taxLines: tax.lines, totalCents: subtotal + shipping + tax.cents };
+      const priced = await priceCart(c, { fulfilment: b.fulfilment, destRegion: b.region, sellerRegion: info.biz_region, federal: info.tax_federal, provincial: info.tax_provincial, flatDeliveryFeeCents: s.delivery_fee_cents,
+        code: b.discountCode, email: b.email, lines: rows.map(r => ({ variantId: r.id, qty: qty.get(r.id) ?? 0, priceCents: r.price_cents, weightGrams: r.weight_grams })) });
+      return { subtotalCents: priced.subtotalCents, discountCents: priced.discountCents, discountCode: priced.discountCode, shippingCents: priced.shippingCents, shippingRule: priced.shippingRule,
+               taxCents: priced.taxCents, taxLines: priced.taxLines, totalCents: priced.totalCents };
     });
   });
 
@@ -493,7 +496,7 @@ export function registerCommerce(app: FastifyInstance, deps: { tenantCtx: (r: Fa
   app.get('/api/public/orders/:token', async (req) => {
     const { token } = z.object({ token: z.string().min(20).max(64) }).parse(req.params);
     const o = await withTx({ platform: true }, async c => { // lookup by unguessable capability token
-      const r = (await c.query('SELECT id,number,status,fulfilment,subtotal_cents,shipping_cents,tax_cents,tax_lines,total_cents,refunded_cents,currency,created_at FROM orders WHERE public_token=$1', [token])).rows[0];
+      const r = (await c.query('SELECT id,number,status,fulfilment,subtotal_cents,discount_cents,discount_code,shipping_cents,tax_cents,tax_lines,total_cents,refunded_cents,currency,created_at FROM orders WHERE public_token=$1', [token])).rows[0];
       if (r) r.items = (await c.query('SELECT name,variant_title,quantity,unit_price_cents FROM order_items WHERE order_id=$1', [r.id])).rows;
       return r;
     });

@@ -18,6 +18,8 @@ import { registerRefunds } from './modules/refunds.js';
 import { registerShare } from './modules/share.js';
 import { registerAccount, createMfaChallenge } from './modules/account.js';
 import { registerGovernance } from './modules/governance.js';
+import { registerPricing } from './modules/pricing.js';
+import { registerPos } from './modules/pos.js';
 import { issueToken } from './lib/tokens.js';
 import { enqueue, url as mailUrl } from './lib/mail.js';
 const SLUG = /^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$/;
@@ -165,6 +167,8 @@ export async function buildApp() {
 
   registerAccount(app, { authenticate, createSession: async (reply, userId, mfa) => { await setSession(reply, userId, mfa); } });
   registerGovernance(app, { tenantCtx, platformPerm, authenticate });
+  registerPricing(app, { tenantCtx });
+  registerPos(app, { tenantCtx });
 
   // ---- Seller: business & onboarding (tenant resolved server-side; RLS enforces isolation) ----
   app.get('/api/seller/business', async (req) => {
@@ -254,8 +258,8 @@ export async function buildApp() {
     const s = await withTx({}, async c => (await c.query('SELECT tenant_id,slug,name,tagline,published_at,delivery_fee_cents,theme FROM stores WHERE slug=$1', [slug])).rows[0]);
     if (!s) throw new HttpError(404, 'not_found');
     // Tenant context derived from the store row (never client input) to read the offered fulfilment options.
-    const f = await withTx({ tenantId: s.tenant_id }, async c => (await c.query('SELECT fulfilment, currency, category, city, region, verification_status, (tax_federal OR cardinality(tax_provincial) > 0) AS taxes FROM businesses WHERE tenant_id=$1', [s.tenant_id])).rows[0]);
-    return { slug: s.slug, name: s.name, tagline: s.tagline, published_at: s.published_at, deliveryFeeCents: s.delivery_fee_cents, theme: s.theme, category: f.category, city: f.city, region: f.region, chargesTax: f.taxes, verified: f.verification_status === 'verified',
+    const f = await withTx({ tenantId: s.tenant_id }, async c => (await c.query('SELECT fulfilment, currency, category, city, region, verification_status, (tax_federal OR cardinality(tax_provincial) > 0) AS taxes, EXISTS (SELECT 1 FROM shipping_rules sr WHERE sr.tenant_id=$1) AS has_rules FROM businesses WHERE tenant_id=$1', [s.tenant_id])).rows[0]);
+    return { slug: s.slug, name: s.name, tagline: s.tagline, published_at: s.published_at, deliveryFeeCents: s.delivery_fee_cents, theme: s.theme, category: f.category, city: f.city, region: f.region, chargesTax: f.taxes, shippingRules: f.has_rules, verified: f.verification_status === 'verified',
              fulfilment: { pickup: !!f.fulfilment?.pickup, delivery: !!f.fulfilment?.delivery }, currency: f.currency };
   });
 

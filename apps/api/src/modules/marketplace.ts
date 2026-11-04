@@ -30,6 +30,7 @@ export function registerMarketplace(app: FastifyInstance) {
                 (SELECT min(v.price_cents) FROM product_variants v WHERE v.product_id=p.id) AS price_from,
                 (SELECT max(v.price_cents) FROM product_variants v WHERE v.product_id=p.id) AS "priceTo",
                 (SELECT '/media/'||m.storage_key FROM product_media m WHERE m.product_id=p.id ORDER BY m.position LIMIT 1) AS image,
+                (SELECT '/media/'||m.storage_key FROM product_media m WHERE m.product_id=p.id ORDER BY m.position OFFSET 1 LIMIT 1) AS image2,
                 EXISTS (SELECT 1 FROM product_variants v JOIN inventory_levels l ON l.variant_id=v.id
                         WHERE v.product_id=p.id AND (NOT v.track_inventory OR l.on_hand-l.reserved>0)) AS available,
                 count(*) OVER()::int AS total

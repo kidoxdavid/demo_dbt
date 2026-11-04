@@ -96,14 +96,16 @@ async function noHScroll(page, label) {
     const g = await guest.newPage();
     await g.goto(`${BASE}/store/${s}`);
     await g.getByRole('heading', { name: `Scented ${s}` }).waitFor();
-    await g.getByText('Pickup available').waitFor(); await g.getByText('Delivery $5.00').first().waitFor();
-    await g.locator('.pmedia img').first().waitFor();   // uploaded photo is shown on the public storefront
-    assert.ok(await g.locator('.pmedia img').first().evaluate(i => i.complete && i.naturalWidth > 0), 'storefront image failed to load');
+    await g.getByText(/Pickup · Delivery \$5\.00/).waitFor();
+    await g.locator('.pc-img img.a').first().waitFor();   // uploaded photo is shown on the public storefront
+    assert.ok(await g.locator('.pc-img img.a').first().evaluate(i => i.complete && i.naturalWidth > 0), 'storefront image failed to load');
     await noHScroll(g, `${name} storefront`);
     await g.screenshot({ path: `${out}/${name}-4-storefront.png`, fullPage: true });
-    await g.getByLabel('Option for Oud Noir').selectOption({ label: '100ml · $140.00' });
+    await g.getByRole('link', { name: /Oud Noir/ }).first().click();       // cards link to the product page (no quick-add on the grid)
+    await g.waitForURL('**/p/**');
+    await g.getByRole('button', { name: '100ml', exact: true }).click();
     await g.getByRole('button', { name: 'Add to cart' }).click();
-    await g.getByRole('link', { name: 'Checkout' }).click();
+    await g.getByRole('link', { name: 'Check out', exact: true }).click();
     await g.locator('.sumline.total').filter({ hasText: '$140.00' }).waitFor();
     await g.getByLabel('Name').fill('Guest Buyer');
     await g.getByLabel('Email').fill('guest@example.test');
@@ -168,7 +170,7 @@ async function noHScroll(page, label) {
     await g.waitForURL('**/p/**');
     await g.locator('h1', { hasText: 'Oud Noir' }).waitFor();
     await g.getByRole('button', { name: 'Add to cart' }).click();
-    await g.getByRole('link', { name: /View cart and check out/ }).waitFor();
+    await g.getByRole('link', { name: 'Check out', exact: true }).waitFor();
     await noHScroll(g, `${name} product page`);
     await g.screenshot({ path: `${out}/${name}-12-product-page.png`, fullPage: true });
     await seller.close(); await guest.close();

@@ -2,9 +2,13 @@ import { FormEvent, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api, ApiError, errorText, money } from '../api';
 import { Alert, Badge, Empty, Field } from '../ui';
+import { PCard } from './Market';
 
 type CartLine = { variantId: string; name: string; title: string; priceCents: number; qty: number };
 const key = (slug: string) => `eazy_cart_${slug}`;
+/** Marks customer-facing pages so the refined public theme applies (body.pub). */
+export function usePub() { useEffect(() => { document.body.classList.add('pub'); return () => document.body.classList.remove('pub'); }, []); }
+
 export function useCart(slug: string) {
   const read = (): CartLine[] => { try { return JSON.parse(localStorage.getItem(key(slug)) ?? '[]'); } catch { return []; } };
   const [lines, setLines] = useState<CartLine[]>(read);
@@ -24,41 +28,32 @@ export function useStore(slug: string) {
 }
 
 export function Storefront() {
+  usePub();
   const { slug = '' } = useParams(); const { store, missing } = useStore(slug); const cart = useCart(slug);
-  const [products, setProducts] = useState<any[] | null>(null); const [sel, setSel] = useState<Record<string, string>>({});
+  const [products, setProducts] = useState<any[] | null>(null);
   useEffect(() => { if (store) api(`/api/public/stores/${slug}/products?limit=100`).then(setProducts); }, [store, slug]);
   if (missing) return <div className="wrap"><h1>Store not found</h1><p>This store doesn't exist or isn't open yet.</p></div>;
   if (!store) return <div className="wrap"><p className="muted">Loading…</p></div>;
-  const accent = /^#[0-9a-f]{6}$/i.test(store.theme?.accent ?? '') ? store.theme.accent : '#0b0b0c';
+  const accent = /^#[0-9a-f]{6}$/i.test(store.theme?.accent ?? '') ? store.theme.accent : '#141414';
   const dark = store.theme?.hero === 'dark'; const spacious = store.theme?.layout === 'spacious';
-  return <div className="shop" style={{ ['--btn' as any]: accent, ['--hero-accent' as any]: accent }}>
-    <header className="top"><div className="wrap"><span className="row"><Link to="/" className="back" aria-label="Back to marketplace">←</Link><span className="logo">{store.name}</span></span>
-      <Link className="btn secondary sm" to={`/store/${slug}/checkout`}>Cart ({cart.count})</Link></div></header>
-    <section className={`shop-hero${dark ? ' dark' : ''}`}><div className="wrap">
-      {store.category && <div className="eyebrow">{[store.category, store.city].filter(Boolean).join(' · ')}</div>}
-      <h1>{store.name}</h1>{store.tagline && <p>{store.tagline}</p>}
-      <div className="pills">{store.fulfilment.pickup && <span className="pill">Pickup available</span>}
-        {store.fulfilment.delivery && <span className="pill">Delivery {store.deliveryFeeCents ? money(store.deliveryFeeCents, store.currency) : 'free'}</span>}<span className="pill">Secure checkout</span></div>
+  const info = [store.fulfilment.pickup && 'Pickup', store.fulfilment.delivery && `Delivery ${store.deliveryFeeCents ? money(store.deliveryFeeCents, store.currency) : 'free'}`].filter(Boolean).join(' · ');
+  return <div style={{ ['--btn' as any]: accent, ['--a' as any]: accent }}>
+    <header className="ptop"><div className="wrap pbar"><Link to="/" className="plogo" aria-label="Back to the marketplace">Eazy<i>Stores</i></Link>
+      <span className="pstore">{store.name}</span>
+      <div className="pright"><Link className="plink" to={`/store/${slug}/checkout`}>Cart ({cart.count})</Link></div></div></header>
+    <section className={`shero${dark ? ' dark' : ''}`}><div className="wrap">
+      <span className="kicker">{[store.category, store.city].filter(Boolean).join(' · ')}</span>
+      <h1>{store.name}</h1>{store.tagline && <p className="lede">{store.tagline}</p>}
+      <p className="meta">{info}</p>
     </div></section>
     <main className="wrap">
-      {products && products.length > 0 && <div className="section-title"><h2>All products</h2><span className="muted small">{products.length} item{products.length > 1 ? 's' : ''}</span></div>}
       {products && !products.length && <Empty title="Nothing here yet">This store hasn't added products. Check back soon.</Empty>}
-      <div className={`products${spacious ? ' spacious' : ''}`}>
+      {products && products.length > 0 && <div className="shead"><h2>Collection</h2><span className="muted small">{products.length} {products.length === 1 ? 'piece' : 'pieces'}</span></div>}
+      <div className={`pgrid${spacious ? ' wide' : ''}`}>
         {products?.map(p => {
-          const vid = sel[p.id] ?? p.variants[0].id; const v = p.variants.find((x: any) => x.id === vid);
-          return <article className="pcard" key={p.id}>
-            <Link to={`/store/${slug}/p/${p.id}`} className="plink" aria-label={`View ${p.name}`}><div className="pmedia">
-              {p.images?.[0] ? <img src={p.images[0]} alt="" loading="lazy" /> : <div className="ph" aria-hidden="true">{p.name.slice(0, 1).toUpperCase()}</div>}
-              {!v.available ? <span className="sold">Sold out</span> : p.madeToOrder ? <span className="sold">Made to order</span> : null}
-            </div>
-            {p.brand && <div className="brand">{p.brand}</div>}
-            <h3>{p.name}</h3></Link>
-            {p.description && <p className="desc">{p.description}</p>}
-            {p.variants.length > 1 && <select aria-label={`Option for ${p.name}`} value={vid} onChange={e => setSel({ ...sel, [p.id]: e.target.value })}>
-              {p.variants.map((x: any) => <option key={x.id} value={x.id}>{x.title} · {money(x.priceCents, store.currency)}{x.available ? '' : ' (sold out)'}</option>)}</select>}
-            <div className="price">{money(v.priceCents, store.currency)}</div>
-            <button disabled={!v.available} onClick={() => cart.add({ variantId: v.id, name: p.name, title: v.title, priceCents: v.priceCents })}>{v.available ? 'Add to cart' : 'Sold out'}</button>
-          </article>;
+          const prices = p.variants.map((x: any) => x.priceCents); const lo = Math.min(...prices), hi = Math.max(...prices);
+          return <PCard key={p.id} p={{ id: p.id, name: p.name, storeSlug: slug, storeName: p.brand || store.name, currency: store.currency, priceFrom: lo, priceTo: hi,
+            image: p.images?.[0], image2: p.images?.[1], available: p.variants.some((x: any) => x.available), madeToOrder: p.madeToOrder }} />;
         })}
       </div>
     </main>
@@ -68,6 +63,7 @@ export function Storefront() {
 }
 
 export function StoreCheckout() {
+  usePub();
   const { slug = '' } = useParams(); const nav = useNavigate(); const { store, missing } = useStore(slug); const cart = useCart(slug);
   const [f, setF] = useState({ name: '', email: '', fulfilment: 'pickup', line1: '', city: '', region: '', postalCode: '' });
   const [err, setErr] = useState(''); const [busy, setBusy] = useState(false); const [placed, setPlaced] = useState<any>(null);
@@ -138,6 +134,7 @@ export function StoreCheckout() {
 }
 
 export function OrderStatus() {
+  usePub();
   const { token = '' } = useParams(); const [o, setO] = useState<any>(null); const [err, setErr] = useState('');
   useEffect(() => { api(`/api/public/orders/${token}`).then(setO).catch(e => setErr(errorText(e))); }, [token]);
   return <main className="wrap" style={{ maxWidth: 560 }}>

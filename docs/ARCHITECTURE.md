@@ -189,3 +189,21 @@ Edge cases covered by tests: six buyers racing for one unit (exactly one wins); 
 **Honest limits:** demo products are generated placeholder illustrations, not photographs; the marketplace orders by newest, so one store's batch can dominate (needs ranking and mixing before launch); no per-category product templates (attributes are free-form and unsuggested); personalisation inputs at checkout (names, uploaded photos, quotes) are not built, so made-to-order products can only be sold as fixed options; there is no multi-store cart (each store checks out separately); no reviews, ratings, wishlists or customer accounts; no location-based "near me" filtering; store accent colours are not contrast-checked, so a very light accent could produce unreadable button text.
 
 **Demo data:** `node apps/web/e2e/seed-demo.cjs` seeds six stores (fragrance, 3D printing, jewellery, beauty, fashion, phone accessories) through the real API. Dev only.
+
+## Public design v3 report (editorial, store-first)
+
+**Why:** feedback was that the customer side felt like a big catalogue marketplace. The traits behind that feel were a dominant search bar, category pills, a dense wall of identical product cards with a price and "Add to cart" on each, and rounded boxes. v3 removes those on purpose.
+
+**What changed** (customer pages only, scoped to `body.pub`; the seller dashboard keeps its own tool-like system):
+- Marketplace home is curated and brand-first: one featured maker, category tiles, a "makers" list, and only four products under "New this week" (one per store). The full product grid exists, but only behind "View all products", a category, or a search.
+- Header: wordmark, categories as plain text links, search that opens on demand.
+- Cards: sharp 4:5 images, hairline rules, small-caps store name, quiet price, and a hover swap to the second photo. No add-to-cart on the grid; shoppers choose options on the product page.
+- Product page: vertical thumbnails, large image, sticky details, option squares, and accordion sections for description, attributes and delivery.
+- Store pages: oversized light display title in the store's own accent (light or dark header), a "Collection" grid.
+- Typography: Inter for UI, a single `--display` font variable for headings (currently Newsreader). Alternatives rendered and compared: Instrument Serif and Inter Tight.
+
+**Tested:** 56 API tests and the browser E2E (updated for product-page checkout flow) pass at 375px and 1280px, including a typo search, product page and add-to-cart.
+
+**Bugs found while building:** a class-name collision (`.feature`) between the new hero and the old landing cards; global public button padding overriding the thumbnail padding (specificity); duplicated "brand · store" label when they are identical; the near-black accent producing a flat grey hero tint (reduced).
+
+**Open:** font choice awaits the owner's decision (one-line change); landing page (`/sell`) and seller dashboard are not yet restyled to match the editorial public theme; the featured maker is simply the newest store (needs curation controls in admin); category tiles use the newest store's first photo; placeholder illustrations stand in for photography.

@@ -211,6 +211,13 @@ export function registerGovernance(app: FastifyInstance, deps: {
         await c.query('UPDATE order_items SET custom_values=$2 WHERE id=$1', [it.id, JSON.stringify(scrubbed)]);
       }
       await c.query(`UPDATE orders SET customer_name='Erased customer', customer_email='erased-'||id||'@invalid.example', delivery_address=NULL, anonymised_at=now() WHERE id = ANY($1::uuid[])`, [ids]);
+      // A customer account under this email: wishlist deleted, reviews anonymised (the review text stays, the author does not).
+      const acct = (await c.query(`SELECT id FROM users WHERE lower(email)=lower($1) AND NOT EXISTS (SELECT 1 FROM memberships m WHERE m.user_id=users.id)`, [b.email])).rows[0];
+      if (acct) {
+        await c.query('DELETE FROM wishlist_items WHERE user_id=$1', [acct.id]);
+        await c.query(`UPDATE product_reviews SET reviewer_name='Former customer', user_id=NULL WHERE user_id=$1`, [acct.id]);
+        await c.query('UPDATE orders SET customer_user_id=NULL WHERE customer_user_id=$1', [acct.id]);
+      }
       const mails = await c.query(`UPDATE email_outbox SET to_email='erased@invalid.example', subject='[erased]', text_body='[erased]', html_body='[erased]' WHERE lower(to_email)=lower($1)`, [b.email]);
       const hash = createHash('sha256').update(b.email.toLowerCase()).digest('hex').slice(0, 16);
       await audit(c, { actor: req.user!.id, action: 'privacy.erase_customer', entityType: 'customer', entityId: hash, next: { orders: ids.length, emails: mails.rowCount, uploads: uploads.length }, reason: b.reason, ip: req.ip });

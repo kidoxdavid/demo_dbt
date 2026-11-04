@@ -39,6 +39,7 @@ export function registerMarketplace(app: FastifyInstance) {
                 (SELECT '/media/'||m.storage_key FROM product_media m WHERE m.product_id=p.id ORDER BY m.position OFFSET 1 LIMIT 1) AS image2,
                 EXISTS (SELECT 1 FROM product_variants v JOIN inventory_levels l ON l.variant_id=v.id
                         WHERE v.product_id=p.id AND (NOT v.track_inventory OR l.on_hand-l.reserved>0)) AS available,
+                (SELECT json_build_object('avg', round(avg(r.rating)::numeric,1)::float, 'count', count(*)::int) FROM product_reviews r WHERE r.product_id=p.id AND r.status='published') AS rating,
                 count(*) OVER()::int AS total
          FROM products p JOIN stores s ON s.tenant_id=p.tenant_id JOIN tenants t ON t.id=p.tenant_id JOIN businesses b ON b.tenant_id=p.tenant_id
          WHERE ${VISIBLE}
@@ -96,7 +97,8 @@ export function registerMarketplace(app: FastifyInstance) {
         (SELECT json_agg(json_build_object('id',v.id,'title',v.title,'options',v.options,'priceCents',v.price_cents,
            'available',(NOT v.track_inventory) OR (l.on_hand-l.reserved>0)) ORDER BY v.created_at)
          FROM product_variants v JOIN inventory_levels l ON l.variant_id=v.id WHERE v.product_id=p.id) AS variants,
-        (SELECT coalesce(json_agg('/media/'||m.storage_key ORDER BY m.position),'[]'::json) FROM product_media m WHERE m.product_id=p.id) AS images
+        (SELECT coalesce(json_agg('/media/'||m.storage_key ORDER BY m.position),'[]'::json) FROM product_media m WHERE m.product_id=p.id) AS images,
+        (SELECT json_build_object('avg', round(avg(r.rating)::numeric,1)::float, 'count', count(*)::int) FROM product_reviews r WHERE r.product_id=p.id AND r.status='published') AS rating
        FROM products p WHERE p.id=$1 AND p.status='active'`, [id])).rows[0]);
     if (!p) throw new HttpError(404, 'not_found');
     return p;

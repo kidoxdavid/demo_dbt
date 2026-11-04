@@ -20,6 +20,7 @@ import { registerAccount, createMfaChallenge } from './modules/account.js';
 import { registerGovernance } from './modules/governance.js';
 import { registerPricing } from './modules/pricing.js';
 import { registerPos } from './modules/pos.js';
+import { registerCustomers } from './modules/customers.js';
 import { issueToken } from './lib/tokens.js';
 import { enqueue, url as mailUrl } from './lib/mail.js';
 const SLUG = /^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$/;
@@ -401,7 +402,9 @@ export async function buildApp() {
     });
   });
 
-  registerCommerce(app, { tenantCtx });
+  const optionalUserId = async (req: FastifyRequest) => { if (!req.cookies[COOKIE]) return null; try { await authenticate(req); return req.user!.id; } catch { return null; } };
+  registerCommerce(app, { tenantCtx, optionalUserId });
+  registerCustomers(app, { tenantCtx, authenticate, platformPerm, setSession });
   registerImport(app, { tenantCtx });
   registerMarketplace(app);
   registerRefunds(app, { tenantCtx });

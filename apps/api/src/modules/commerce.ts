@@ -128,7 +128,7 @@ const TRANSITIONS: Record<string, string[]> = {
   paid: ['processing'], processing: ['ready', 'shipped'], ready: ['completed'], shipped: ['completed'],
 };
 
-export function registerCommerce(app: FastifyInstance, deps: { tenantCtx: (r: FastifyRequest) => Promise<TenantCtx> }) {
+export function registerCommerce(app: FastifyInstance, deps: { tenantCtx: (r: FastifyRequest) => Promise<TenantCtx>; optionalUserId?: (r: FastifyRequest) => Promise<string | null> }) {
   const { tenantCtx } = deps;
   const storage = localStorageAdapter(uploadDir);
 
@@ -366,7 +366,8 @@ export function registerCommerce(app: FastifyInstance, deps: { tenantCtx: (r: Fa
         (SELECT json_agg(json_build_object('id',v.id,'title',v.title,'options',v.options,'priceCents',v.price_cents,
            'available',(NOT v.track_inventory) OR (l.on_hand-l.reserved>0)))
          FROM product_variants v JOIN inventory_levels l ON l.variant_id=v.id WHERE v.product_id=p.id) AS variants,
-        (SELECT coalesce(json_agg('/media/'||m.storage_key ORDER BY m.position),'[]'::json) FROM product_media m WHERE m.product_id=p.id) AS images
+        (SELECT coalesce(json_agg('/media/'||m.storage_key ORDER BY m.position),'[]'::json) FROM product_media m WHERE m.product_id=p.id) AS images,
+        (SELECT json_build_object('avg', round(avg(r.rating)::numeric,1)::float, 'count', count(*)::int) FROM product_reviews r WHERE r.product_id=p.id AND r.status='published') AS rating
        FROM products p WHERE p.status='active' AND ($3::text IS NULL OR p.name ILIKE $3 ESCAPE '\\' OR p.brand ILIKE $3 ESCAPE '\\' OR p.description ILIKE $3 ESCAPE '\\' OR ($5::boolean AND word_similarity($4, p.name) > 0.45))
        ORDER BY ${order} LIMIT $1 OFFSET $2`, [q.limit, q.offset, like, q.q ?? '', fuzzy])).rows;
       const total = Number((await c.query(`SELECT count(*) n FROM products p WHERE p.status='active' AND ($1::text IS NULL OR p.name ILIKE $1 ESCAPE '\\' OR p.brand ILIKE $1 ESCAPE '\\' OR p.description ILIKE $1 ESCAPE '\\' OR ($3::boolean AND word_similarity($2, p.name) > 0.45))`, [like, q.q ?? '', fuzzy])).rows[0].n);
@@ -388,6 +389,7 @@ export function registerCommerce(app: FastifyInstance, deps: { tenantCtx: (r: Fa
     const provider = getProvider();
     if (!provider) throw new HttpError(503, 'payments_not_configured');
     if (b.fulfilment === 'delivery' && !b.address) throw new HttpError(422, 'address_required');
+    const customerUserId = (await deps.optionalUserId?.(req)) ?? null;       // a signed-in customer's order is linked to their account; guests still check out
     const s = await publicStore(slug);
     // Lines stay separate when their customisation differs; stock is reserved per variant in total.
     const lineMap = new Map<string, { variantId: string; qty: number; custom: Record<string, string> }>();
@@ -424,10 +426,10 @@ export function registerCommerce(app: FastifyInstance, deps: { tenantCtx: (r: Fa
       const tax = { cents: priced.taxCents, lines: priced.taxLines, region: priced.taxRegion };
       const token = randomBytes(24).toString('base64url');
       const o = (await c.query(
-        `INSERT INTO orders(tenant_id,store_id,public_token,customer_email,customer_name,fulfilment,delivery_address,currency,subtotal_cents,shipping_cents,total_cents,platform_fee_bps,reservation_expires_at,source,tax_cents,tax_lines,tax_region,discount_cents,discount_code)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12, now() + ($13 || ' minutes')::interval, $14, $15, $16, $17, $18, $19) RETURNING id, number`,
+        `INSERT INTO orders(tenant_id,store_id,public_token,customer_email,customer_name,fulfilment,delivery_address,currency,subtotal_cents,shipping_cents,total_cents,platform_fee_bps,reservation_expires_at,source,tax_cents,tax_lines,tax_region,discount_cents,discount_code,customer_user_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12, now() + ($13 || ' minutes')::interval, $14, $15, $16, $17, $18, $19, $20) RETURNING id, number`,
         [s.tenant_id, s.id, token, b.email, b.name, b.fulfilment, b.address ? JSON.stringify(b.address) : null, info.currency,
-         subtotal, shipping, total, info.transaction_fee_bps, String(reservationMinutes), b.source ?? null, tax.cents, JSON.stringify(tax.lines), tax.region, priced.discountCents, priced.discountCode])).rows[0];
+         subtotal, shipping, total, info.transaction_fee_bps, String(reservationMinutes), b.source ?? null, tax.cents, JSON.stringify(tax.lines), tax.region, priced.discountCents, priced.discountCode, customerUserId])).rows[0];
       for (const { l, snapshot } of checked) {
         const r = byId.get(l.variantId);
         await c.query(

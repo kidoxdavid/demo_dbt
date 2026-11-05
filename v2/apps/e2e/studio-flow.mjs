@@ -11,6 +11,7 @@ const text = async sel => (await page.locator(sel).first().innerText());
 // ---- 1. Onboarding
 await page.goto(BASE + '/studio'); await page.waitForURL(/\/studio\/login/); ok(true, 'signed-out visitors are sent to the studio sign-in');
 await page.goto(BASE + '/studio/start/2'); await page.waitForURL(/\/studio\/start\/1/); ok(true, 'later onboarding steps need an account first');
+const t0 = Date.now();   // timing starts when a new maker lands on step 1
 await page.waitForSelector('.tile-sel'); ok((await page.locator('.tile-sel').count()) === 10, 'step 1 shows ten category tiles');
 ok(await page.getByRole('button', { name: 'Continue' }).isDisabled(), 'Continue waits for a choice');
 await page.getByRole('button', { name: 'Candles', exact: true }).click(); await page.getByRole('button', { name: 'Jewellery', exact: true }).click(); await page.getByRole('button', { name: 'Continue' }).click();
@@ -26,7 +27,7 @@ await page.waitForFunction(() => document.querySelector('.saved')?.textContent?.
 await page.waitForFunction(() => !document.querySelector('.problems')); ok(true, 'the readiness list clears once nothing is missing');
 await page.getByRole('button', { name: 'Publish product' }).click(); await page.waitForURL(/\/studio\/start\/4/); ok(true, 'product published, shop goes live');
 await page.fill('#sh-rate', '7.50'); await page.fill('#sh-free', '60'); await page.getByRole('button', { name: 'Continue' }).click(); await page.waitForURL(/\/studio\/start\/5/); await page.waitForSelector('.qr svg');
-ok((await text('.livecard .u')).includes('/shop/'), 'step 5 shows the shop link and a QR code'); const slug = (await text('.livecard .u')).split('/shop/')[1];
+ok((await text('.livecard .u')).includes('/shop/'), 'step 5 shows the shop link and a QR code'); const secs = (Date.now() - t0) / 1000; console.log(`TIMING sign-up to live listing on a phone, scripted: ${secs.toFixed(1)} s`); ok(secs < 600, 'a new maker reaches a live listing in under 10 minutes (scripted run, a lower bound for a person)'); const slug = (await text('.livecard .u')).split('/shop/')[1];
 const pub = await (await ctx.request.get(`${BASE}/api/shops/${slug}`)).json(); ok(pub.name === shopName && pub.look === 'noir' && pub.tagline === 'Hand-poured soy candles', 'the public shop page shows what was entered');
 await page.getByRole('link', { name: 'Go to my studio' }).click(); await page.waitForURL(/\/studio$/); await page.waitForSelector('.sp-cards'); ok(true, 'studio home opens on a phone'); ok((await page.locator('.tabbar').count()) === 1, 'phone studio has its tab bar');
 const done = await page.evaluate(() => document.body.textContent); ok(done.includes('3 of 5 done') || done.includes('Next: set up payouts'), 'checklist counts what is done');

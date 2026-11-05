@@ -32,3 +32,6 @@ Production settings for notifications: `SMTP_URL`, `EMAIL_FROM`, `PUBLIC_URL` (u
 - **Load test:** `npm run seed:load -w apps/api` builds a 20,000-product database (`eazystores2_load`); `autocannon` is installed for timing.
 - **Accessibility check:** `CHROMIUM_PATH=/path/to/chromium node apps/e2e/a11y.mjs` (website on :5180, demo seed).
 - **Privacy requests:** a signed-in person downloads their data and deletes their account from Account; sales records stay without personal details.
+
+## Deploying (Phase 11)
+The API also serves the built website in production (`npm run build -w @eazystores/web`, then start the API with `NODE_ENV=production`; `WEB_DIST` overrides the folder). `render.yaml` at the repository root is the Render blueprint. Read `docs/DEPLOYMENT.md` to deploy, `docs/OPERATIONS.md` to run it, `docs/BACKUP_RECOVERY.md` for backups, and `docs/LAUNCH_READINESS.md` for what is and is not ready (payments are the blocker).

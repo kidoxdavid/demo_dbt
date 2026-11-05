@@ -1,3 +1,4 @@
+import { registerWeb, webDist } from './lib/web.js';
 import Fastify from 'fastify';
 import cookie from '@fastify/cookie';
 import helmet from '@fastify/helmet';
@@ -36,7 +37,9 @@ export function areaOf(url: string, header?: string): Area {
   return url.startsWith('/api/auth/') && header && (AREAS as string[]).includes(header) ? header as Area : 'shop';
 }
 
-export async function buildApp(opts: { authRateLimitMax?: number } = {}) {
+export async function buildApp(opts: { authRateLimitMax?: number; webDir?: string | null } = {}) {
+  // The built website is served by this service in production (or when a folder is given); in development the Vite server does that.
+  const webDir = opts.webDir !== undefined ? opts.webDir : (config.production ? webDist() : null);
   const app = Fastify({ logger: false, genReqId: req => { const h = req.headers['x-request-id']; return typeof h === 'string' && /^[\w-]{8,64}$/.test(h) ? h : crypto.randomUUID(); }, trustProxy: process.env.TRUST_PROXY === 'true', bodyLimit: 1024 * 1024, routerOptions: { maxParamLength: 600 } });          // signed links (unsubscribe, order tokens) are longer than the default 100
   // Every route as registered, so tests can sweep all of them for authorisation, cross-site requests and server errors.
   const routeTable: { method: string; url: string }[] = []; app.addHook('onRoute', r => { for (const m of ([] as string[]).concat(r.method)) if (m !== 'HEAD' && m !== 'OPTIONS') routeTable.push({ method: m, url: r.url }); }); (app as any).routeTable = routeTable;
@@ -54,7 +57,7 @@ export async function buildApp(opts: { authRateLimitMax?: number } = {}) {
     if (err.statusCode && err.statusCode < 500) return reply.code(err.statusCode).send({ error: err.code === 'FST_ERR_CTP_BODY_TOO_LARGE' ? 'body_too_large' : err.message });
     log('error', 'request failed', { requestId: _req.id, method: _req.method, path: safePath(_req.url), ...errorFields(err) }); return reply.code(500).send({ error: 'internal_error', requestId: _req.id });
   });
-  app.setNotFoundHandler((_req, reply) => reply.code(404).send({ error: 'not_found' }));
+  if (!webDir) app.setNotFoundHandler((_req, reply) => reply.code(404).send({ error: 'not_found' }));
 
   // A request id on every response (and in every error), and one access-log line per request: method, safe path, status, time. No query strings, no cookies, no tokens.
   app.addHook('onRequest', async (req, reply) => { reply.header('x-request-id', req.id); });
@@ -88,5 +91,6 @@ export async function buildApp(opts: { authRateLimitMax?: number } = {}) {
   app.get('/healthz', async () => ({ ok: true }));                                                                       // liveness: the process is up
   app.get('/readyz', async (_req, reply) => { try { await q('SELECT 1'); return { ok: true }; } catch { return reply.code(503).send({ ok: false }); } });          // readiness: the database answers
   registerAuth(app); registerPublicConfig(app); registerCategories(app); registerCatalogue(app); registerHome(app); registerSaved(app); registerStudio(app); registerStudioDashboard(app); registerStudioProducts(app); registerCart(app); registerOrders(app); registerStudioOrders(app); registerAdmin(app); registerConsoles(app); registerEngagement(app); registerAds(app); registerNotifications(app); registerPrivacy(app);
+  if (webDir) await registerWeb(app, webDir);
   return app;
 }

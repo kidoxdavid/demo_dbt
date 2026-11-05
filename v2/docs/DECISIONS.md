@@ -80,3 +80,13 @@
 - **Logs never contain secrets**: tokens and keys are redacted, ids in paths are collapsed, and every response carries a request id so a person can quote it to support.
 - **Accessibility: structure and behaviour were fixed; colour was not.** Landmarks, names and focus rings changed because they do not alter the approved look. The tag contrast shortfall comes from approved tokens, so it is put to you as a decision, not changed silently.
 - **Backups are scripts, not a service.** Custom-format dumps plus a manifest, proven by restoring into a scratch database. Scheduling and point-in-time recovery belong to the host chosen in Phase 11.
+
+## Phase 11 decisions
+- **API and website are one service on one origin.** Avoids cross-site cookies and CORS, keeps rate limits and ad checks seeing real addresses, and lets a custom domain attach directly to Render with no proxy.
+- **Page security policy is separate from the API's.** Pages allow only own scripts/styles/fonts/images/media; `style-src-attr 'unsafe-inline'` is the one relaxation because React sets inline style attributes. The API stays `default-src 'none'`.
+- **Cache rules:** hashed assets immutable for a year; the page, service worker and anything unhashed `no-cache`; fonts a week.
+- **Manual deploys and forward-only migrations run before the new version starts**; a failed migration or health check leaves the old version serving.
+- **A persistent disk now, object storage later.** It is the simplest way to keep uploads across deploys; the cost is one instance and a short pause per deploy, documented as the thing to change before scaling.
+- **No payment provider by default in production.** Not setting `PAYMENT_PROVIDER` is the safe state; money cannot move by misconfiguration.
+- **The first admin is created from the Shell with `make-staff`**, not from an environment variable, so a leaked or mistyped variable can never grant admin.
+- **`?look=` and `/_art` stay development-only**, so the production site cannot be shown a design preview and visual proof of those screens comes from the development build.

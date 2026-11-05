@@ -1,0 +1,45 @@
+# Render blueprint for EAZYstores: one web service (API + website on one address) and one Postgres database.
+# Create it in Render: New > Blueprint > pick this repository. Render asks for every value marked `sync: false`.
+# The service refuses to start in production until those values are valid (see v2/apps/api/src/lib/prod-check.ts), by design.
+databases:
+  - name: eazystores-db
+    databaseName: eazystores
+    user: eazystores
+    postgresMajorVersion: "16"
+    plan: basic-256mb          # upgrade for launch: backups and point-in-time recovery need a paid plan, see docs/BACKUP_RECOVERY.md
+    region: oregon
+    ipAllowList: []            # only services in this Render account can connect
+
+services:
+  - type: web
+    name: eazystores
+    runtime: node
+    region: oregon             # closest Render region to Alberta
+    plan: starter              # a persistent disk needs a paid plan
+    rootDir: v2
+    buildCommand: npm ci --include=dev && npm run build -w @eazystores/web
+    preDeployCommand: npm run migrate -w @eazystores/api       # forward-only migrations, then the launch categories; never seeds demo data
+    startCommand: npm run start -w @eazystores/api
+    healthCheckPath: /readyz   # 200 only when the database answers
+    autoDeploy: false          # deploy on purpose, after tests pass
+    disk:
+      name: uploads            # photos and videos; a disk keeps files across deploys but limits the service to ONE instance
+      mountPath: /var/data
+      sizeGB: 10
+    envVars:
+      - { key: NODE_ENV, value: production }
+      - { key: NODE_VERSION, value: "22" }
+      - { key: TRUST_PROXY, value: "true" }                    # Render's load balancer sits in front: needed for real visitor addresses
+      - { key: UPLOAD_DIR, value: /var/data/uploads }
+      - { key: WEB_DIST, value: ./apps/web/dist }
+      - { key: DATABASE_URL, fromDatabase: { name: eazystores-db, property: connectionString } }
+      - { key: AD_SECRET, generateValue: true }                # signs ad click tokens; changing it invalidates tokens in flight
+      - { key: NOTIFY_SECRET, generateValue: true }            # signs unsubscribe links; changing it breaks links already emailed, so keep it
+      - { key: PUBLIC_URL, sync: false }                       # https address of the site, e.g. https://www.eazystores.ca
+      - { key: ALLOWED_ORIGINS, sync: false }                  # same address(es), comma separated, https only
+      - { key: SMTP_URL, sync: false }                         # from the email provider, e.g. smtps://user:pass@smtp.provider.com:465
+      - { key: EMAIL_FROM, sync: false }                       # e.g. "EAZYstores <hello@eazystores.ca>"
+      - { key: VAPID_PUBLIC_KEY, sync: false }                 # npm run make-vapid -w @eazystores/api
+      - { key: VAPID_PRIVATE_KEY, sync: false }
+      - { key: VAPID_SUBJECT, sync: false }                    # mailto:support@eazystores.ca
+      # PAYMENT_PROVIDER is deliberately not set: with no provider, checkout says "payments not configured". Never set it to mock.

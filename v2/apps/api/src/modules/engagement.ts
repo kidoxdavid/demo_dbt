@@ -7,6 +7,7 @@ import { CARD_COLUMNS, CARD_FROM, VISIBLE, toCard } from '../lib/cards.js';
 import { mediaUrl } from '../lib/media.js';
 import { enqueue } from '../lib/outbox.js';
 import { recomputeShopRating } from '../lib/reviews.js';
+import { notifyUsers, sellerUserIds } from '../lib/notify.js';
 import { allFlags } from '../settings.js';
 import { sellerCtx } from './studio.js';
 
@@ -36,6 +37,7 @@ async function addMessage(c: Client, t: any, sender: 'buyer' | 'seller', authorI
   const targets = sender === 'buyer' ? await sellerEmails(c, t.seller_id) : [t.user_id ? (await c.query('SELECT email FROM users WHERE id=$1', [t.user_id])).rows[0]?.email : t.guest_email].filter(Boolean) as string[];
   for (const to of targets) { if ((await c.query(`SELECT 1 FROM outbox_emails WHERE status='pending' AND template='new_message' AND to_email=$1 AND data->>'threadId'=$2`, [to, t.id])).rowCount) continue;
     await enqueue(c, to, 'new_message', { threadId: t.id, from: sender === 'buyer' ? t.buyer_name : shop.name, about, preview: text, url: sender === 'buyer' ? `${base()}/studio/messages/${t.id}` : t.seller_order_id ? `${base()}/account/messages/${t.id}` : `${base()}/account/messages/${t.id}` }); }
+  await notifyUsers(c, sender === 'buyer' ? await sellerUserIds(c, t.seller_id) : [t.user_id], { category: 'messages', kind: 'message', title: `New message from ${sender === 'buyer' ? t.buyer_name : shop.name}`, body: text.slice(0, 60), url: sender === 'buyer' ? `/studio/messages/${t.id}` : `/account/messages/${t.id}` });
   return { id: Number(m.id), createdAt: m.created_at };
 }
 const msgView = (r: any) => ({ id: Number(r.id), sender: r.sender, body: r.body, createdAt: r.created_at });
@@ -61,6 +63,8 @@ export function registerEngagement(app: FastifyInstance) {
       if (so.status !== 'delivered') throw new HttpError(409, 'not_delivered_yet');
       const row = (await c.query(`INSERT INTO reviews(product_id,shop_id,seller_id,seller_order_id,user_id,author_name,rating,title,body) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`, [b.productId, so.shop_id, so.seller_id, so.id, o.user_id, shortName(o.buyer_name), b.rating, b.title || null, b.body])
         .catch(e => { if (e.code === '23505') throw new HttpError(409, 'already_reviewed'); throw e; })).rows[0];
+      const pt = (await c.query('SELECT title FROM products WHERE id=$1', [b.productId])).rows[0]?.title ?? 'a piece'; await notifyUsers(c, await sellerUserIds(c, so.seller_id), { category: 'reviews', kind: 'review', title: `New ${b.rating}-star review of ${pt}`, body: b.body.slice(0, 80), url: '/studio/reviews' });
+      for (const to of await sellerEmails(c, so.seller_id)) await enqueue(c, to, 'new_review', { rating: b.rating, product: pt, author: shortName(o.buyer_name), preview: b.body, url: `${base()}/studio/reviews` });
       await recomputeShopRating(c, so.shop_id); await audit(c, { actor: o.user_id, area: 'shop', action: 'review.create', entityType: 'review', entityId: row.id, next: { rating: b.rating }, ip: req.ip }); return row;
     });
     return reply.code(201).send({ id: r.id });
@@ -75,6 +79,8 @@ export function registerEngagement(app: FastifyInstance) {
   app.post('/api/studio/reviews/:id/reply', async req => {
     const s = await sellerCtx(req, 'seller.messages.write'); const { id } = idp.parse(req.params); const b = z.object({ body: z.string().trim().min(1).max(1000) }).strict().parse(req.body);
     const r = await q(`UPDATE reviews SET seller_reply=$3, replied_at=now() WHERE id=$1 AND seller_id=$2 AND status='published' RETURNING id`, [id, s.sellerId, b.body]); if (!r.rowCount) throw new HttpError(404, 'not_found');
+    const rv = (await q(`SELECT r.user_id, o.email, o.public_token, p.title, s2.name AS shop FROM reviews r JOIN seller_orders so ON so.id=r.seller_order_id JOIN orders o ON o.id=so.order_id JOIN products p ON p.id=r.product_id JOIN shops s2 ON s2.id=r.shop_id WHERE r.id=$1`, [id])).rows[0];
+    if (rv) await tx(async c => { await notifyUsers(c, [rv.user_id], { category: 'reviews', kind: 'review_reply', title: `${rv.shop} replied to your review`, body: b.body.slice(0, 80), url: `/orders/${rv.public_token}` }); await enqueue(c, rv.email, 'review_reply', { shop: rv.shop, product: rv.title, preview: b.body, url: `${base()}/orders/${rv.public_token}` }); });
     await audit(pool, { actor: s.user.id, area: 'studio', action: 'review.reply', entityType: 'review', entityId: id, ip: req.ip }); return { id, reply: { body: b.body } };
   });
   app.post('/api/studio/reviews/:id/report', async req => {

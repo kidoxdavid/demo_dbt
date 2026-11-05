@@ -6,6 +6,7 @@ import { allocateToLines, priceCart, type PricedCart } from './cart.js';
 import { postTxn, saleEntries } from './ledger.js';
 import { now as clockNow } from './clock.js';
 import { enqueue } from './outbox.js';
+import { notifyUsers, sellerUserIds } from './notify.js';
 import { getProvider } from './payments.js';
 import { POSTAL, PROVINCES, normalisePostal } from './shipping.js';
 import { config } from '../config.js';
@@ -111,6 +112,7 @@ export async function settlePayment(providerRef: string, outcome: 'succeeded' | 
       await postTxn(c, { orderId: o.id, sellerOrderId: so.id, sellerId: so.seller_id, memo: 'sale', entries: saleEntries(so) });
       const lines = (await c.query('SELECT title, variant_label, quantity FROM order_lines WHERE seller_order_id=$1 ORDER BY id', [so.id])).rows;
       for (const to of await sellerEmails(c, so.seller_id)) await enqueue(c, to, 'seller_new_order', { number: Number(o.number), buyer: o.buyer_name, totalCents: so.total_cents, shipBy, gift: so.gift?.message ?? null, url: `${base}/studio/orders/${so.id}`, lines: lines.map(l => ({ title: l.title, variant: l.variant_label, quantity: l.quantity })) });
+      await notifyUsers(c, await sellerUserIds(c, so.seller_id), { category: 'orders', kind: 'new_order', title: `New order #${o.number}`, body: `${o.buyer_name}: $${(so.total_cents / 100).toFixed(2)}`, url: `/studio/orders/${so.id}` });
     }
     const all = (await c.query('SELECT l.title, l.quantity, l.seller_order_id FROM order_lines l WHERE l.order_id=$1 ORDER BY l.id', [o.id])).rows;
     await enqueue(c, o.email, 'order_confirmation', { number: Number(o.number), name: o.buyer_name, totalCents: o.total_cents, taxCents: o.tax_cents, url: `${base}/orders/${o.public_token}`,

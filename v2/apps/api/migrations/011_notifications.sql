@@ -1,0 +1,8 @@
+-- Notifications: an in-app inbox, per-person channel preferences (kept by email so guests can unsubscribe too), web push subscriptions and a push queue.
+CREATE TABLE notification_prefs (email citext NOT NULL, category text NOT NULL CHECK (category IN ('orders','messages','reviews')), email_enabled boolean NOT NULL DEFAULT true, push_enabled boolean NOT NULL DEFAULT true, updated_at timestamptz NOT NULL DEFAULT now(), PRIMARY KEY (email, category));
+CREATE TABLE notifications (id bigserial PRIMARY KEY, user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE, category text NOT NULL, kind text NOT NULL, title text NOT NULL CHECK (length(title) <= 200), body text NOT NULL DEFAULT '' CHECK (length(body) <= 400), url text, read_at timestamptz, created_at timestamptz NOT NULL DEFAULT now());
+CREATE INDEX notifications_user ON notifications(user_id, created_at DESC); CREATE INDEX notifications_unread ON notifications(user_id) WHERE read_at IS NULL;
+CREATE TABLE push_subscriptions (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE, endpoint text NOT NULL UNIQUE, p256dh text NOT NULL, auth text NOT NULL, user_agent text, created_at timestamptz NOT NULL DEFAULT now(), last_ok_at timestamptz);
+CREATE INDEX push_subs_user ON push_subscriptions(user_id);
+CREATE TABLE push_outbox (id bigserial PRIMARY KEY, user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE, payload jsonb NOT NULL, status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','sent','failed','no_device')), attempts int NOT NULL DEFAULT 0, send_after timestamptz NOT NULL DEFAULT now(), error text, created_at timestamptz NOT NULL DEFAULT now());
+CREATE INDEX push_due ON push_outbox(send_after) WHERE status='pending';

@@ -4,6 +4,7 @@ import { ApiError, api } from '../api';
 import { Icon, type IconName } from '../components/Icon';
 import { STUDIO_TABS, TabBar, Wordmark } from '../components/ui';
 import { useDesktop } from '../hooks';
+import { useUnread } from '../components/Notifications';
 
 export interface StudioUser { id: string; email: string; fullName: string }
 export interface StudioShop { id: string; slug: string; name: string; tagline: string | null; story: string | null; city: string | null; region: string | null; look: string; status: string; vacation: boolean; processing: { minDays: number; maxDays: number };
@@ -24,18 +25,18 @@ export function StudioProvider({ children }: { children: React.ReactNode }) {
   return <C.Provider value={v}>{children}</C.Provider>;
 }
 
-const NAV: { to: string; label: string; icon: IconName; end?: boolean }[] = [{ to: '/studio', label: 'Home', icon: 'home', end: true }, { to: '/studio/orders', label: 'Orders', icon: 'box' }, { to: '/studio/products', label: 'Products', icon: 'tag' }, { to: '/studio/messages', label: 'Messages', icon: 'msg' }, { to: '/studio/reviews', label: 'Reviews', icon: 'msg' },
+const NAV: { to: string; label: string; icon: IconName; end?: boolean }[] = [{ to: '/studio', label: 'Home', icon: 'home', end: true }, { to: '/studio/orders', label: 'Orders', icon: 'box' }, { to: '/studio/products', label: 'Products', icon: 'tag' }, { to: '/studio/messages', label: 'Messages', icon: 'msg' }, { to: '/studio/reviews', label: 'Reviews', icon: 'msg' }, { to: '/studio/notifications', label: 'Notifications', icon: 'msg' },
   { to: '/studio/ads', label: 'Ads', icon: 'chart' }, { to: '/studio/promotions', label: 'Promotions', icon: 'tag' }, { to: '/studio/shop', label: 'Shop page', icon: 'store' }, { to: '/studio/insights', label: 'Insights', icon: 'chart' }, { to: '/studio/payouts', label: 'Payouts', icon: 'wallet' }];
 const PHONE_TAB = (p: string) => (p === '/studio' ? 0 : p.startsWith('/studio/orders') ? 1 : p.startsWith('/studio/products') ? 2 : p.startsWith('/studio/messages') ? 3 : p.startsWith('/studio/insights') ? 4 : null);
 
 /** Signed-in studio chrome: sidebar on desktop, glass tab bar on a phone. Signed-out visitors are sent to the studio sign-in. */
 export function StudioLayout() {
-  const { user, shop, ready, toShip } = useStudio(); const desktop = useDesktop(); const { pathname } = useLocation();
+  const { user, shop, ready, toShip } = useStudio(); const [unread] = useUnread('studio', !!user); const desktop = useDesktop(); const { pathname } = useLocation();
   if (!ready) return <div className="pad" style={{ paddingTop: 40 }}><div className="skeleton" style={{ height: 240 }} /></div>;
   if (!user || !shop) return <Navigate to="/studio/login" replace state={{ from: pathname }} />;
   const url = `eazystores.ca/shop/${shop.slug}`; const tab = PHONE_TAB(pathname);
   if (!desktop) return <><div className="sd-phone-pad"><Outlet /></div>{tab !== null && <TabBar items={STUDIO_TABS} active={tab} />}</>;
   return <div className="sd"><aside className="sd-side"><Link to="/studio"><Wordmark studio /></Link>
-    {NAV.map(n => <Link key={n.label} to={n.to} className={`sd-nav${(n.end ? pathname === n.to : pathname.startsWith(n.to)) ? ' on' : ''}`}><Icon name={n.icon} />{n.label}{n.label === 'Orders' && toShip > 0 && <span className="sd-badge">{toShip}</span>}</Link>)}
+    {NAV.map(n => <Link key={n.label} to={n.to} className={`sd-nav${(n.end ? pathname === n.to : pathname.startsWith(n.to)) ? ' on' : ''}`}><Icon name={n.icon} />{n.label}{n.label === 'Orders' && toShip > 0 && <span className="sd-badge">{toShip}</span>}{n.label === 'Notifications' && unread > 0 && <span className="sd-badge">{unread}</span>}</Link>)}
     <div className="card sd-shopcard"><b>{shop.name}</b><div className="u">{url}</div></div></aside><main className="sd-main"><Outlet /></main></div>;
 }

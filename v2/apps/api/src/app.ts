@@ -19,6 +19,7 @@ import { registerSaved } from './modules/saved.js';
 import { registerConsoles } from './modules/consoles.js';
 import { registerEngagement } from './modules/engagement.js';
 import { registerAds } from './modules/ads.js';
+import { registerNotifications } from './modules/notifications.js';
 import { registerStudioDashboard } from './modules/studioDashboard.js';
 import { registerStudio } from './modules/studio.js';
 import { registerStudioProducts } from './modules/studioProducts.js';
@@ -34,7 +35,7 @@ export function areaOf(url: string, header?: string): Area {
 }
 
 export async function buildApp(opts: { authRateLimitMax?: number } = {}) {
-  const app = Fastify({ logger: false, trustProxy: process.env.TRUST_PROXY === 'true', bodyLimit: 1024 * 1024 });
+  const app = Fastify({ logger: false, trustProxy: process.env.TRUST_PROXY === 'true', bodyLimit: 1024 * 1024, maxParamLength: 600 });          // signed links (unsubscribe, order tokens) are longer than the default 100
   await app.register(helmet, { contentSecurityPolicy: false });
   await app.register(cookie);
   await app.register(rateLimit, { global: false });
@@ -71,6 +72,6 @@ export async function buildApp(opts: { authRateLimitMax?: number } = {}) {
   });
 
   app.get('/health', async () => ({ ok: true }));
-  registerAuth(app); registerPublicConfig(app); registerCategories(app); registerCatalogue(app); registerHome(app); registerSaved(app); registerStudio(app); registerStudioDashboard(app); registerStudioProducts(app); registerCart(app); registerOrders(app); registerStudioOrders(app); registerAdmin(app); registerConsoles(app); registerEngagement(app); registerAds(app);
+  registerAuth(app); registerPublicConfig(app); registerCategories(app); registerCatalogue(app); registerHome(app); registerSaved(app); registerStudio(app); registerStudioDashboard(app); registerStudioProducts(app); registerCart(app); registerOrders(app); registerStudioOrders(app); registerAdmin(app); registerConsoles(app); registerEngagement(app); registerAds(app); registerNotifications(app);
   return app;
 }

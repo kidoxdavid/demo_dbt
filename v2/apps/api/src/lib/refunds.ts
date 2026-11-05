@@ -3,6 +3,7 @@ import { HttpError } from '../errors.js';
 import { allocate } from './money.js';
 import { postTxn, type Entry } from './ledger.js';
 import { enqueue } from './outbox.js';
+import { notifyUsers } from './notify.js';
 import { getProvider } from './payments.js';
 
 export interface RefundInput { sellerOrderId: string; sellerId: string; lines: { lineId: string; quantity: number }[]; includeShipping: boolean; reason: string; restock: boolean; actor: string; idempotencyKey?: string }
@@ -53,6 +54,7 @@ export async function refund(i: RefundInput) {
     if (i.restock) for (const d of step1.detail) await c.query('UPDATE variants SET stock_on_hand = stock_on_hand + $2 WHERE id = (SELECT variant_id FROM order_lines WHERE id=$1) AND tracks_stock', [d.lineId, d.quantity]);
     const shop = (await c.query('SELECT s.name FROM shops s WHERE s.id=$1', [step1.so.shop_id])).rows[0];
     await enqueue(c, step1.so.email, 'refund_issued', { number: Number(step1.so.number), shop: shop.name, amountCents: step1.amount, reason: i.reason });
+    await notifyUsers(c, [(await c.query('SELECT user_id FROM orders WHERE id=$1', [step1.so.order_id])).rows[0]?.user_id], { category: 'orders', kind: 'refund', title: `Refund of $${(step1.amount / 100).toFixed(2)} from ${shop.name}`, body: i.reason, url: '/account' });
     await audit(c, { actor: i.actor, area: 'studio', action: 'refund.succeeded', entityType: 'refund', entityId: step1.refundId, next: { amountCents: step1.amount, commissionReturnedCents: step1.comm, taxReturnedCents: step1.tax }, reason: i.reason });
   });
   return { refundId: step1.refundId, amountCents: step1.amount, status: 'succeeded', replay: false };

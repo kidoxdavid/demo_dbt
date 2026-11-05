@@ -60,3 +60,12 @@
 - **Restricted categories cannot be advertised** (toys, perfume, hair), and a staff stop is a hard stop the seller cannot undo.
 - **Sponsored pieces take a fixed slot and replace their organic copy**; organic ranking is never changed by a bid.
 - **`AD_SECRET` must be set in production** (the server refuses to start without it); development uses a fixed dev-only secret.
+
+## Phase 9 decisions
+- **Preferences are by email address, not account**, so a guest who clicks "unsubscribe" in a review request is honoured, and the same choice shows when they later sign up. Receipts and order updates are exempt on purpose (and say so).
+- **`enqueue()` is the single gate for email**: it consults the preference and returns whether it queued, so no caller can forget. The inbox and push are written by `notifyUsers()` in the same transaction as the event, so a rolled-back order or refund never notifies anyone.
+- **Push defaults:** on for orders and messages, off for reviews. Push bodies are short (60 characters of a message) because lock screens show them. A push is only queued if the server has VAPID keys, the person has a device and has push on for that kind.
+- **A device the browser forgot (404 or 410) is deleted**; other failures retry up to five times. Ten devices per person.
+- **Signed links use their own secret** (`NOTIFY_SECRET`, required in production) and carry no expiry: an unsubscribe link should keep working. Order links are unchanged.
+- **The web server raises Fastify's URL-parameter limit to 600** because signed tokens exceed the default 100.
+- **Mail and push configuration lives in the environment**: `SMTP_URL`, `EMAIL_FROM`, `PUBLIC_URL`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, `NOTIFY_SECRET`, `AD_SECRET`.

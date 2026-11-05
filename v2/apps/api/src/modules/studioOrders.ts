@@ -4,6 +4,7 @@ import { audit, pool, q, tx } from '../db.js';
 import { HttpError } from '../errors.js';
 import { canForSeller } from '../permissions.js';
 import { enqueue } from '../lib/outbox.js';
+import { notifyUsers } from '../lib/notify.js';
 import { refund } from '../lib/refunds.js';
 import { CARRIERS } from '../lib/shipping.js';
 import { sellerCtx } from './studio.js';
@@ -42,13 +43,15 @@ export function registerStudioOrders(app: FastifyInstance) {
   step('accept', ['new'], 'accepted');
   step('ship', ['new', 'accepted'], 'shipped', async (c, so, b) => {
     await c.query('UPDATE seller_orders SET tracking_carrier=$2, tracking_number=$3, shipped_at=now() WHERE id=$1', [so.id, b.carrier, b.trackingNumber]);
-    const o = (await c.query('SELECT o.email, o.number, o.public_token, s.name AS shop FROM orders o JOIN seller_orders x ON x.order_id=o.id JOIN shops s ON s.id=x.shop_id WHERE x.id=$1', [so.id])).rows[0];
+    const o = (await c.query('SELECT o.email, o.user_id, o.number, o.public_token, s.name AS shop FROM orders o JOIN seller_orders x ON x.order_id=o.id JOIN shops s ON s.id=x.shop_id WHERE x.id=$1', [so.id])).rows[0];
     await enqueue(c, o.email, 'order_shipped', { number: Number(o.number), shop: o.shop, carrier: b.carrier.replace('_', ' '), trackingNumber: b.trackingNumber, trackingUrl: (CARRIERS[b.carrier] ?? CARRIERS.other)(b.trackingNumber) || null, url: `${process.env.PUBLIC_URL ?? 'http://localhost:5180'}/orders/${o.public_token}` });
+    await notifyUsers(c, [o.user_id], { category: 'orders', kind: 'order_shipped', title: `Your order #${o.number} from ${o.shop} has shipped`, body: `${b.carrier.replace('_', ' ')} ${b.trackingNumber}`, url: `/orders/${o.public_token}` });
   }, z.object({ carrier: z.enum(Object.keys(CARRIERS) as [string, ...string[]]), trackingNumber: z.string().trim().regex(/^[A-Za-z0-9-]{3,40}$/) }).strict());
   step('deliver', ['shipped'], 'delivered', async (c, so) => {
     await c.query('UPDATE seller_orders SET delivered_at=now() WHERE id=$1', [so.id]);
-    const o = (await c.query('SELECT o.email, o.number, o.public_token, s.name AS shop FROM orders o JOIN seller_orders x ON x.order_id=o.id JOIN shops s ON s.id=x.shop_id WHERE x.id=$1', [so.id])).rows[0];
+    const o = (await c.query('SELECT o.email, o.user_id, o.number, o.public_token, s.name AS shop FROM orders o JOIN seller_orders x ON x.order_id=o.id JOIN shops s ON s.id=x.shop_id WHERE x.id=$1', [so.id])).rows[0];
     await enqueue(c, o.email, 'review_request', { number: Number(o.number), shop: o.shop, url: `${process.env.PUBLIC_URL ?? 'http://localhost:5180'}/orders/${o.public_token}` });          // asks once, when the piece has arrived
+    await notifyUsers(c, [o.user_id], { category: 'orders', kind: 'order_delivered', title: `Your order #${o.number} was delivered`, body: `How was it? A short review helps ${o.shop}.`, url: `/orders/${o.public_token}` });
   });
 
   /** Refund some or all lines (and optionally the shipping). Owners and managers only: money leaves the seller's balance. */

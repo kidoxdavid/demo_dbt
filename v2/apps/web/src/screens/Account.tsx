@@ -19,6 +19,7 @@ export function AccountPage() {
   if (!ready) return <div className="pad" style={{ paddingTop: 40 }}><div className="skeleton" style={{ height: 200 }} /></div>;
   if (user) return <div className="screen pad" style={{ paddingTop: 10 }}><div className="co"><h1 className="serif">Hello, {user.fullName.split(' ')[0]}</h1><p className="muted" style={{ marginTop: 4 }}>{user.email}</p>
     <Link to="/account/messages" className="card sec" style={{ display: 'block', marginTop: 18 }}><b>Messages</b><div className="muted" style={{ fontSize: 13, marginTop: 2 }}>Conversations with makers</div></Link>
+    <Link to="/account/notifications" className="card sec" style={{ display: 'block', marginTop: 10 }}><b>Notifications</b><div className="muted" style={{ fontSize: 13, marginTop: 2 }}>Your inbox, email and push settings</div></Link>
     <h2 className="serif" style={{ fontSize: 20, marginTop: 24 }}>Your orders</h2>
     {orders.data?.length === 0 && <p className="muted" style={{ marginTop: 8 }}>No orders yet.</p>}
     {(orders.data ?? []).map(o => <Link key={o.id} to={`/orders/${o.token}`} className="card sec" style={{ display: 'block', marginTop: 10 }}><div style={{ display: 'flex', justifyContent: 'space-between' }}><b>Order #{o.number}</b><b>{money(o.totalCents)}</b></div><div className="muted" style={{ fontSize: 13, marginTop: 4 }}>{o.sellers.map((s: any) => s.shop.name).join(', ')} · {o.paymentStatus.replace('_', ' ')}{o.sellers[0]?.eta?.min ? ` · arrives ${dateRange(o.sellers[0].eta.min, o.sellers[0].eta.max)}` : ''}</div></Link>)}

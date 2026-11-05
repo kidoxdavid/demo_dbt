@@ -5,6 +5,8 @@ import { BUYER_TABS, TabBar, Wordmark } from './ui';
 import { useCart } from '../cart';
 import { useDesktop } from '../hooks';
 import { useApi } from '../api';
+import { useUnread } from './Notifications';
+import { useSession } from '../session';
 
 /** The search field is a real form: Enter goes to /search?q=. */
 export function SearchBox({ large, initial = '' }: { large?: boolean; initial?: string }) {
@@ -13,13 +15,15 @@ export function SearchBox({ large, initial = '' }: { large?: boolean; initial?: 
   return <form className={`card search${large ? ' lg' : ''}`} role="search" onSubmit={submit}><span className="muted"><Icon name="search" /></span><input aria-label="Search" value={q} onChange={e => setQ(e.target.value)} placeholder={large ? 'Search for pottery, art, perfume, hair, toys…' : 'Search pottery, art, perfume…'} /></form>;
 }
 export function BasketLink() { const { cart } = useCart(); return <Link to="/basket" className="icon-link" aria-label={`Basket, ${cart.count} items`}><Icon name="bag" />{cart.count > 0 && <span className="badge">{cart.count}</span>}</Link>; }
-export const PhoneTop = () => <div className="pad home-top"><Link to="/"><Wordmark /></Link><span style={{ flex: 1 }} /><Link to="/saved" aria-label="Saved"><Icon name="heart" /></Link><BasketLink /></div>;
+/** The bell only exists for signed-in people; the number is what is waiting in their inbox. */
+export function Bell() { const { user } = useSession(); const [n] = useUnread('me', !!user); if (!user) return null; return <Link to="/account/notifications" className="icon-link" aria-label={`Notifications, ${n} unread`}><Icon name="msg" />{n > 0 && <span className="badge">{n}</span>}</Link>; }
+export const PhoneTop = () => <div className="pad home-top"><Link to="/"><Wordmark /></Link><span style={{ flex: 1 }} /><Bell /><Link to="/saved" aria-label="Saved"><Icon name="heart" /></Link><BasketLink /></div>;
 
 function DesktopChrome() {
   const { data } = useApi<{ promoBar: string; categories: { slug: string; label: string }[] }>('/api/home');
   return <>
     {data?.promoBar && <div className="promo">{data.promoBar}</div>}
-    <div className="dhead"><Link to="/"><Wordmark large /></Link><SearchBox large /><span className="right"><Link to="/studio">Sell on eazystores</Link><Link to="/saved" aria-label="Saved"><Icon name="heart" /></Link><Link to="/account" aria-label="Account"><Icon name="user" /></Link><BasketLink /></span></div>
+    <div className="dhead"><Link to="/"><Wordmark large /></Link><SearchBox large /><span className="right"><Link to="/studio">Sell on eazystores</Link><Bell /><Link to="/saved" aria-label="Saved"><Icon name="heart" /></Link><Link to="/account" aria-label="Account"><Icon name="user" /></Link><BasketLink /></span></div>
     <nav className="dnav" aria-label="Categories">{(data?.categories ?? []).map(c => <Link key={c.slug} to={`/c/${c.slug}`}>{c.label === 'Art & prints' ? 'Art & prints' : c.label}</Link>)}<Link to="/guides">Gift guides</Link></nav></>;
 }
 const TAB_FOR = (p: string) => (p === '/' ? 0 : p.startsWith('/c/') || p.startsWith('/search') ? 1 : p.startsWith('/saved') ? 2 : p.startsWith('/account') || p.startsWith('/orders') ? 4 : null);

@@ -10,5 +10,7 @@ export const config = {
   uploadRateLimitMax: Number(process.env.UPLOAD_RATE_LIMIT_MAX ?? 60),
   // Signs ad click tokens so a click cannot be forged or replayed. Production must set its own.
   adSecret: process.env.AD_SECRET ?? (env === 'production' ? (() => { throw new Error('AD_SECRET must be set in production'); })() : 'dev-only-ad-secret'),
+  // Signs unsubscribe links. Production must set its own.
+  notifySecret: process.env.NOTIFY_SECRET ?? (env === 'production' ? (() => { throw new Error('NOTIFY_SECRET must be set in production'); })() : 'dev-only-notify-secret'),
   authRateLimitMax: Number(process.env.AUTH_RATE_LIMIT_MAX ?? 10),
 };

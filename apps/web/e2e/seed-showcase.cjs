@@ -40,6 +40,22 @@ const ORDERS = [
 ];
 const POS = [[0, 0, 1, 'cash', 5], [8, 0, 2, 'card_terminal', 4], [6, 0, 1, 'cash', 2], [3, 0, 1, 'e_transfer', 1], [0, 1, 1, 'card_terminal', 0]];
 
+// Photos. Put your own real photos in e2e/photos/ named after the product, e.g. cedar-and-smoke-candle-1.jpg, cedar-and-smoke-candle-2.jpg (see photos/README.md).
+// Or run with PHOTOS=download to fetch random keyword-matched Creative Commons photos from loremflickr.com (needs internet; they may not match well; demo only).
+// With neither, generated illustrations are used. Run `node e2e/seed-showcase.cjs --photos` on an existing showcase store to swap its pictures.
+const slugify = n => n.toLowerCase().replace(/&/g, 'and').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+const KW = ['candle', 'candle', 'candle', 'ceramic,mug', 'ceramic,mug', 'scarf,wool', 'tote,bag', 'planter,plant', 'balm,skincare', 'gift,box'];
+async function photosFor(p, idx) {
+  const out = []; const dir = `${__dirname}/photos`;
+  for (let i = 1; i <= 4; i++) for (const ext of ['jpg', 'jpeg', 'png', 'webp']) {
+    const f = `${dir}/${slugify(p.n)}-${i}.${ext}`; if (fs.existsSync(f)) { out.push({ buf: fs.readFileSync(f), type: ext === 'jpg' ? 'image/jpeg' : `image/${ext}` }); break; }
+  }
+  if (!out.length && process.env.PHOTOS === 'download') for (let i = 1; i <= 2; i++) {
+    try { const r = await fetch(`https://loremflickr.com/800/800/${KW[idx]}?lock=${idx * 10 + i}`, { redirect: 'follow' }); const t = r.headers.get('content-type') ?? '';
+      if (r.ok && t.startsWith('image/jpeg')) out.push({ buf: Buffer.from(await r.arrayBuffer()), type: 'image/jpeg' }); } catch { /* fall back below */ }
+  }
+  return out;
+}
 const jar = {};
 async function call(who, path, { method = 'GET', body, raw, type } = {}, tries = 0) {
   const res = await fetch(API + path, { method, headers: { ...(jar[who] && { cookie: jar[who] }), ...(body && { 'content-type': 'application/json' }), ...(type && { 'content-type': type }) }, body: raw ?? (body && JSON.stringify(body)) });
@@ -49,7 +65,18 @@ async function call(who, path, { method = 'GET', body, raw, type } = {}, tries =
 }
 const must = (r, what) => { if (r.status >= 300) throw new Error(`${what} failed: ${r.status} ${JSON.stringify(r.data)}`); return r.data; };
 
+async function swapPhotos() {
+  must(await call('s', '/api/auth/login', { method: 'POST', body: { email: SELLER.email, password: PW } }), 'login');
+  const list = (await call('s', '/api/seller/products')).data; let changed = 0;
+  for (const [idx, p] of PRODUCTS.entries()) {
+    const row = list.find(x => x.name === p.n); if (!row) continue; const real = await photosFor(p, idx); if (!real.length) { console.log(`no photos found for ${p.n}, left as is`); continue; }
+    for (const im of row.images ?? []) await call('s', `/api/seller/images/${im.id}`, { method: 'DELETE' });
+    for (const ph of real) must(await call('s', `/api/seller/products/${row.id}/images`, { method: 'POST', raw: ph.buf, type: ph.type }), 'photo'); changed++;
+  }
+  console.log(`Replaced the pictures on ${changed} product(s).`);
+}
 (async () => {
+  if (process.argv.includes('--photos')) return swapPhotos();
   const su = await call('s', '/api/auth/signup', { method: 'POST', body: { email: SELLER.email, password: PW, fullName: SELLER.name, businessName: 'Northern Hearth', storeSlug: SLUG } });
   if (su.status === 409) { console.log(`Already there: the showcase store exists. Log in as ${SELLER.email}. (To rebuild it, use a fresh database.)`); return; }
   must(su, 'seller signup');
@@ -62,7 +89,9 @@ const must = (r, what) => { if (r.status >= 300) throw new Error(`${what} failed
   for (const p of PRODUCTS) {
     const r = must(await call('s', '/api/seller/products', { method: 'POST', body: { name: p.n, description: p.d, brand: 'Northern Hearth', attributes: p.a, madeToOrder: !!p.mto, customFields: p.cf ?? [], status: 'active',
       variants: p.v.map(([title, price, cost, stock, weight]) => ({ title, priceCents: price, costCents: cost, stock, weightGrams: weight })) } }), `product ${p.n}`);
-    for (const pal of [p.art[1], p.art[2]]) must(await call('s', `/api/seller/products/${r.id}/images`, { method: 'POST', raw: await render(art(p.art[0], pal)), type: 'image/jpeg' }), 'image');
+    const real = await photosFor(p, PRODUCTS.indexOf(p));
+    if (real.length) for (const ph of real) must(await call('s', `/api/seller/products/${r.id}/images`, { method: 'POST', raw: ph.buf, type: ph.type }), 'photo');
+    else for (const pal of [p.art[1], p.art[2]]) must(await call('s', `/api/seller/products/${r.id}/images`, { method: 'POST', raw: await render(art(p.art[0], pal)), type: 'image/jpeg' }), 'image');
     ids.push(r.id);
   }
   await browser.close();

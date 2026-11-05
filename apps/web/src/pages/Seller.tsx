@@ -4,19 +4,20 @@ import { api, ApiError, errorText, money, toCents, PROVINCES } from '../api';
 import { Alert, Badge, Empty, Field } from '../ui';
 import { SecurityPanel } from './Security';
 import { IcoBox, IcoCog, IcoHome, IcoLink, IcoReceipt, IcoUpload, IcoPos, IcoMore, IcoStar, IcoTag, IcoChart } from '../icons';
+import { KeepHero, Profit, OrderKeep, PriceHint } from './ProfitPages';
 import { MorePage, Discounts, ShippingRules, Pos, Reviews, Plan, Assist, AiPhotoDraft, AiStoreText } from './SellerExtra';
 
 type Biz = { business: any; store: any; role: string };
 const NAV = [
   { to: '/dashboard', label: 'Overview', Icon: IcoHome, end: true }, { to: '/dashboard/products', label: 'Products', Icon: IcoBox },
-  { to: '/dashboard/orders', label: 'Orders', Icon: IcoReceipt }, { to: '/dashboard/pos', label: 'Sell', Icon: IcoPos },
+  { to: '/dashboard/orders', label: 'Orders', Icon: IcoReceipt }, { to: '/dashboard/profit', label: 'Profit', Icon: IcoChart }, { to: '/dashboard/pos', label: 'Sell', Icon: IcoPos },
   { to: '/dashboard/discounts', label: 'Discounts', Icon: IcoTag }, { to: '/dashboard/delivery', label: 'Delivery', Icon: IcoBox },
   { to: '/dashboard/reviews', label: 'Reviews', Icon: IcoStar }, { to: '/dashboard/assist', label: 'Insights', Icon: IcoChart },
   { to: '/dashboard/plan', label: 'Plan', Icon: IcoTag },
   { to: '/dashboard/share', label: 'Share', Icon: IcoLink }, { to: '/dashboard/import', label: 'Import', Icon: IcoUpload },
   { to: '/dashboard/settings', label: 'Settings', Icon: IcoCog },
 ];
-const TABS = [NAV[0], NAV[1], NAV[2], NAV[3], { to: '/dashboard/more', label: 'More', Icon: IcoMore, end: false }];
+const TABS = [NAV[0], NAV[2], NAV[1], NAV[3], { to: '/dashboard/more', label: 'More', Icon: IcoMore, end: false }];
 
 export function SellerShell() {
   const nav = useNavigate();
@@ -54,6 +55,7 @@ export function SellerShell() {
           <Route path="orders" element={<Orders />} />
           <Route path="share" element={<SharePage />} />
           <Route path="import" element={<ImportPage />} />
+          <Route path="profit" element={<Profit />} />
           <Route path="pos" element={<Pos />} />
           <Route path="discounts" element={<Discounts />} />
           <Route path="delivery" element={<ShippingRules />} />
@@ -91,6 +93,7 @@ function Overview({ data }: { data: Biz }) {
       <ul className="list" style={{ marginTop: 8 }}>{att.map(a => <li key={a.id} className="row spread"><span>Order #{a.orderNumber} · {a.customerName} · {money(a.amount_cents, a.currency)}</span><button className="sm" onClick={() => refundUnfulfilled(a.id)}>Refund customer</button></li>)}</ul></Alert>}
     {attMsg && <Alert kind="ok">{attMsg}</Alert>}
     {published && <Alert kind="ok">Your store is live at <Link to={`/store/${data.store.slug}`}>/store/{data.store.slug}</Link>. Share it anywhere.</Alert>}
+    <KeepHero />
     {d && <>
       <div className="grid">
         <div className="card stat accent"><div className="n">{money(d.grossSalesCents)}</div><div className="l">Gross sales (not profit)</div></div>
@@ -105,7 +108,7 @@ function Overview({ data }: { data: Biz }) {
       {d.bySource?.length > 0 && <section className="card"><h3>Sales by channel</h3><p className="muted small">Where your paid orders came from. Share links on the Share page are tagged automatically.</p>
         <table><thead><tr><th>Channel</th><th>Orders</th><th>Gross sales</th></tr></thead><tbody>{d.bySource.map((r: any) => <tr key={r.source}><td style={{ textTransform: 'capitalize' }}>{r.source}</td><td>{r.orders}</td><td>{money(r.grossSalesCents)}</td></tr>)}</tbody></table></section>}
       {d.grossProfitIsPartial && <Alert kind="warn">{d.lineItemsMissingCost} sold item(s) have no cost recorded, so profit is {d.grossProfitCents == null ? 'unknown' : 'only partly known'}. Add costs on the Products page.</Alert>}
-      <ul className="muted small">{d.notes.map((n: string) => <li key={n}>{n}</li>)}</ul>
+      <p className="muted small">Gross sales exclude delivery and are not profit. <Link to="/dashboard/profit">See exactly what you keep</Link>.</p>
     </>}
   </>;
 }
@@ -200,6 +203,7 @@ function ProductForm({ onDone }: { onDone: () => void }) {
       <Field label="Price ($)">{id => <input id={id} required inputMode="decimal" pattern="\d+(\.\d{1,2})?" value={v.price} onChange={e => upd(i, 'price', e.target.value)} />}</Field>
       <Field label="Your cost ($)">{id => <input id={id} inputMode="decimal" pattern="\d+(\.\d{1,2})?" value={v.cost} onChange={e => upd(i, 'cost', e.target.value)} />}</Field>
       <Field label="In stock">{id => <input id={id} required inputMode="numeric" pattern="\d+" value={v.stock} onChange={e => upd(i, 'stock', e.target.value)} />}</Field>
+      <PriceHint price={v.price} cost={v.cost} />
       <Field label="Weight (g)" hint="For delivery prices">{id => <input id={id} inputMode="numeric" pattern="\d+" value={v.weight} onChange={e => upd(i, 'weight', e.target.value)} />}</Field>
       <Field label="Barcode" hint="For counter sales">{id => <input id={id} maxLength={64} value={v.barcode} onChange={e => upd(i, 'barcode', e.target.value)} />}</Field>
     </div>)}
@@ -327,6 +331,7 @@ function Orders() {
       <div className="table-scroll"><table><tbody>{open.items.map((i: any, n: number) => <tr key={n}><td>{i.name}{i.variant_title !== 'Default' ? ` (${i.variant_title})` : ''} × {i.quantity}
         {i.custom_values?.length > 0 && <dl className="answers">{i.custom_values.map((v: any) => <div key={v.label}><dt>{v.label}</dt><dd>{v.type === 'image' ? <a href={`/api/seller/custom-uploads/${v.value}`} target="_blank" rel="noreferrer"><img src={`/api/seller/custom-uploads/${v.value}`} alt={`${v.label} from customer`} width="72" height="72" style={{ objectFit: 'cover', display: 'block' }} /></a> : v.value}</dd></div>)}</dl>}</td><td>{money(i.unit_price_cents * i.quantity)}</td></tr>)}
         <tr><td>Delivery</td><td>{money(open.shipping_cents)}</td></tr>{open.tax_lines?.map((t: any) => <tr key={t.name}><td>{t.name}</td><td>{money(t.cents)}</td></tr>)}<tr><td><b>Total</b></td><td><b>{money(open.total_cents)}</b></td></tr></tbody></table></div>
+      {['paid', 'processing', 'ready', 'shipped', 'completed'].includes(open.status) && <OrderKeep orderId={open.id} status={open.status} />}
       <div className="row" style={{ marginTop: 12 }}>{(NEXT[open.status] ?? []).map(n => <button key={n.to} onClick={() => move(open.id, n.to)}>{n.label}</button>)}</div>
       <RefundPanel order={open} onDone={() => { show(open.id); load(); }} onError={setErr} />
       {open.status === 'awaiting_payment' && <p className="muted small">Waiting for the customer to pay. Stock is held until the reservation expires.</p>}

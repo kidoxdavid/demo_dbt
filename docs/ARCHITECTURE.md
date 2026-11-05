@@ -324,3 +324,11 @@ Edge cases covered by tests: six buyers racing for one unit (exactly one wins); 
 3. Whether reviews should be allowed without a purchase (currently never) and whether sellers may reply more than once (currently once).
 4. Grace period before a non-paying store moves to Starter (7 days now) and what happens to products above the Starter limit (today they stay visible; only new products are blocked).
 5. AI: which model, a monthly budget per seller, and whether AI drafting is a paid-plan feature.
+
+## Phase 1 of the rebuild: profit-first ("what you keep")
+New direction: sell the platform as the one that shows sellers what they actually keep, not just what they sold; second pillar (planned): drops and waitlists for sellers and buyers, plus a buyer-facing "where your money goes" receipt.
+- **Definition (`apps/api/src/lib/profit.ts`, one place):** keep = (item sales − discount) + delivery charged − cost of goods − EazyStores fee − card fee (ESTIMATE) − delivery the seller paid − refunds (excl. tax). Tax is never included. Missing cost prices count as zero and are flagged; delivery cost counts only once the seller enters it; counter sales have no card-fee estimate.
+- **Card fee is an estimate** (2.9% + 30¢, `PROCESSING_FEE_BPS` / `PROCESSING_FEE_FIXED_CENTS`) until a real payment provider reports actual fees. Nothing here is accounting-grade.
+- **API:** `GET /api/seller/profit` (totals, by day in the seller's time zone, by product, by channel, flags), `GET /api/seller/orders/:id/profit`, `PATCH /api/seller/orders/:id/delivery-cost`, expenses CRUD, `POST /api/seller/profit/price-check` (per-sale economics, loses-money/thin/healthy verdict, suggested price for a target margin). Migration 016. Owner/manager only.
+- **UI:** "What you actually kept" headline on the dashboard with a where-it-went bar, a Profit page (waterfall, by channel/product/day, expenses), per-order breakdown with a delivery-cost field, and a live "you keep $X per sale / you lose money at this price" hint under every product price.
+- **Tests:** 8 API tests with hand-computed figures plus browser flow 6 (`e2e/flow6.cjs`).

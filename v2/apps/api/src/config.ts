@@ -6,5 +6,7 @@ export const config = {
   // Origins allowed to make state-changing requests besides same-host. Set explicitly in production.
   allowedOrigins: (process.env.ALLOWED_ORIGINS ?? (env === 'production' ? '' : 'http://localhost:5180,http://127.0.0.1:5180')).split(',').map(s => s.trim()).filter(Boolean),
   secureCookies: env === 'production', sessionTtlHours: Number(process.env.SESSION_TTL_HOURS ?? 24 * 14),
+  uploadDir: process.env.UPLOAD_DIR ?? './uploads', maxImageBytes: 10 * 1024 * 1024, maxVideoBytes: 60 * 1024 * 1024, maxVideoSeconds: 60,
+  uploadRateLimitMax: Number(process.env.UPLOAD_RATE_LIMIT_MAX ?? 60),
   authRateLimitMax: Number(process.env.AUTH_RATE_LIMIT_MAX ?? 10),
 };

@@ -13,6 +13,9 @@ import { registerAuth } from './modules/auth.js';
 import { registerAdmin } from './modules/admin.js';
 import { registerPublicConfig } from './modules/publicConfig.js';
 import { registerCategories } from './modules/categories.js';
+import { registerCatalogue } from './modules/catalogue.js';
+import { registerStudio } from './modules/studio.js';
+import { registerStudioProducts } from './modules/studioProducts.js';
 
 
 /** The window a request belongs to. API paths decide it (so a header can never turn a shop session into an admin one); only /api/auth/* reads the x-area header. */
@@ -56,6 +59,6 @@ export async function buildApp(opts: { authRateLimitMax?: number } = {}) {
   });
 
   app.get('/health', async () => ({ ok: true }));
-  registerAuth(app); registerPublicConfig(app); registerCategories(app); registerAdmin(app);
+  registerAuth(app); registerPublicConfig(app); registerCategories(app); registerCatalogue(app); registerStudio(app); registerStudioProducts(app); registerAdmin(app);
   return app;
 }

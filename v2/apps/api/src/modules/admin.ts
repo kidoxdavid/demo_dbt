@@ -23,6 +23,7 @@ export function registerAdmin(app: FastifyInstance) {
     if (isSellerRole(b.role) !== !!b.sellerId) throw new HttpError(422, isSellerRole(b.role) ? 'seller_id_required' : 'seller_id_not_allowed');
     const row = await tx(async c => {
       if (!(await c.query('SELECT 1 FROM users WHERE id=$1', [id])).rowCount) throw new HttpError(404, 'not_found');
+      if (b.sellerId && !(await c.query('SELECT 1 FROM sellers WHERE id=$1', [b.sellerId])).rowCount) throw new HttpError(422, 'seller_not_found');
       const r = await c.query('INSERT INTO user_roles(user_id,role,seller_id,granted_by) VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING RETURNING id', [id, b.role, b.sellerId ?? null, actor.id]);
       if (!r.rowCount) throw new HttpError(409, 'role_exists');
       await audit(c, { actor: actor.id, area: 'admin', action: 'role.grant', entityType: 'user', entityId: id, next: { role: b.role, sellerId: b.sellerId ?? null }, reason: b.reason, ip: req.ip }); return r.rows[0];

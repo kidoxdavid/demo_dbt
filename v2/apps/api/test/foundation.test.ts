@@ -17,7 +17,7 @@ describe('migrations and the audit trail', () => {
   it('apply once, are recorded, and running them again changes nothing', async () => {
     const before = (await q('SELECT count(*)::int n FROM schema_migrations')).rows[0].n; await runMigrations();
     expect((await q('SELECT count(*)::int n FROM schema_migrations')).rows[0].n).toBe(before); expect(before).toBeGreaterThanOrEqual(2);
-    expect((await q('SELECT count(*)::int n FROM categories')).rows[0].n).toBe(13);
+    expect((await q('SELECT count(*)::int n FROM categories WHERE slug IN (\'toys-games\',\'art-prints\',\'3d-printing\',\'perfume-fragrance\',\'hair-wigs\',\'pottery-ceramics\',\'jewellery\',\'candles-home-fragrance\',\'home-decor\',\'clothing-accessories\',\'stationery-paper\',\'plants-planters\',\'other\')')).rows[0].n).toBe(13);
   });
   it('the audit log cannot be edited or deleted', async () => {
     await q(`INSERT INTO audit_log(action,entity_type) VALUES ('test','test')`);
@@ -96,7 +96,8 @@ describe('independent windows and roles', () => {
     const g = await call('POST', roles, { ...o, payload: { role: 'marketing', reason: 'Joins the team' } }); expect(g.statusCode).toBe(201);
     expect((await call('POST', roles, { ...o, payload: { role: 'marketing' } })).json().error).toBe('role_exists');
     expect((await call('POST', roles, { ...o, payload: { role: 'seller_owner' } })).json().error).toBe('seller_id_required'); expect((await call('POST', roles, { ...o, payload: { role: 'finance', sellerId: '11111111-1111-4111-8111-111111111111' } })).json().error).toBe('seller_id_not_allowed');
-    const sellerId = '22222222-2222-4222-8222-222222222222'; expect((await call('POST', roles, { ...o, payload: { role: 'seller_manager', sellerId } })).statusCode).toBe(201);
+    expect((await call('POST', roles, { ...o, payload: { role: 'seller_manager', sellerId: '22222222-2222-4222-8222-222222222222' } })).json().error).toBe('seller_not_found');
+    const sellerId = (await q(`INSERT INTO sellers(legal_name) VALUES ('Role Test Seller') RETURNING id`)).rows[0].id; expect((await call('POST', roles, { ...o, payload: { role: 'seller_manager', sellerId } })).statusCode).toBe(201);
     expect((await q(`SELECT reason, next FROM audit_log WHERE action='role.grant' AND entity_id=$1 ORDER BY id`, [target.id])).rows[0]).toMatchObject({ reason: 'Joins the team', next: { role: 'marketing' } });
     expect((await call('DELETE', `${roles}/${g.json().id}`, o)).statusCode).toBe(200); expect((await q(`SELECT count(*)::int n FROM audit_log WHERE action='role.revoke' AND entity_id=$1`, [target.id])).rows[0].n).toBe(1);
     await q(`DELETE FROM user_roles WHERE role='admin' AND user_id<>$1`, [admin.id]); const mine = (await q(`SELECT id FROM user_roles WHERE user_id=$1 AND role='admin'`, [admin.id])).rows[0].id;

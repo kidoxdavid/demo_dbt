@@ -1,20 +1,15 @@
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { audit, pool, q, tx } from '../db.js';
-import { config } from '../config.js';
 import { HttpError } from '../errors.js';
-import { hashPassword, newToken, passwordProblem, sha256, verifyPassword } from '../security.js';
+import { hashPassword, passwordProblem, sha256, verifyPassword } from '../security.js';
 import { canAccessArea, type Area, type RoleGrant } from '../permissions.js';
 import { cookieName, requireUser } from '../guards.js';
+import { openSession } from '../session.js';
 
 const email = z.string().trim().toLowerCase().email().max(254);
 const LOCK_AFTER = 5; const LOCK_MINUTES = 15;
 
-async function openSession(reply: FastifyReply, userId: string, area: Area, ip: string, ua?: string) {
-  const token = newToken();
-  await q(`INSERT INTO sessions(user_id,area,token_hash,expires_at,ip,user_agent) VALUES ($1,$2,$3, now() + ($4 || ' hours')::interval, $5, $6)`, [userId, area, sha256(token), String(config.sessionTtlHours), ip, ua?.slice(0, 200) ?? null]);
-  reply.setCookie(cookieName(area), token, { httpOnly: true, sameSite: 'lax', secure: config.secureCookies, path: '/', maxAge: config.sessionTtlHours * 3600 });
-}
 const userView = (u: { id: string; email: string; fullName: string; roles: RoleGrant[] }, area: Area) => ({ id: u.id, email: u.email, fullName: u.fullName, area, roles: u.roles.map(r => ({ role: r.role, sellerId: r.sellerId })) });
 
 export function registerAuth(app: FastifyInstance) {

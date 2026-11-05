@@ -21,3 +21,20 @@ export async function login(app: FastifyInstance, area: Area, opts: { role?: str
   return { ...u, cookie: cookieOf(r, area) };
 }
 export const end = async () => { await pool.end(); };
+
+import sharp from 'sharp';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+export const jpeg = (w = 800, h = 600, bg = '#c8a05a') => sharp({ create: { width: w, height: h, channels: 3, background: bg } }).jpeg().toBuffer();
+export const tinyMp4 = (seconds = 2) => { const d = mkdtempSync(join(tmpdir(), 'es2-mp4-')); const f = join(d, 't.mp4'); execFileSync('ffmpeg', ['-y', '-f', 'lavfi', '-i', `testsrc=duration=${seconds}:size=320x240:rate=15`, '-pix_fmt', 'yuv420p', f], { stdio: 'ignore' }); return readFileSync(f); };
+let sn = 0;
+/** A seller signs up through the studio flow; returns their studio cookie and shop. */
+export async function studioSeller(app: FastifyInstance, opts: { categories?: string[]; shopName?: string } = {}) {
+  const email = `seller${Date.now()}${sn++}@t.test`;
+  const r = await app.inject({ method: 'POST', url: '/api/studio/signup', payload: { email, password: PW, fullName: 'Sam Seller', categories: opts.categories ?? ['pottery-ceramics'], shopName: opts.shopName ?? `Test Shop ${sn}` } });
+  if (r.statusCode !== 201) throw new Error(`studio signup failed ${r.statusCode} ${r.body}`);
+  return { email, cookie: cookieOf(r, 'studio'), sellerId: r.json().sellerId as string, shop: r.json().shop as { id: string; slug: string; name: string } };
+}
+export const upload = (app: FastifyInstance, cookie: string, buf: Buffer, type = 'image/jpeg') => app.inject({ method: 'POST', url: '/api/studio/media', headers: { 'content-type': type }, payload: buf, ...ck('studio', cookie) });

@@ -10,6 +10,8 @@ export const TEMPLATES: Record<string, (d: Data) => { subject: string; body: str
   seller_new_order: d => ({ subject: `New order #${d.number}: ${dollars(d.totalCents)}`, body: `You have a new order from ${esc(d.buyer)}.\n\n${(d.lines as any[]).map(l => `${l.quantity} x ${l.title}${l.variant ? ` (${l.variant})` : ''}`).join('\n')}\n\nShip by ${d.shipBy}.${d.gift ? `\nThis is a gift. Message: ${esc(d.gift)}` : ''}\nOpen it: ${d.url}` }),
   order_shipped: d => ({ subject: `Your order #${d.number} from ${esc(d.shop)} has shipped`, body: `${esc(d.shop)} shipped your order with ${esc(d.carrier)}.\nTracking number: ${esc(d.trackingNumber)}\n${d.trackingUrl ? `Track it: ${d.trackingUrl}\n` : ''}Order: ${d.url}` }),
   refund_issued: d => ({ subject: `Refund of ${dollars(d.amountCents)} for order #${d.number}`, body: `${esc(d.shop)} refunded ${dollars(d.amountCents)} CAD for order #${d.number}. It can take a few business days to appear on your statement.\nReason: ${esc(d.reason)}` }),
+  review_request: d => ({ subject: `How was your order from ${esc(d.shop)}?`, body: `Your order #${d.number} from ${esc(d.shop)} has been delivered.\n\nA short review helps the maker and other shoppers: ${esc(d.url)}` }),
+  new_message: d => ({ subject: `New message from ${esc(d.from)}`, body: `${esc(d.from)} wrote${d.about ? ` about ${esc(d.about)}` : ''}:\n\n${String(d.preview ?? '').slice(0, 300)}\n\nReply here: ${esc(d.url)}` }),
   order_cancelled: d => ({ subject: `Order #${d.number} was cancelled`, body: `Your order #${d.number} was cancelled and any payment has been refunded.` }),
 };
 export async function enqueue(c: Client | typeof pool, to: string, template: keyof typeof TEMPLATES, data: Data) {

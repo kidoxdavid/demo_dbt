@@ -16,10 +16,10 @@ const trackingOf = (so: any) => so.tracking_number ? { carrier: so.tracking_carr
 export async function buyerOrder(orderId: string) {
   const o = (await pool.query('SELECT * FROM orders WHERE id=$1', [orderId])).rows[0];
   const sos = (await pool.query(`SELECT so.*, s.name AS shop_name, s.slug AS shop_slug FROM seller_orders so JOIN shops s ON s.id=so.shop_id WHERE so.order_id=$1 ORDER BY so.created_at, so.id`, [orderId])).rows;
-  const lines = (await pool.query('SELECT * FROM order_lines WHERE order_id=$1 ORDER BY id', [orderId])).rows;
+  const lines = (await pool.query('SELECT * FROM order_lines WHERE order_id=$1 ORDER BY id', [orderId])).rows; const reviews = (await pool.query('SELECT seller_order_id, product_id, rating FROM reviews WHERE seller_order_id = ANY($1::uuid[])', [sos.map(x => x.id)])).rows;
   return { id: o.id, token: o.public_token as string, number: Number(o.number), status: o.status, paymentStatus: o.payment_status, createdAt: o.created_at, paidAt: o.paid_at, shipTo: o.ship_to, email: o.email, itemsCents: o.items_cents, shippingCents: o.shipping_cents, taxCents: o.tax_cents, totalCents: o.total_cents,
     sellers: sos.map(so => ({ id: so.id, shop: { name: so.shop_name, slug: so.shop_slug }, status: so.status, itemsCents: so.items_cents, shippingCents: so.shipping_cents, taxCents: so.tax_cents, totalCents: so.total_cents, refundedCents: so.refunded_cents, gift: so.gift, eta: { min: so.est_delivery_min, max: so.est_delivery_max }, tracking: trackingOf(so), deliveredAt: so.delivered_at,
-      lines: lines.filter(l => l.seller_order_id === so.id).map(l => ({ title: l.title, variant: l.variant_label, quantity: l.quantity, unitCents: l.unit_price_cents, personalisation: l.personalisation, art: l.art_kind ? { kind: l.art_kind, tone: l.art_tone } : null })) })) };
+      lines: lines.filter(l => l.seller_order_id === so.id).map(l => ({ productId: l.product_id, review: reviews.find(r => r.seller_order_id === so.id && r.product_id === l.product_id) ? { rating: reviews.find(r => r.seller_order_id === so.id && r.product_id === l.product_id)!.rating } : null, title: l.title, variant: l.variant_label, quantity: l.quantity, unitCents: l.unit_price_cents, personalisation: l.personalisation, art: l.art_kind ? { kind: l.art_kind, tone: l.art_tone } : null })) })) };
 }
 
 export function registerOrders(app: FastifyInstance) {

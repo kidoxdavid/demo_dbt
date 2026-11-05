@@ -28,7 +28,7 @@ export function registerStudioDashboard(app: FastifyInstance) {
     const sales = week.rows[0].sales as number, before = prev.rows[0].sales as number; const sh = shop.rows[0];
     return {
       firstName: s.user.fullName.split(' ')[0], shop: { name: sh.name, slug: sh.slug, status: sh.status, look: sh.look },
-      tasks: { ordersToShip: toShip.rows[0].n, shipBy: toShip.rows[0].earliest, messagesToAnswer: null, lowStock: low.rows.map(r => ({ productId: r.id, title: r.title, variant: Object.values(r.options as Record<string, string>).join(' · ') || null, left: r.left })) },
+      tasks: { ordersToShip: toShip.rows[0].n, shipBy: toShip.rows[0].earliest, messagesToAnswer: Number((await q(`SELECT count(*) n FROM threads WHERE seller_id=$1 AND last_sender='buyer'`, [sid])).rows[0].n), lowStock: low.rows.map(r => ({ productId: r.id, title: r.title, variant: Object.values(r.options as Record<string, string>).join(' · ') || null, left: r.left })) },
       week: { salesCents: sales, orders: week.rows[0].orders, visits: visits.rows[0].n, changePct: before > 0 ? Math.round(((sales - before) / before) * 100) : null, daily: daily.rows.map(r => ({ day: r.day, cents: r.cents })) },
       checklist: [{ key: 'shop', label: 'Create your shop', done: true }, { key: 'product', label: 'Add your first product', done: sh.published > 0 || (await q('SELECT 1 FROM products WHERE seller_id=$1 LIMIT 1', [sid])).rowCount! > 0 },
         { key: 'look', label: 'Choose your shop look', done: sh.look_chosen }, { key: 'payouts', label: 'Set up payouts', done: false /* payouts connect to a payment provider, which is not built yet */ }, { key: 'freeShipping', label: 'Offer free shipping', done: !!profile.rows[0]?.free }],

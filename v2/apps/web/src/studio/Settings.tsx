@@ -58,5 +58,5 @@ export function ShippingPage() {
     {!edit && err && <div className="err" role="alert">{err}</div>}</div>;
 }
 
-const SOON: Record<string, [string, string]> = { messages: ['Messages', 'Talk to buyers about their orders. Coming in a later release.'], promotions: ['Promotions', 'Discount codes and sales. Coming in a later release.'], insights: ['Insights', 'Which pieces people look at and buy. Coming in a later release.'], payouts: ['Payouts', 'Connect a bank account to get paid. This needs the payment provider, which is not connected yet, so no payouts can happen today.'] };
+const SOON: Record<string, [string, string]> = { promotions: ['Promotions', 'Discount codes and sales. Coming in a later release.'], insights: ['Insights', 'Which pieces people look at and buy. Coming in a later release.'], payouts: ['Payouts', 'Connect a bank account to get paid. This needs the payment provider, which is not connected yet, so no payouts can happen today.'] };
 export function Soon({ what }: { what: keyof typeof SOON }) { const desktop = useDesktop(); const [t, d] = SOON[what]; return <div {...wrap(desktop)}><h1 className="serif">{t}</h1><div className="empty"><h2 className="serif">Not available yet</h2><p>{d}</p><Link to="/studio" className="btn" style={{ marginTop: 16 }}>Back to studio home</Link></div></div>; }

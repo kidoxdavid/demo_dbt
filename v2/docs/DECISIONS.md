@@ -44,3 +44,11 @@
 - **Notes are internal**: stored apart from orders, never returned by any buyer or seller route.
 - **CSV exports neutralise spreadsheet formulas** (a cell starting with = + - @ gets a leading apostrophe) and are audited.
 - **The sign-in rate limit stays at 10 a minute**; the browser flows raise it with `AUTH_RATE_LIMIT_MAX` on the development server only.
+
+## Phase 7 decisions
+- **Reviews are verified by delivery**, not by account: the order link proves the order, the seller order must be `delivered`, and a database unique key (seller order, product) allows one review each. Shortening the name happens when the review is written.
+- **A shop's rating is a blend**: `rating_base_avg/count` (seeded demo rating, zero for real shops) plus published reviews. Hiding a review recomputes it. The shop's displayed rating column stays what every card already reads.
+- **Reporting a review is the seller's only lever**; it is not a takedown. A review a seller reported and staff kept cannot be reported again. Replies are one per review and public.
+- **Conversations are threads**: per order (one per seller order, works with the order link) or per buyer, shop and product. Email to the other side is throttled to one pending message email per thread. Staff see conversations only through the order (support, read only).
+- **The shop window hides seller roles**, so "you cannot message your own shop" asks the database, not the session.
+- **Every storefront field a new shop may leave empty (tagline, city, story) must be null-safe**: the new-shop path is now part of the browser flows.

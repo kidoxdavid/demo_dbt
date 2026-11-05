@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ApiError, api, useApi } from '../api';
 import { useCart } from '../cart';
 import { Icon } from '../components/Icon';
+import { Conversation, RatingStars, ReviewForm, type Msg } from '../components/Engagement';
 import { Button } from '../components/ui';
 import { dateRange, money } from '../format';
 import { useSession } from '../session';
@@ -54,6 +55,18 @@ function Pay({ placed, onPaid, onBack }: { placed: Placed; onPaid: () => void; o
     {err && <div className="err" role="alert">{err}</div>}<button className="muted" style={{ display: 'block', margin: '16px auto 0', fontSize: 13, textDecoration: 'underline' }} onClick={onBack}>Back to your details</button></div></div>;
 }
 
+/** Order chat with one maker, through the private order link (guests can use it too). */
+function OrderChat({ token, sellerOrderId, shop }: { token: string; sellerOrderId: string; shop: string }) {
+  const [open, setOpen] = useState(false); const { data, reload } = useApi<{ messages: Msg[] }>(open ? `/api/orders/by-token/${token}/messages/${sellerOrderId}` : null);
+  return <div style={{ marginTop: 12 }}><Button size="sm" variant="ghost" onClick={() => setOpen(!open)} aria-expanded={open}>{open ? 'Hide messages' : `Message ${shop}`}</Button>
+    {open && <div className="rv-form"><Conversation messages={data?.messages ?? []} me="buyer" placeholder={`Ask ${shop} about this order`} onSend={async body => { await api(`/api/orders/by-token/${token}/messages/${sellerOrderId}`, { method: 'POST', body: { body } }); reload(); }} /></div>}</div>;
+}
+function LineReview({ token, line, delivered, onDone }: { token: string; line: any; delivered: boolean; onDone: () => void }) {
+  const [open, setOpen] = useState(false); if (!line.productId) return null;
+  if (line.review) return <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>Your review: <RatingStars n={line.review.rating} size={12} /></div>;
+  if (!delivered) return null;
+  return open ? <ReviewForm token={token} productId={line.productId} title={line.title} onDone={() => { setOpen(false); onDone(); }} /> : <button type="button" style={{ fontSize: 13, textDecoration: 'underline', marginTop: 4 }} onClick={() => setOpen(true)}>Write a review</button>;
+}
 const STEPS = ['Order placed', 'Accepted by the maker', 'Shipped', 'Delivered'];
 const rank = (s: string) => ({ new: 0, accepted: 1, shipped: 2, delivered: 3 } as Record<string, number>)[s] ?? -1;
 /** Order status. Guests reach it by the private link in their email. */
@@ -66,10 +79,10 @@ export function OrderPage() {
   return <div className="screen pad" style={{ paddingTop: 24 }}><div className="co">
     <div style={{ textAlign: 'center' }}><div className="ok-mark"><Icon name="check" size={28} /></div><h1 className="serif" style={{ marginTop: 14 }}>{paid ? 'Thank you' : o.paymentStatus === 'failed' ? 'Payment did not go through' : 'Waiting for payment'}</h1><p className="muted" style={{ marginTop: 6 }}>Order #{o.number}{paid ? ` · confirmation sent to ${o.email}` : ''}</p></div>
     {o.sellers.map((s: any) => <div key={s.id} className="card sec"><div style={{ display: 'flex', justifyContent: 'space-between' }}><Link to={`/shop/${s.shop.slug}`}><b>{s.shop.name}</b></Link>{s.eta?.min && <span className="muted" style={{ fontSize: 12 }}>Arrives {dateRange(s.eta.min, s.eta.max)}</span>}</div>
-      {s.lines.map((l: any, i: number) => <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, marginTop: 8 }}><span>{l.title}{l.variant ? ` · ${l.variant}` : ''} × {l.quantity}</span><b style={{ fontWeight: 500 }}>{money(l.unitCents * l.quantity)}</b></div>)}
+      {s.lines.map((l: any, i: number) => <div key={i} style={{ marginTop: 8 }}><div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14 }}><span>{l.title}{l.variant ? ` · ${l.variant}` : ''} × {l.quantity}</span><b style={{ fontWeight: 500 }}>{money(l.unitCents * l.quantity)}</b></div><LineReview token={token} line={l} delivered={s.status === 'delivered'} onDone={reload} /></div>)}
       {paid && <ul className="timeline">{STEPS.map((t, i) => <li key={t} className={i <= rank(s.status) ? 'on' : ''}><i />{t}</li>)}</ul>}
       {s.tracking && <p style={{ fontSize: 13, marginTop: 8 }}>Tracking: {s.tracking.url ? <a href={s.tracking.url} style={{ textDecoration: 'underline' }}>{s.tracking.number}</a> : s.tracking.number}</p>}
-      {s.refundedCents > 0 && <p className="muted" style={{ fontSize: 13, marginTop: 8 }}>Refunded {money(s.refundedCents)}</p>}</div>)}
+      {s.refundedCents > 0 && <p className="muted" style={{ fontSize: 13, marginTop: 8 }}>Refunded {money(s.refundedCents)}</p>}{paid && <OrderChat token={token} sellerOrderId={s.id} shop={s.shop.name} />}</div>)}
     <div className="card sec tot"><div className="r"><span>Items</span><b>{money(o.itemsCents)}</b></div><div className="r"><span>Shipping</span><b>{money(o.shippingCents)}</b></div><div className="r"><span>GST</span><b>{money(o.taxCents)}</b></div><div className="r big"><span style={{ color: 'var(--ink)' }}>Total</span><b>{money(o.totalCents)}</b></div></div>
     <Link to="/" className="btn ghost" style={{ display: 'flex', marginTop: 18 }}>Keep browsing</Link></div></div>;
 }

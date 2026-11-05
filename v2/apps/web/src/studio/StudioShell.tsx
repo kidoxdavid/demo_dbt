@@ -24,7 +24,7 @@ export function StudioProvider({ children }: { children: React.ReactNode }) {
   return <C.Provider value={v}>{children}</C.Provider>;
 }
 
-const NAV: { to: string; label: string; icon: IconName; end?: boolean }[] = [{ to: '/studio', label: 'Home', icon: 'home', end: true }, { to: '/studio/orders', label: 'Orders', icon: 'box' }, { to: '/studio/products', label: 'Products', icon: 'tag' }, { to: '/studio/messages', label: 'Messages', icon: 'msg' },
+const NAV: { to: string; label: string; icon: IconName; end?: boolean }[] = [{ to: '/studio', label: 'Home', icon: 'home', end: true }, { to: '/studio/orders', label: 'Orders', icon: 'box' }, { to: '/studio/products', label: 'Products', icon: 'tag' }, { to: '/studio/messages', label: 'Messages', icon: 'msg' }, { to: '/studio/reviews', label: 'Reviews', icon: 'msg' },
   { to: '/studio/promotions', label: 'Promotions', icon: 'tag' }, { to: '/studio/shop', label: 'Shop page', icon: 'store' }, { to: '/studio/insights', label: 'Insights', icon: 'chart' }, { to: '/studio/payouts', label: 'Payouts', icon: 'wallet' }];
 const PHONE_TAB = (p: string) => (p === '/studio' ? 0 : p.startsWith('/studio/orders') ? 1 : p.startsWith('/studio/products') ? 2 : p.startsWith('/studio/messages') ? 3 : p.startsWith('/studio/insights') ? 4 : null);
 

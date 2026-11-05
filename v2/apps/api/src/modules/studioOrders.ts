@@ -45,7 +45,11 @@ export function registerStudioOrders(app: FastifyInstance) {
     const o = (await c.query('SELECT o.email, o.number, o.public_token, s.name AS shop FROM orders o JOIN seller_orders x ON x.order_id=o.id JOIN shops s ON s.id=x.shop_id WHERE x.id=$1', [so.id])).rows[0];
     await enqueue(c, o.email, 'order_shipped', { number: Number(o.number), shop: o.shop, carrier: b.carrier.replace('_', ' '), trackingNumber: b.trackingNumber, trackingUrl: (CARRIERS[b.carrier] ?? CARRIERS.other)(b.trackingNumber) || null, url: `${process.env.PUBLIC_URL ?? 'http://localhost:5180'}/orders/${o.public_token}` });
   }, z.object({ carrier: z.enum(Object.keys(CARRIERS) as [string, ...string[]]), trackingNumber: z.string().trim().regex(/^[A-Za-z0-9-]{3,40}$/) }).strict());
-  step('deliver', ['shipped'], 'delivered', async (c, so) => { await c.query('UPDATE seller_orders SET delivered_at=now() WHERE id=$1', [so.id]); });
+  step('deliver', ['shipped'], 'delivered', async (c, so) => {
+    await c.query('UPDATE seller_orders SET delivered_at=now() WHERE id=$1', [so.id]);
+    const o = (await c.query('SELECT o.email, o.number, o.public_token, s.name AS shop FROM orders o JOIN seller_orders x ON x.order_id=o.id JOIN shops s ON s.id=x.shop_id WHERE x.id=$1', [so.id])).rows[0];
+    await enqueue(c, o.email, 'review_request', { number: Number(o.number), shop: o.shop, url: `${process.env.PUBLIC_URL ?? 'http://localhost:5180'}/orders/${o.public_token}` });          // asks once, when the piece has arrived
+  });
 
   /** Refund some or all lines (and optionally the shipping). Owners and managers only: money leaves the seller's balance. */
   app.post('/api/studio/orders/:id/refund', async (req) => {

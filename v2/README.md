@@ -17,6 +17,6 @@ npm test -w apps/api                 # API tests; the test database name must co
 ```
 Staff: `npm run make-staff -w apps/api -- you@example.com admin 'a-long-password'`.
 Visual tests: `CHROMIUM_PATH=/path/to/chromium node apps/e2e/visual.mjs` (needs the website running on :5180).
-Browser flows (buyer, studio, staff consoles): `node apps/e2e/flow.mjs`, `studio-flow.mjs`, `console-flow.mjs`. They need the stack running on the demo data. Start it with a pinned clock and a higher sign-in limit (the flows sign in many times a minute; production keeps 10):
+Browser flows (buyer, studio, staff consoles, engagement): `node apps/e2e/flow.mjs`, `studio-flow.mjs`, `console-flow.mjs`, `engagement-flow.mjs`. The flows create shops, products and orders in the database, so run the visual tests first on freshly seeded data, then the flows. They need the stack running on the demo data. Start it with a pinned clock and a higher sign-in limit (the flows sign in many times a minute; production keeps 10):
 `EAZY_FAKE_NOW=2026-11-05T16:41:00Z npx tsx src/seed-demo.ts` then `AUTH_RATE_LIMIT_MAX=1000 EAZY_FAKE_NOW=2026-11-05T16:41:00Z npm run start -w apps/api` and `npm run dev -w apps/web`.
 Demo staff sign-ins (password `demo-password-2026`): admin@, support@, finance@, catalogue@, marketing@eazystores.test at /admin, /support, /finance, /marketing.

@@ -82,10 +82,11 @@ export function SearchPage() {
 }
 
 export function SavedPage() {
-  const { user, ready, card } = useSession(); const desktop = useDesktop(); const { data } = useApi<{ items: ApiCard[] }>(user ? '/api/me/saved' : null);
+  const { user, ready, card } = useSession(); const desktop = useDesktop(); const { data } = useApi<{ items: ApiCard[] }>(user ? '/api/me/saved' : null); const following = useApi<{ slug: string; name: string; tagline: string; items: ApiCard[] }[]>(user ? '/api/me/following' : null).data;
   return <div className={desktop ? 'dpad' : 'screen'}><div className={desktop ? '' : 'pad'} style={{ paddingTop: 6 }}><h1 className="serif" style={{ fontSize: desktop ? 38 : 30 }}>Saved</h1>
     {ready && !user ? <div className="empty"><h2 className="serif">Sign in to see what you saved</h2><p>Tap the heart on any piece to keep it here.</p><Link to="/account?next=/saved" className="btn" style={{ marginTop: 16 }}>Sign in</Link></div>
       : data && data.items.length === 0 ? <div className="empty"><h2 className="serif">Nothing saved yet</h2><p>Tap the heart on a piece you love.</p><Link to="/" className="btn" style={{ marginTop: 16 }}>Browse the shop</Link></div>
-      : <div className={desktop ? 'grid4' : 'grid2 list'}>{(data?.items ?? []).map(c => <ProductCard key={c.id} p={card(c)} />)}</div>}</div></div>;
+      : <div className={desktop ? 'grid4' : 'grid2 list'}>{(data?.items ?? []).map(c => <ProductCard key={c.id} p={card(c)} />)}</div>}
+    {following && following.length > 0 && <><h2 className="serif" style={{ fontSize: 24, marginTop: 30 }}>Shops you follow</h2>{following.map(f => <div key={f.slug} style={{ marginTop: 16 }}><Link to={`/shop/${f.slug}`} style={{ fontWeight: 600 }}>{f.name}</Link><div className={desktop ? 'grid4' : 'grid2 list'} style={{ marginTop: 10 }}>{f.items.slice(0, desktop ? 4 : 2).map(c => <ProductCard key={c.id} p={card(c)} />)}</div></div>)}</>}</div></div>;
 }
 void money;

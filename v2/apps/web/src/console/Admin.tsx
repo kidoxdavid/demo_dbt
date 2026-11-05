@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api, useApi } from '../api';
 import { ProductArt } from '../art/ProductArt';
+import { RatingStars } from '../components/Engagement';
 import { Button, Chip } from '../components/ui';
 import { money } from '../format';
 import { useConsole } from './ConsoleShell';
@@ -72,10 +73,21 @@ export function ModerationPage() {
   const decide = async (id: string, decision: 'approve' | 'remove') => { setErr(''); setBusy(true); try { await api(`/api/admin/moderation/${id}`, { method: 'POST', body: { decision, ...(decision === 'remove' ? { reason: reason.trim() } : {}) } }); setOpen(null); setReason(''); reload(); } catch (e) { setErr(fail(e)); } finally { setBusy(false); } };
   return <Page title="Review queue" sub="Products in restricted categories go live straight away and wait here to be checked. Approve them, or remove them with a reason.">
     {err && <div className="err" role="alert">{err}</div>}
-    <Rows empty="The queue is empty. Nothing is waiting for review.">{(data ?? []).map(p => <div key={p.id} className="tr" style={{ flexWrap: 'wrap' }}><div style={{ width: 52, height: 52, borderRadius: 10, overflow: 'hidden', flex: 'none' }}>{p.image ? <img src={p.image} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : p.art ? <ProductArt kind={p.art.kind} tone={p.art.tone} /> : null}</div>
+    <ReportedReviews />
+    <h2 className="serif" style={{ fontSize: 20, marginTop: 24 }}>Products</h2><Rows empty="The queue is empty. Nothing is waiting for review.">{(data ?? []).map(p => <div key={p.id} className="tr" style={{ flexWrap: 'wrap' }}><div style={{ width: 52, height: 52, borderRadius: 10, overflow: 'hidden', flex: 'none' }}>{p.image ? <img src={p.image} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : p.art ? <ProductArt kind={p.art.kind} tone={p.art.tone} /> : null}</div>
       <div className="t"><b><Link to={`/p/${p.id}`} style={{ textDecoration: 'underline' }}>{p.title}</Link></b><div>{p.shop} · {p.category} · {p.priceCents ? money(p.priceCents) : 'no price'} · {stamp(p.updatedAt)}</div></div>
       <Button size="sm" disabled={busy} onClick={() => decide(p.id, 'approve')}>Approve</Button><Button size="sm" variant="ghost" onClick={() => setOpen(open === p.id ? null : p.id)}>Remove…</Button>
       {open === p.id && <div style={{ flexBasis: '100%', display: 'flex', gap: 10 }}><input className="field" aria-label="Reason for removing" placeholder="Reason (the seller is told)" value={reason} onChange={e => setReason(e.target.value)} /><Button size="sm" disabled={busy || reason.trim().length < 3} onClick={() => decide(p.id, 'remove')}>Remove product</Button></div>}</div>)}</Rows></Page>;
+}
+
+/** Reviews a seller has reported. Keep them (the review stays and cannot be reported again) or hide them (they leave the rating). */
+function ReportedReviews() {
+  const { data, reload } = useApi<any[]>('/api/admin/reviews/reported'); const [open, setOpen] = useState<string | null>(null); const [reason, setReason] = useState(''); const [err, setErr] = useState(''); const [busy, setBusy] = useState(false);
+  const decide = async (id: string, decision: 'keep' | 'hide') => { setErr(''); setBusy(true); try { await api(`/api/admin/reviews/${id}`, { method: 'POST', body: { decision, reason: reason.trim() } }); setOpen(null); setReason(''); reload(); } catch (e) { setErr(fail(e)); } finally { setBusy(false); } };
+  return <><h2 className="serif" style={{ fontSize: 20, marginTop: 24 }}>Reported reviews</h2>{err && <div className="err" role="alert">{err}</div>}
+    <Rows empty="No reported reviews.">{(data ?? []).map(r => <div key={r.id} className="tr" style={{ flexWrap: 'wrap', alignItems: 'flex-start' }}><div className="t"><div style={{ display: 'flex', gap: 8, alignItems: 'center' }}><RatingStars n={r.rating} /><b>{r.title}</b></div><div style={{ color: 'var(--ink)', fontSize: 14, margin: '4px 0' }}>{r.body}</div><div>{r.authorName} on {r.productTitle} ({r.shop})</div><div style={{ color: 'var(--ink)' }}>Seller says: “{r.reportReason}”</div></div>
+      <Button size="sm" variant="ghost" onClick={() => setOpen(open === r.id ? null : r.id)}>Decide…</Button>
+      {open === r.id && <div style={{ flexBasis: '100%', display: 'flex', gap: 10, flexWrap: 'wrap' }}><input className="field" aria-label="Reason for the decision" placeholder="Reason (kept in the audit log)" value={reason} onChange={e => setReason(e.target.value)} /><Button size="sm" disabled={busy || reason.trim().length < 3} onClick={() => decide(r.id, 'keep')}>Keep the review</Button><Button size="sm" variant="ghost" disabled={busy || reason.trim().length < 3} onClick={() => decide(r.id, 'hide')}>Hide the review</Button></div>}</div>)}</Rows></>;
 }
 
 export function SettingsPage() {

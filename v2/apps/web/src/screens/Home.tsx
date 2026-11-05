@@ -8,7 +8,7 @@ import { useApi } from '../api';
 import { useDesktop } from '../hooks';
 import { useSession, type ApiCard } from '../session';
 
-interface HomeData { categories: { slug: string; label: string; kind: ArtKind; tone: Tone }[]; phone: ApiCard[]; desktop: ApiCard[]; spotlight: { shop: { name: string; slug: string; city: string; tagline: string; logo: string | null }; quote: string; art: { kind: ArtKind; tone: Tone } | null } | null }
+interface HomeData { categories: { slug: string; label: string; kind: ArtKind; tone: Tone }[]; phone: ApiCard[]; desktop: ApiCard[]; spotlight: { shop: { name: string; slug: string; city: string | null; tagline: string | null; logo: string | null }; quote: string; art: { kind: ArtKind; tone: Tone } | null } | null }
 const Skeleton = () => <div className="pad" style={{ marginTop: 22 }}><div className="skeleton" style={{ height: 300 }} /></div>;
 
 /** Home. Phone matches reference buyer-home.png, desktop matches buyer-home-desktop.png. Both read the same /api/home. */
@@ -34,7 +34,7 @@ function PhoneHome({ d, card }: { d: HomeData; card: Card }) {
       <SectionHead title="New from makers" action="See all" />
       <div className="grid2">{d.phone.map(c => <ProductCard key={c.id} p={card(c)} />)}</div>
       {d.spotlight && <div style={{ marginTop: 20 }}><Link to={`/shop/${d.spotlight.shop.slug}`} className="card spotlight"><div className="round64"><ProductArt kind={d.spotlight.art?.kind ?? 'pottery'} tone={d.spotlight.art?.tone ?? 'warm'} /></div>
-        <div style={{ flex: 1 }}><div className="muted" style={{ fontSize: 11, letterSpacing: '.08em', textTransform: 'uppercase' }}>Maker spotlight</div><div className="serif" style={{ fontSize: 18, marginTop: 2 }}>{d.spotlight.shop.name}</div><div className="muted" style={{ fontSize: 12, marginTop: 2 }}>{d.spotlight.shop.tagline.replace(/ from .*/, '')}, {d.spotlight.shop.city}</div></div><Icon name="chev" /></Link></div>}</div>
+        <div style={{ flex: 1 }}><div className="muted" style={{ fontSize: 11, letterSpacing: '.08em', textTransform: 'uppercase' }}>Maker spotlight</div><div className="serif" style={{ fontSize: 18, marginTop: 2 }}>{d.spotlight.shop.name}</div><div className="muted" style={{ fontSize: 12, marginTop: 2 }}>{[d.spotlight.shop.tagline?.replace(/ from .*/, ''), d.spotlight.shop.city].filter(Boolean).join(', ')}</div></div><Icon name="chev" /></Link></div>}</div>
   </div>;
 }
 

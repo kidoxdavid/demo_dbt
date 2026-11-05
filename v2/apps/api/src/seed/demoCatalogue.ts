@@ -98,7 +98,7 @@ export async function seedDemoCatalogue(c: Client, password: string) {
     await addVariant(p, 1800 + ((i * 137) % 9000), 3 + (i % 9));
   }
   await c.query('INSERT INTO seller_categories(seller_id,category_id) SELECT DISTINCT p.seller_id, p.category_id FROM products p WHERE p.category_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM seller_categories sc WHERE sc.seller_id=p.seller_id) ON CONFLICT DO NOTHING');          // each seller sells in the categories of their products
-  await c.query(`UPDATE shops SET look_chosen=true WHERE slug='clay-ember'`);
+  await c.query(`UPDATE shops SET look_chosen=true WHERE slug='clay-ember'`); await c.query('UPDATE shops SET rating_base_avg = coalesce(rating_avg, 0), rating_base_count = rating_count');          // the seeded demo ratings are the base real reviews build on
   // Curated home: phones show the first four newest, the desktop row swaps the hair bundle for the perfume (the two mockups differ), and the spotlight is Clay & Ember.
   const idOf = async (t: string) => (await c.query('SELECT id FROM products WHERE title=$1', [t])).rows[0].id as string; const titles = { dusk: 'Dusk over the hills, A4 print', cedar: 'Cedar & fig soy candle', planter: 'Geometric desk planter', hair: 'Body wave bundle, 18 in', perfume: 'Amber & oud eau de parfum, 50 ml' };
   const [d, ce, pl, h, pf] = [await idOf(titles.dusk), await idOf(titles.cedar), await idOf(titles.planter), await idOf(titles.hair), await idOf(titles.perfume)]; const put = (k: string, v: unknown) => c.query(`INSERT INTO app_settings(key,value) VALUES ($1,$2) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value`, [k, JSON.stringify(v)]);

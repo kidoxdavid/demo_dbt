@@ -6,6 +6,7 @@ import type { ArtKind, Tone } from '../art/tones';
 import { useCart } from '../cart';
 import { Icon } from '../components/Icon';
 import { BasketLink } from '../components/Layout';
+import { Conversation, RatingStars, ReviewList, apiMessage, type ReviewData } from '../components/Engagement';
 import { Button, Chip, ProductCard, Stars } from '../components/ui';
 import { dateRange, money, moneyShort } from '../format';
 import { useDesktop } from '../hooks';
@@ -16,7 +17,7 @@ interface Media { id: string; kind: 'image' | 'video'; w640?: string; w1280?: st
 interface Product {
   id: string; title: string; description: string; chip: string | null; oneOfAKind: boolean; onlyOne: boolean; madeToOrder: boolean; leadTimeDays: number | null; art: { kind: ArtKind; tone: Tone } | null;
   category: { slug: string; name: string; breadcrumbs: { slug: string; name: string }[] } | null; personalisation: { label: string; required: boolean; maxLength?: number }[];
-  shop: { name: string; slug: string; city: string; region: string; logo: string | null; rating: { avg: number; count: number } | null; vacation: boolean }; processing: { minDays: number; maxDays: number }; returns: { text?: string } | null;
+  shop: { name: string; slug: string; city: string | null; region: string | null; logo: string | null; rating: { avg: number; count: number } | null; vacation: boolean }; processing: { minDays: number; maxDays: number }; returns: { text?: string } | null;
   options: { name: string; values: { value: string; swatch: string | null }[] }[]; defaultOptions: Record<string, string>; variants: Variant[]; media: Media[]; attributes: { key: string; label: string; display: string }[]; moreFromShop: ApiCard[]; similar: ApiCard[];
 }
 interface Ship { shippingCents: number; free: boolean; shipsInDays: { min: number; max: number }; arrives: { min: string; max: string }; freeOverCents: number | null }
@@ -39,6 +40,19 @@ function ShipCard({ productId }: { productId: string }) {
     {data && <button className="muted" style={{ marginLeft: 'auto', fontSize: 12 }} onClick={() => { setPostal(''); store.set(''); }}>Change</button>}</div>;
 }
 
+function Reviews({ productId }: { productId: string }) {
+  const [limit, setLimit] = useState(5); const { data, error } = useApi<ReviewData>(`/api/products/${productId}/reviews?limit=${limit}`);
+  if (error || !data) return null;
+  return <div className="pdp-section"><h2 className="serif">Reviews</h2><ReviewList data={data} more={data.items.length < data.count} onMore={() => setLimit(limit + 10)} /></div>;
+}
+/** "Ask the maker": a short question about this piece. Needs an account so the answer has somewhere to go. */
+function AskMaker({ shop, productId, title }: { shop: string; productId: string; title: string }) {
+  const { user, say } = useSession(); const nav = useNavigate(); const [open, setOpen] = useState(false); const [sent, setSent] = useState(false); const [err, setErr] = useState('');
+  const send = async (body: string) => { try { await api(`/api/shops/${shop}/messages`, { method: 'POST', body: { productId, body } }); setSent(true); say('Message sent'); } catch (e) { setErr(apiMessage(e)); throw e; } };
+  if (sent) return <p className="muted" style={{ fontSize: 14, marginTop: 10 }}>Sent. Replies arrive in <Link to="/account/messages" style={{ textDecoration: 'underline' }}>your messages</Link> and by email.</p>;
+  if (!open) return <Button variant="ghost" size="sm" style={{ marginTop: 12 }} onClick={() => (user ? setOpen(true) : nav(`/account?next=${encodeURIComponent(location.pathname)}`))}>{user ? 'Ask the maker a question' : 'Sign in to ask the maker a question'}</Button>;
+  return <div className="rv-form"><b style={{ fontSize: 14 }}>About “{title}”</b><div style={{ marginTop: 10 }}><Conversation messages={[]} me="buyer" onSend={send} placeholder="Is it dishwasher safe? Can you make it in blue?" />{err && null}</div></div>;
+}
 export function ProductPage() {
   const { id = '' } = useParams(); const nav = useNavigate(); const desktop = useDesktop(); const { data: p, error } = useApi<Product>(`/api/products/${id}`);
   const { add } = useCart(); const { savedProducts, toggleSaved, say, card } = useSession(); const [opts, setOpts] = useState<Record<string, string>>({}); const [pers, setPers] = useState<Record<string, string>>({}); const [busy, setBusy] = useState(false); const [msg, setMsg] = useState('');
@@ -71,7 +85,8 @@ export function ProductPage() {
       {p.description && <div className="pdp-section"><h2 className="serif">About this piece</h2><p>{p.description}</p></div>}
       {p.attributes.length > 0 && <div className="pdp-section"><h2 className="serif">Details</h2><dl className="attrs">{p.attributes.map(a => <Fragment key={a.key}><dt>{a.label}</dt><dd>{a.display}</dd></Fragment>)}</dl></div>}
       {p.returns?.text && <div className="pdp-section"><h2 className="serif">Returns</h2><p>{p.returns.text}</p></div>}
-      <div className="pdp-section"><h2 className="serif">From {p.shop.name}, {p.shop.city}</h2><Link to={`/shop/${p.shop.slug}`} className="muted" style={{ fontSize: 14, textDecoration: 'underline' }}>Visit the shop</Link></div>
+      <Reviews productId={p.id} />
+      <div className="pdp-section"><h2 className="serif">From {p.shop.name}{p.shop.city ? `, ${p.shop.city}` : ''}</h2><Link to={`/shop/${p.shop.slug}`} className="muted" style={{ fontSize: 14, textDecoration: 'underline' }}>Visit the shop</Link><div><AskMaker shop={p.shop.slug} productId={p.id} title={p.title} /></div></div>
       {p.moreFromShop.length > 0 && <div className="pdp-section"><h2 className="serif">More from {p.shop.name}</h2><div className="grid2">{p.moreFromShop.slice(0, 4).map(c => <ProductCard key={c.id} p={card(c)} />)}</div></div>}
       {p.similar.length > 0 && <div className="pdp-section" style={{ marginBottom: 130 }}><h2 className="serif">You may also like</h2><div className="grid2">{p.similar.slice(0, 4).map(c => <ProductCard key={c.id} p={card(c)} />)}</div></div>}
     </div></>;

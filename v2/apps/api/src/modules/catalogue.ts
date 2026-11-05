@@ -124,6 +124,7 @@ export function registerCatalogue(app: FastifyInstance) {
     const { slug } = z.object({ slug: z.string().regex(SLUG) }).parse(req.params);
     const s = (await pool.query(`SELECT s.*, se.verification_tier, (SELECT count(*) FROM products p WHERE p.shop_id=s.id AND p.status='published' AND p.moderation_status<>'removed')::int AS product_count
       FROM shops s JOIN sellers se ON se.id=s.seller_id WHERE s.slug=$1 AND s.status='live' AND se.status='active'`, [slug])).rows[0]; if (!s) throw new HttpError(404, 'not_found');
+    void pool.query('INSERT INTO shop_views(shop_id,day,views) VALUES ($1,current_date,1) ON CONFLICT (shop_id,day) DO UPDATE SET views=shop_views.views+1', [s.id]).catch(() => {});       // page views for the studio
     return { name: s.name, slug: s.slug, tagline: s.tagline, story: s.story, city: s.city, region: s.region, look: s.look, logo: mediaUrl(s.logo_media_id, 'w320'), banner: mediaUrl(s.banner_media_id, 'w1280'),
       badges: s.badges, verifiedMaker: s.verification_tier === 'verified_maker', rating: s.rating_count > 0 ? { avg: Number(s.rating_avg), count: s.rating_count } : null, vacation: s.vacation_mode,
       policies: s.policies, processing: { minDays: s.processing_days_min, maxDays: s.processing_days_max }, productCount: s.product_count };

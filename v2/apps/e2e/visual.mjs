@@ -17,6 +17,18 @@ async function fillCart(page, lines) {
     const r = await page.context().request.post(`${BASE}/api/cart/items`, { data: { variantId: v.id, quantity: l.quantity ?? 1 }, headers: { origin: BASE } }); if (!r.ok()) throw new Error(`cart add failed ${r.status()} ${await r.text()}`);
   }
 }
+/** A draft for the studio first-product step: a copy of a seeded piece (so it has the illustration as its cover), retitled and repriced through the studio API. */
+async function makeDraft(ctx, d) {
+  const mine = await (await ctx.request.get(`${BASE}/api/studio/products?q=${encodeURIComponent(d.from)}&limit=5`)).json(); const src = mine.items.find(i => i.title === d.from); if (!src) throw new Error(`draft source not found: ${d.from}`);
+  const dup = await ctx.request.post(`${BASE}/api/studio/products/${src.id}/duplicate`, { data: {}, headers: { origin: BASE } }); const id = (await dup.json()).id;
+  for (const body of [{ oneOfAKind: false }, d.patch]) { const r = await ctx.request.patch(`${BASE}/api/studio/products/${id}`, { data: body, headers: { origin: BASE } }); if (!r.ok()) throw new Error(`draft patch failed ${r.status()} ${await r.text()}`); }
+  if (d.photo) {                                                    // a real uploaded photo that looks like the mockup's illustration (the app's own art, screenshotted square)
+    const ap = await ctx.newPage(); await ap.setViewportSize({ width: 640, height: 640 }); await ap.goto(`${BASE}/_art/${d.photo.kind}/${d.photo.tone}`); await ap.waitForSelector('svg'); const png = await ap.screenshot(); await ap.close();
+    const up = await ctx.request.post(`${BASE}/api/studio/media`, { data: png, headers: { origin: BASE, 'content-type': 'image/png' } }); if (!up.ok()) throw new Error(`photo upload failed ${up.status()}`);
+    const r = await ctx.request.patch(`${BASE}/api/studio/products/${id}`, { data: { mediaIds: [(await up.json()).id] }, headers: { origin: BASE } }); if (!r.ok()) throw new Error(`photo attach failed ${r.status()}`);
+  }
+  return id;
+}
 async function installFixture(page, name) {
   const fx = JSON.parse(readFileSync(join(here, 'fixtures', `${name}.json`), 'utf8'));
   await page.route('**/api/shops/*', r => r.fulfill({ json: fx.shop })); await page.route('**/api/products?*', r => r.fulfill({ json: { total: fx.items.length, makers: 1, fuzzy: false, items: fx.items } }));
@@ -28,11 +40,14 @@ for (const s of screens) {
   await page.addInitScript(() => { const st = document.createElement('style'); document.addEventListener('DOMContentLoaded', () => { st.textContent = '*{animation:none!important;transition:none!important;caret-color:transparent!important}'; document.head.appendChild(st); }); });
   if (s.storage) await page.addInitScript(kv => { for (const [k, v] of Object.entries(kv)) localStorage.setItem(k, v); }, s.storage);
   if (s.fixture) await installFixture(page, s.fixture);
-  let path = s.path;
+  if (s.login) { const r = await ctx.request.post(`${BASE}/api/auth/login`, { data: { email: s.login.email, password: s.login.password }, headers: { origin: BASE, 'x-area': s.login.area } }); if (!r.ok()) throw new Error(`login failed ${r.status()}`); }
+  let path = s.path; if (s.draft) { const id = await makeDraft(ctx, s.draft); path = path.replace('{draft}', id); }
   if (s.productTitle) { const id = await findProductId(ctx, s.productTitle); path = `/p/${id}`; }
   await page.goto(BASE + path);
   if (s.cart) { await fillCart(page, s.cart); await page.goto(BASE + path); }
-  if (s.waitFor) await page.waitForSelector(s.waitFor, { timeout: 15000 }); await page.evaluate(() => document.fonts.ready); await page.waitForLoadState('load'); await page.waitForTimeout(400);
+  if (s.waitFor) await page.waitForSelector(s.waitFor, { timeout: 15000 });
+  for (const a of s.actions ?? []) { await page.getByRole('button', { name: a.click, exact: true }).click(); }
+  if (s.actions) { await page.evaluate(() => window.scrollTo(0, 0)); await page.waitForTimeout(150); } await page.evaluate(() => document.fonts.ready); await page.waitForLoadState('load'); await page.waitForTimeout(400);
   const shot = s.selector ? await (await page.$(s.selector)).screenshot() : await page.screenshot({ fullPage: s.fullPage ?? false });
   writeFileSync(join(OUT, `${s.name}.actual.png`), shot);
   const refPath = s.baseline ? join(BASELINES, `${s.name}.png`) : join(REF, `${s.ref ?? s.name}.png`);

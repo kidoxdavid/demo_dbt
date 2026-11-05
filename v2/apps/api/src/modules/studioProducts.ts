@@ -52,7 +52,7 @@ async function productView(c: Client | typeof pool, p: any) {
   const attributes = Object.fromEntries((await c.query('SELECT key, value FROM product_attribute_values WHERE product_id=$1', [p.id])).rows.map(r => [r.key, r.value]));
   const extra = (await c.query(`SELECT c.slug FROM product_categories pc JOIN categories c ON c.id=pc.category_id WHERE pc.product_id=$1 AND pc.category_id IS DISTINCT FROM $2`, [p.id, p.category_id])).rows.map(r => r.slug);
   const r = await readiness(c, p, true);
-  return { id: p.id, title: p.title, description: p.description, status: p.status, moderation: p.moderation_status, categorySlug: cat?.slug ?? null, extraCategorySlugs: extra, condition: p.condition, handmade: p.handmade, madeIn: p.made_in, taxClass: p.tax_class,
+  return { id: p.id, title: p.title, description: p.description, art: p.art_kind ? { kind: p.art_kind, tone: p.art_tone ?? 'warm' } : null, status: p.status, moderation: p.moderation_status, categorySlug: cat?.slug ?? null, extraCategorySlugs: extra, condition: p.condition, handmade: p.handmade, madeIn: p.made_in, taxClass: p.tax_class,
     oneOfAKind: p.one_of_a_kind, madeToOrder: p.made_to_order, leadTimeDays: p.lead_time_days, weeklyCapacity: p.weekly_capacity, tags: p.tags, personalisation: p.personalisation, dangerousGoods: p.dangerous_goods, attributes, media, options, variants,
     category: cat && { slug: cat.slug, name: cat.name, restricted: cat.restricted, attributes: cat.defs }, readiness: { ready: r.ready, problems: r.problems.filter(x => x.code !== 'acknowledgement_required') }, updatedAt: p.updated_at, publishedAt: p.published_at };
 }

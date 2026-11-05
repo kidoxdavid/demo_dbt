@@ -26,3 +26,11 @@
 - **Hearts and Follow are real now** (migration 006, `/api/me/saved`, `/api/shops/:slug/follow`): guests are sent to sign in and returned to the page.
 - **Demo seed gained a Clay & Ember candle**, because the basket mockup has that shop selling a candle (2 makers, ships separately).
 - The checkout screen has a **test-mode payment panel** that exists only while the mock provider is active; with no provider, checkout answers 503 and the screen says payments are not connected.
+
+## Phase 5 decisions
+- **The studio is its own window** (`/studio`, cookie `es_studio`): signed-out visitors are sent to `/studio/login`; a person can hold a buyer session and a seller session at once.
+- **Studio home numbers come from orders, stock and page views.** Sales = items + shipping (no GST), last 7 days against the 7 before; visits = shop page views (`shop_views`, one row per shop per day); "Running low" = a variant with 1 or 2 left; the checklist is computed (payouts is always undone until a payment provider is connected).
+- **Category suggestion** ranks only the categories the seller picked at sign-up, by words in the title plus a small hint list ("vase" means pottery). It never invents a category.
+- **Onboarding autosaves a draft product** (900 ms after the last edit) and cannot publish until the same readiness list the product editor uses is empty. Restricted categories need the seller to tick the extra-rules box.
+- **Money screens show the seller what they earn:** items + shipping - commission; GST is shown as collected for the tax authority, not as the seller's.
+- **Payouts, messages, promotions and insights are honest placeholders**, not fake screens.

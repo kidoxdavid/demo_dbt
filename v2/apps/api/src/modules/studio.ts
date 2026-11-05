@@ -79,6 +79,7 @@ export function registerStudio(app: FastifyInstance) {
         processing_days_min=$17, processing_days_max=$18, vacation_mode=coalesce($19,vacation_mode), policies=coalesce($20::jsonb,policies), badges=coalesce($21,badges) WHERE id=$1`,
         [s.shopId, b.name ?? null, 'tagline' in b, b.tagline ?? null, 'story' in b, b.story ?? null, 'city' in b, b.city ?? null, 'region' in b, b.region ?? null, b.look ?? null, b.slug ?? null, 'logoMediaId' in b, b.logoMediaId ?? null, 'bannerMediaId' in b, b.bannerMediaId ?? null,
          min, max, b.vacation ?? null, pol ? JSON.stringify(pol) : null, b.badges ?? null]).catch(e => { if (e.code === '23505') throw new HttpError(409, 'slug_unavailable'); throw e; });
+      if ('look' in b) await c.query('UPDATE shops SET look_chosen=true WHERE id=$1', [s.shopId]);
       await audit(c, { actor: s.user.id, area: 'studio', action: 'shop.update', entityType: 'shop', entityId: s.shopId, prev: { name: prev.name, slug: prev.slug, look: prev.look, vacation: prev.vacation_mode }, next: b, ip: req.ip });
       return shopView(c, s.sellerId);
     });

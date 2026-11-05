@@ -27,6 +27,8 @@ const PRODUCTS: Prod[] = [
   { shop: 'maison-nuit', title: 'Amber & oud eau de parfum, 50 ml', cat: 'perfume-fragrance', price: 9600, was: 11000, art: ['perfume', 'butter'], hoursAgo: 5, desc: 'Warm amber over smoked oud with a trace of vanilla. 50 ml.', attrs: { volume_ml: 50, concentration: 'eau-de-parfum', fragrance_family: 'amber', notes: 'Oud, amber, vanilla', flammable: true }, stock: 22, sales: 58 },
   // The basket mockup has Clay & Ember selling a candle too (poured in their own seconds): a second, older product so the basket shows two makers
   { shop: 'clay-ember', title: 'Cedar & fig candle', cat: 'candles-home-fragrance', price: 2600, handmade: true, art: ['candle', 'sand'], hoursAgo: 30, desc: 'Cedar and fig, poured into a small stoneware pot. 200 g.', attrs: { wax: 'soy', scent: 'Cedar and fig', burn_time_h: 40, weight_g: 200 }, stock: 20 },
+  // A plain (not one-of-a-kind) mug that sells more than once: the studio and shop mockups show "Speckled mug" at $34 from Clay & Ember
+  { shop: 'clay-ember', title: 'Speckled mug', cat: 'pottery-ceramics', price: 3400, handmade: true, art: ['pottery', 'sand'], hoursAgo: 40, desc: 'The everyday version of the speckled stoneware mug, made in small batches. 350 ml.', attrs: { technique: 'wheel-thrown', dishwasher_safe: true, microwave_safe: true }, stock: 8 },
   // Category page: Pottery & ceramics (these six lead the listing, in this order)
   { shop: 'clay-ember', title: 'Speckled stoneware mug', cat: 'pottery-ceramics', price: 3400, ooak: true, art: ['pottery', 'blush'], hoursAgo: 10, desc: 'A wheel-thrown mug with a speckled oatmeal glaze. 350 ml. No two are alike.', attrs: { technique: 'wheel-thrown', dishwasher_safe: true, microwave_safe: true, height_cm: 9, width_cm: 8 }, stock: 1, madeIn: 'Alberta', handmade: true },
   { shop: 'kiln-co', title: 'Tall bud vase, matte glaze', cat: 'pottery-ceramics', price: 4800, art: ['pottery', 'sand'], hoursAgo: 11, desc: 'A tall, narrow vase with a soft matte glaze for a single stem.', attrs: { technique: 'wheel-thrown', height_cm: 24, width_cm: 8 }, stock: 9 },
@@ -35,7 +37,7 @@ const PRODUCTS: Prod[] = [
   { shop: 'kiln-co', title: 'Trinket dish set of 3', cat: 'pottery-ceramics', price: 2900, was: 3600, art: ['pottery', 'stone'], hoursAgo: 14, desc: 'Three small dishes for rings, pins and keys.', attrs: { technique: 'slip-cast', dishwasher_safe: true }, stock: 14 },
   { shop: 'studio-marlow', title: 'Espresso cup pair', cat: 'pottery-ceramics', price: 4400, art: ['pottery', 'butter'], hoursAgo: 15, desc: 'Two espresso cups with a warm butter glaze.', attrs: { technique: 'wheel-thrown', dishwasher_safe: true, microwave_safe: true }, stock: 8 },
 ];
-const FILLER_SHOPS = 35, FILLER_PRODUCTS = 405;       // 6 listed + the product-page vase + 405 = 412 pottery pieces; 3 + 35 = 38 makers
+const FILLER_SHOPS = 35, FILLER_PRODUCTS = 404;       // 6 listed + the product-page vase + the plain mug + 404 = 412 pottery pieces; 3 + 35 = 38 makers
 const FILLER_WORDS = { a: ['Speckled', 'Glazed', 'Hand-pinched', 'Matte', 'Ash-glazed', 'Celadon', 'Raw clay', 'Satin', 'Reactive', 'Wood-fired'], b: ['mug', 'bowl', 'vase', 'plate', 'jug', 'planter', 'dish', 'cup', 'teapot', 'tumbler', 'platter', 'salt cellar'], tone: ['warm', 'sand', 'blush', 'sage', 'stone', 'butter'] };
 
 const BUD_VASE = { shop: 'clay-ember', title: 'Tall bud vase in terracotta glaze', cat: 'pottery-ceramics', handmade: true, madeIn: 'Alberta', hoursAgo: 20 };
@@ -85,7 +87,7 @@ export async function seedDemoCatalogue(c: Client, password: string) {
   const so = (await c.query(`INSERT INTO product_options(product_id,position,name) VALUES ($1,0,'Size') RETURNING id`, [vase])).rows[0].id; const go = (await c.query(`INSERT INTO product_options(product_id,position,name) VALUES ($1,1,'Glaze') RETURNING id`, [vase])).rows[0].id;
   for (const [i, [v]] of sizes.entries()) await c.query('INSERT INTO product_option_values(option_id,position,value,is_default) VALUES ($1,$2,$3,$4)', [so, i, v, v === 'Medium']);
   for (const [i, [v, sw]] of glazes.entries()) await c.query('INSERT INTO product_option_values(option_id,position,value,swatch,is_default) VALUES ($1,$2,$3,$4,$5)', [go, i, v, sw, v === 'Terracotta']);
-  let pos = 0; for (const [sz, price] of sizes) for (const [gl] of glazes) await addVariant(vase, price, sz === 'Large' && gl === 'Charcoal' ? 1 : 6, undefined, { Size: sz, Glaze: gl }, pos++);
+  let pos = 0; for (const [sz, price] of sizes) for (const [gl] of glazes) await addVariant(vase, price, sz === 'Large' && gl === 'Charcoal' ? 1 : 12, undefined, { Size: sz, Glaze: gl }, pos++);
 
   // Pottery & ceramics reaches 412 pieces from 38 makers (the numbers on the category mockup): filler makers and pieces, older than the six above
   const wordsA = FILLER_WORDS.a, wordsB = FILLER_WORDS.b;
@@ -95,9 +97,11 @@ export async function seedDemoCatalogue(c: Client, password: string) {
     const p = await insertProduct(slug, { title, cat: 'pottery-ceramics', handmade: i % 3 === 0, art: ['pottery', FILLER_WORDS.tone[i % 6]], hoursAgo: 100 + i, sales: i % 17, attrs: { material: ['stoneware', 'porcelain', 'earthenware', 'terracotta'][i % 4], size: ['small', 'medium', 'large'][i % 3], technique: ['wheel-thrown', 'hand-built', 'slip-cast'][i % 3], dishwasher_safe: i % 2 === 0 } });
     await addVariant(p, 1800 + ((i * 137) % 9000), 3 + (i % 9));
   }
+  await c.query('INSERT INTO seller_categories(seller_id,category_id) SELECT DISTINCT p.seller_id, p.category_id FROM products p WHERE p.category_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM seller_categories sc WHERE sc.seller_id=p.seller_id) ON CONFLICT DO NOTHING');          // each seller sells in the categories of their products
+  await c.query(`UPDATE shops SET look_chosen=true WHERE slug='clay-ember'`);
   // Curated home: phones show the first four newest, the desktop row swaps the hair bundle for the perfume (the two mockups differ), and the spotlight is Clay & Ember.
   const idOf = async (t: string) => (await c.query('SELECT id FROM products WHERE title=$1', [t])).rows[0].id as string; const titles = { dusk: 'Dusk over the hills, A4 print', cedar: 'Cedar & fig soy candle', planter: 'Geometric desk planter', hair: 'Body wave bundle, 18 in', perfume: 'Amber & oud eau de parfum, 50 ml' };
-  const [d, ce, pl, h, pf] = await Promise.all(Object.values(titles).map(idOf)); const put = (k: string, v: unknown) => c.query(`INSERT INTO app_settings(key,value) VALUES ($1,$2) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value`, [k, JSON.stringify(v)]);
+  const [d, ce, pl, h, pf] = [await idOf(titles.dusk), await idOf(titles.cedar), await idOf(titles.planter), await idOf(titles.hair), await idOf(titles.perfume)]; const put = (k: string, v: unknown) => c.query(`INSERT INTO app_settings(key,value) VALUES ($1,$2) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value`, [k, JSON.stringify(v)]);
   await put('home_picks_phone', [d, ce, pl, h]); await put('home_picks_desktop', [d, ce, pl, pf]);
   await put('home_spotlight', { shop: 'clay-ember', art: { kind: 'pottery', tone: 'warm' }, quote: '\u201cI started throwing pots in my garage during winter. Now every mug I make finds a home somewhere in Canada.\u201d Amara, Calgary' });
   return true;

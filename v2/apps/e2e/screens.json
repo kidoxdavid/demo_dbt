@@ -189,5 +189,112 @@
   "kind": "phone",
   "fixture": "shop-sage",
   "waitFor": ".pcard"
+ },
+ {
+  "name": "seller-onboarding-1-what-do-you-sell",
+  "path": "/studio/start/1",
+  "viewport": [
+   390,
+   798
+  ],
+  "kind": "phone",
+  "waitFor": ".tile-sel",
+  "actions": [
+   {
+    "click": "Pottery"
+   },
+   {
+    "click": "Candles"
+   }
+  ]
+ },
+ {
+  "name": "seller-onboarding-2-shop-identity",
+  "path": "/studio/start/2",
+  "viewport": [
+   390,
+   798
+  ],
+  "kind": "phone",
+  "login": {
+   "area": "studio",
+   "email": "amara@clayember.test",
+   "password": "demo-password-2026"
+  },
+  "waitFor": ".previewcard"
+ },
+ {
+  "name": "seller-onboarding-3-first-product",
+  "path": "/studio/start/3?draft={draft}",
+  "viewport": [
+   390,
+   798
+  ],
+  "kind": "phone",
+  "login": {
+   "area": "studio",
+   "email": "amara@clayember.test",
+   "password": "demo-password-2026"
+  },
+  "draft": {
+   "from": "Speckled stoneware mug",
+   "patch": {
+    "title": "Tall bud vase in terracotta glaze",
+    "priceCents": 4800,
+    "stock": 6,
+    "handmade": true,
+    "categorySlug": "pottery-ceramics"
+   },
+   "photo": {
+    "kind": "pottery",
+    "tone": "blush"
+   }
+  },
+  "waitFor": ".photos .cover img"
+ },
+ {
+  "name": "seller-onboarding-4-live",
+  "path": "/studio/start/5",
+  "viewport": [
+   390,
+   798
+  ],
+  "kind": "phone",
+  "login": {
+   "area": "studio",
+   "email": "amara@clayember.test",
+   "password": "demo-password-2026"
+  },
+  "waitFor": ".livecard"
+ },
+ {
+  "name": "studio-desktop",
+  "path": "/studio",
+  "viewport": [
+   1180,
+   860
+  ],
+  "kind": "desktop",
+  "login": {
+   "area": "studio",
+   "email": "amara@clayember.test",
+   "password": "demo-password-2026"
+  },
+  "waitFor": ".sd-recent .orderrow"
+ },
+ {
+  "name": "studio-phone",
+  "path": "/studio",
+  "viewport": [
+   390,
+   798
+  ],
+  "kind": "phone",
+  "login": {
+   "area": "studio",
+   "email": "amara@clayember.test",
+   "password": "demo-password-2026"
+  },
+  "waitFor": ".sp-cards"
  }
 ]

@@ -12,6 +12,7 @@
 .dhead .right{margin-left:auto;display:flex;gap:22px;align-items:center;font-size:14px}
 .dnav{display:flex;gap:30px;padding:0 64px 16px;border-bottom:1px solid var(--line)}.dnav a{font-size:14px}
 .dmain{max-width:1280px;margin:0 auto}.dpad{padding:34px 64px 80px}
+.search:has(input:focus-visible){outline:2px solid var(--acc);outline-offset:2px}
 .search input{flex:1;border:0;background:transparent;font-size:14px;outline:none;min-width:0}.search input::placeholder{color:var(--mut)}
 /* desktop home */
 .dhero{padding:34px 64px 0;display:flex;gap:28px}.dhero .l{flex:1.1;border-radius:28px;background:var(--accsoft);padding:64px 56px;position:relative;overflow:hidden;height:470px}

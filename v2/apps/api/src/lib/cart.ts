@@ -15,7 +15,7 @@ export interface PricedCart { groups: PricedGroup[]; itemsCents: number; shippin
 
 /** Price a cart from the database (never from anything the browser sent): current prices, availability, per-seller shipping, delivery window, GST and commission. */
 export async function priceCart(c: Client | typeof pool, cartId: string, now = clockNow()): Promise<PricedCart> {
-  const settings = await allSettings(); const gst = settings.gst_bps as number; const defaultCommission = settings.commission_bps as number;
+  const settings = await allSettings(c); const gst = settings.gst_bps as number; const defaultCommission = settings.commission_bps as number;
   const rows = (await c.query(`SELECT ci.id AS item_id, ci.quantity, ci.personalisation, v.id AS variant_id, v.price_cents, v.compare_at_cents, v.options, v.sku, v.weight_g, v.tracks_stock, v.status AS vstatus, v.image_media_id,
       v.stock_on_hand - v.stock_reserved AS avail, p.id AS product_id, p.title, p.status AS pstatus, p.moderation_status, p.tax_class, p.one_of_a_kind, p.shipping_profile_id, p.art_kind, p.art_tone,
       s.id AS shop_id, s.name AS shop_name, s.slug AS shop_slug, s.status AS shop_status, s.vacation_mode, s.processing_days_min, s.processing_days_max, s.logo_media_id, se.id AS seller_id, se.status AS seller_status, se.commission_bps,

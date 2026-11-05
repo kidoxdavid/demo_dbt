@@ -23,3 +23,12 @@ Demo staff sign-ins (password `demo-password-2026`): admin@, support@, finance@,
 
 
 Production settings for notifications: `SMTP_URL`, `EMAIL_FROM`, `PUBLIC_URL` (used in email links), `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, `NOTIFY_SECRET` and `AD_SECRET`. The server refuses to start in production without the two secrets.
+
+## Operations (Phase 10)
+- **Production refuses unsafe settings.** With `NODE_ENV=production` the server stops at start-up if the database URL is the development one, `ALLOWED_ORIGINS`/`PUBLIC_URL` are not https, `AD_SECRET`/`NOTIFY_SECRET` are under 32 characters or placeholders, `SMTP_URL` or `EMAIL_FROM` is missing, or `PAYMENT_PROVIDER=mock`. It warns about `TRUST_PROXY` (set it behind a load balancer so rate limits see real addresses), no payment provider, no VAPID keys and `UPLOAD_DIR`.
+- **Tuning:** `DB_POOL_MAX` (20), `DB_STATEMENT_TIMEOUT_MS` (30000), `DB_LOCK_TIMEOUT_MS` (15000), `DB_IDLE_TX_TIMEOUT_MS` (30000), `LIST_CACHE_MS` (10000; 0 turns shared listing answers off).
+- **Health:** `GET /healthz` (process is up), `GET /readyz` (database answers). Stop the server with SIGTERM; it finishes in-flight requests and exits 0.
+- **Backup:** `DATABASE_URL=... BACKUP_DIR=/backups UPLOAD_DIR=/data/uploads ops/backup.sh` (run it nightly from the host's scheduler). **Prove it restores:** `ops/restore-verify.sh /backups/<stamp>` (loads into a scratch database named `...restore...` and checks counts, a zero ledger sum and migrations). To recover for real: stop the app, create an empty database with the three extensions, `pg_restore --no-owner --dbname=<new url> db.dump`, unpack `uploads.tgz`, point `DATABASE_URL` at it, start the app. Recovery point = the last backup; recovery time on the 20,000-product test data was 2 s (measured on one machine, not production).
+- **Load test:** `npm run seed:load -w apps/api` builds a 20,000-product database (`eazystores2_load`); `autocannon` is installed for timing.
+- **Accessibility check:** `CHROMIUM_PATH=/path/to/chromium node apps/e2e/a11y.mjs` (website on :5180, demo seed).
+- **Privacy requests:** a signed-in person downloads their data and deletes their account from Account; sales records stay without personal details.

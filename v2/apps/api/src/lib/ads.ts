@@ -5,7 +5,7 @@ import { CARD_COLUMNS, CARD_FROM, VISIBLE, toCard, type Card } from './cards.js'
 import { allSettings } from '../settings.js';
 
 /** What a seller still owes-to-them in the ledger: ad clicks can only be charged against money they have earned. */
-export const sellerOwed = async (sellerId: string) => Number((await q(`SELECT coalesce(-sum(amount_cents),0)::bigint AS owed FROM ledger_entries WHERE account='seller_payable' AND seller_id=$1`, [sellerId])).rows[0].owed);
+export const sellerOwed = async (sellerId: string, c: { query: (sql: string, p?: unknown[]) => Promise<{ rows: any[] }> } = pool) => Number((await c.query(`SELECT coalesce(-sum(amount_cents),0)::bigint AS owed FROM ledger_entries WHERE account='seller_payable' AND seller_id=$1`, [sellerId])).rows[0].owed);
 
 const b64 = (s: string) => Buffer.from(s).toString('base64url');
 export function signClick(p: { c: string; p: string; k: number }) {

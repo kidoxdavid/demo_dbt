@@ -1,5 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
+import { config } from '../config.js';
+import { microcache } from '../lib/microcache.js';
 import { pool, q } from '../db.js';
 import { HttpError } from '../errors.js';
 import { categoryInfo } from '../lib/attributes.js';
@@ -43,7 +45,7 @@ async function buildWhere(f: z.infer<typeof listQuery>, raw: Record<string, unkn
   if (f.q) {
     const syn = await synonymMap(); const tokens = f.q.toLowerCase().replace(/[^\p{L}\p{N}\s-]/gu, ' ').split(/\s+/).filter(Boolean).slice(0, 6);
     if (tokens.length) {
-      const field = (p: string) => `(p.title ILIKE ${p} ESCAPE '\\' OR array_to_string(p.tags,' ') ILIKE ${p} ESCAPE '\\' OR s.name ILIKE ${p} ESCAPE '\\' OR p.description ILIKE ${p} ESCAPE '\\')`;
+      const field = (p: string) => `(p.search_text ILIKE ${p} ESCAPE '\\' OR p.shop_id IN (SELECT id FROM shops WHERE name ILIKE ${p} ESCAPE '\\'))`;
       const phrase = tokens.join(' '); const phraseAlts = syn.get(phrase) ?? [];
       if (!fuzzy) {
         const groups = tokens.map(t => `(${[t, ...(syn.get(t) ?? [])].map(a => field(add(`%${esc(a)}%`))).join(' OR ')})`);
@@ -57,29 +59,34 @@ async function buildWhere(f: z.infer<typeof listQuery>, raw: Record<string, unkn
 
 export function registerCatalogue(app: FastifyInstance) {
   /** Listing and search. Same cards everywhere. Exact matches win; typo-tolerant matching only runs when nothing matches exactly. */
-  app.get('/api/products', async (req) => {
+  const listProducts = async (req: { query: unknown }) => {
     const raw = req.query as Record<string, unknown>; const f = listQuery.parse(raw);
-    let b = await buildWhere(f, raw, false);
-    let total = Number((await pool.query(`SELECT count(*) n ${CARD_FROM} WHERE ${b.where}`, b.params)).rows[0].n);
-    if (total === 0 && f.q) { b = await buildWhere(f, raw, true); total = Number((await pool.query(`SELECT count(*) n ${CARD_FROM} WHERE ${b.where}`, b.params)).rows[0].n); }
+    // Counting and facets do not need each piece's cheapest variant unless a price or shipping filter does, so that join is left out when it is not needed.
+    const needsV = f.minPrice !== undefined || f.maxPrice !== undefined || !!f.freeShipping;
+    const fromC = needsV ? CARD_FROM : `FROM products p JOIN shops s ON s.id=p.shop_id JOIN sellers se ON se.id=p.seller_id`; const whereC = (b: Built) => (needsV ? b.where : `${b.where} AND EXISTS (SELECT 1 FROM variants x0 WHERE x0.product_id=p.id AND x0.status='active')`);
+    const count = async (b: Built) => (await pool.query(`SELECT count(*)::int AS n, count(DISTINCT s.id)::int AS makers ${fromC} WHERE ${whereC(b)}`, b.params)).rows[0] as { n: number; makers: number };
+    let b = await buildWhere(f, raw, false); let c = await count(b);
+    if (c.n === 0 && f.q) { b = await buildWhere(f, raw, true); c = await count(b); }
     const sort = f.sort ?? (f.q ? 'relevance' : 'featured'); const params = [...b.params];
     const rel = f.q && sort === 'relevance' ? (() => { params.push(f.q!.toLowerCase()); return `(CASE WHEN lower(p.title) = $${params.length} THEN 4 WHEN lower(p.title) LIKE $${params.length} || '%' THEN 3 WHEN lower(p.title) LIKE '%' || $${params.length} || '%' THEN 2 ELSE 0 END) DESC, `; })() : '';
     const order = { featured: 'p.created_at DESC', new: 'p.created_at DESC', relevance: 'p.created_at DESC', price_asc: 'v.price_cents ASC, p.created_at DESC', price_desc: 'v.price_cents DESC, p.created_at DESC', popular: 'p.sales_count DESC, p.created_at DESC' }[sort];
     params.push(f.limit, f.offset);
-    const rows = (await pool.query(`SELECT ${CARD_COLUMNS} ${CARD_FROM} WHERE ${b.where} ORDER BY ${rel}${order}, p.id LIMIT $${params.length - 1} OFFSET $${params.length}`, params)).rows;
-    const makers = Number((await pool.query(`SELECT count(DISTINCT s.id) n ${CARD_FROM} WHERE ${b.where}`, b.params)).rows[0].n);
-    const out: any = { total, makers, fuzzy: b.fuzzy, items: rows.map(toCard) };
-    if (f.category) {                                                         // facets for the category's filterable attributes, counted over what currently matches
-      const cat = await categoryInfo(pool, (await q('SELECT id FROM categories WHERE slug=$1', [f.category])).rows[0].id); const facets: any[] = [];
-      for (const d of (cat?.defs ?? []).filter(d => d.filterable && ['select', 'multiselect', 'boolean'].includes(d.type))) {
-        const fp = [...b.params, d.key]; const vals = (await pool.query(`SELECT av.value, count(*)::int n FROM product_attribute_values av WHERE av.key=$${fp.length} AND av.product_id IN (SELECT p.id ${CARD_FROM} WHERE ${b.where}) GROUP BY av.value ORDER BY n DESC`, fp)).rows;
-        const counts = new Map<string, number>(); for (const r of vals) for (const v of Array.isArray(r.value) ? r.value : [r.value]) counts.set(String(v), (counts.get(String(v)) ?? 0) + r.n);
+    const rowsP = pool.query(`SELECT ${CARD_COLUMNS} ${CARD_FROM} WHERE ${b.where} ORDER BY ${rel}${order}, p.id LIMIT $${params.length - 1} OFFSET $${params.length}`, params);
+    const facetsP = f.category ? (async () => {                                // facets for the category's filterable attributes, counted over what currently matches, in one query
+      const cat = await categoryInfo(pool, (await q('SELECT id FROM categories WHERE slug=$1', [f.category])).rows[0].id); const defs = (cat?.defs ?? []).filter(d => d.filterable && ['select', 'multiselect', 'boolean'].includes(d.type)); if (!defs.length) return [];
+      const fp = [...b.params, defs.map(d => d.key)]; const vals = (await pool.query(`SELECT av.key, av.value, count(*)::int n FROM product_attribute_values av WHERE av.key = ANY($${fp.length}::text[]) AND av.product_id IN (SELECT p.id ${fromC} WHERE ${whereC(b)}) GROUP BY av.key, av.value`, fp)).rows;
+      const facets: any[] = [];
+      for (const d of defs) { const counts = new Map<string, number>(); for (const r of vals.filter(v => v.key === d.key)) for (const v of Array.isArray(r.value) ? r.value : [r.value]) counts.set(String(v), (counts.get(String(v)) ?? 0) + r.n);
         facets.push({ key: d.key, label: d.label, type: d.type, options: d.type === 'boolean' ? [{ value: 'true', label: 'Yes', count: counts.get('true') ?? 0 }] : (d.options ?? []).map(o => ({ value: o.value, label: o.label, count: counts.get(o.value) ?? 0 })).filter(o => o.count > 0) });
       }
-      out.facets = facets.filter(x => x.options.length);
-    }
+      return facets.filter(x => x.options.length);
+    })() : Promise.resolve(undefined);
+    const [rows, facets] = await Promise.all([rowsP, facetsP]);
+    const out: any = { total: c.n, makers: c.makers, fuzzy: b.fuzzy, items: rows.rows.map(toCard) }; if (facets) out.facets = facets;
     return out;
-  });
+  };
+  /** The same answer for everyone, so identical requests within a few seconds share one query. */
+  app.get('/api/products', async (req, reply) => { reply.header('cache-control', config.listCacheMs > 0 ? `public, max-age=${Math.round(config.listCacheMs / 2000)}` : 'no-store'); return microcache(`products:${req.url}`, () => listProducts(req)); });
 
   app.get('/api/search/suggest', async (req) => {
     const { q: term } = z.object({ q: z.string().trim().min(1).max(60) }).parse(req.query); const like = `%${esc(term)}%`;

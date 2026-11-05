@@ -1,12 +1,22 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { ApiError, useApi } from '../api';
+import { ApiError, api, useApi } from '../api';
 import { Button } from '../components/ui';
 import { dateRange, money } from '../format';
 import { useSession } from '../session';
 
 const ERRORS: Record<string, string> = { invalid_credentials: 'That email and password do not match.', email_in_use: 'There is already an account with that email. Try signing in.', account_locked: 'Too many tries. Wait a few minutes and try again.' };
 const nextPath = (n: string | null) => (n && n.startsWith('/') && !n.startsWith('//') ? n : '/account');
+
+const DELETE_ERR: Record<string, string> = { wrong_password: 'That password is not right.', open_orders: 'You have an order that has not arrived yet. You can delete your account once it has.', has_roles: 'This account runs a shop or has staff access. Ask us to close that first.' };
+/** Your data: download everything we hold, or delete the account (personal details go; sales records stay without your name, email or address). */
+function DataControls() {
+  const { signOut } = useSession(); const [open, setOpen] = useState(false); const [pw, setPw] = useState(''); const [err, setErr] = useState(''); const [busy, setBusy] = useState(false);
+  const del = async () => { setErr(''); setBusy(true); try { await api('/api/me', { method: 'DELETE', body: { password: pw } }); await signOut().catch(() => {}); location.assign('/'); } catch (e) { setErr(e instanceof ApiError ? DELETE_ERR[e.code] ?? 'That did not work. Try again.' : 'That did not work. Try again.'); } finally { setBusy(false); } };
+  return <div className="card sec" style={{ marginTop: 28 }}><b>Your data</b><p className="muted" style={{ fontSize: 13, marginTop: 4 }}>Download everything we hold about you, or delete your account. Records of past sales are kept for tax, without your name, email or street address.</p>
+    <div style={{ display: 'flex', gap: 10, marginTop: 12, flexWrap: 'wrap' }}><a className="btn ghost sm" href="/api/me/export" download>Download my data</a><Button size="sm" variant="ghost" aria-expanded={open} onClick={() => setOpen(!open)}>Delete my account</Button></div>
+    {open && <div style={{ marginTop: 12 }}><label className="label" htmlFor="del-pw">Enter your password to confirm. This cannot be undone.</label><input id="del-pw" className="field" type="password" autoComplete="current-password" value={pw} onChange={e => setPw(e.target.value)} />{err && <div className="err" role="alert">{err}</div>}<Button size="sm" style={{ marginTop: 12 }} disabled={busy || !pw} onClick={del}>{busy ? 'Deleting…' : 'Delete everything now'}</Button></div>}</div>;
+}
 
 /** Buyer account: sign in or create one (the shop window), then your orders. */
 export function AccountPage() {
@@ -23,7 +33,8 @@ export function AccountPage() {
     <h2 className="serif" style={{ fontSize: 20, marginTop: 24 }}>Your orders</h2>
     {orders.data?.length === 0 && <p className="muted" style={{ marginTop: 8 }}>No orders yet.</p>}
     {(orders.data ?? []).map(o => <Link key={o.id} to={`/orders/${o.token}`} className="card sec" style={{ display: 'block', marginTop: 10 }}><div style={{ display: 'flex', justifyContent: 'space-between' }}><b>Order #{o.number}</b><b>{money(o.totalCents)}</b></div><div className="muted" style={{ fontSize: 13, marginTop: 4 }}>{o.sellers.map((s: any) => s.shop.name).join(', ')} · {o.paymentStatus.replace('_', ' ')}{o.sellers[0]?.eta?.min ? ` · arrives ${dateRange(o.sellers[0].eta.min, o.sellers[0].eta.max)}` : ''}</div></Link>)}
-    <Button variant="ghost" block style={{ marginTop: 24 }} onClick={() => signOut()}>Sign out</Button></div></div>;
+    <Button variant="ghost" block style={{ marginTop: 24 }} onClick={() => signOut()}>Sign out</Button>
+    <DataControls /></div></div>;
   return <div className="screen pad" style={{ paddingTop: 10 }}><div className="co"><h1 className="serif">{mode === 'in' ? 'Sign in' : 'Create your account'}</h1>
     <form onSubmit={submit} noValidate>{mode === 'up' && <><label className="label" htmlFor="ac-name">Your name</label><input id="ac-name" className="field" autoComplete="name" value={f.name} onChange={e => setF({ ...f, name: e.target.value })} required /></>}
       <label className="label" htmlFor="ac-email">Email</label><input id="ac-email" className="field" type="email" autoComplete="email" value={f.email} onChange={e => setF({ ...f, email: e.target.value })} required />

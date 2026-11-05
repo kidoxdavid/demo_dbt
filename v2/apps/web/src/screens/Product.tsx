@@ -26,7 +26,7 @@ const POSTAL_KEY = 'es_postal'; const store = { get: () => { try { return localS
 function Hero({ p, variantImage }: { p: Product; variantImage?: string | null }) {
   const ref = useRef<HTMLDivElement>(null); const [i, setI] = useState(0); const n = Math.max(p.media.length, 1);
   useEffect(() => { const el = ref.current; if (!el) return; const f = () => setI(Math.round(el.scrollLeft / el.clientWidth)); el.addEventListener('scroll', f, { passive: true }); return () => el.removeEventListener('scroll', f); }, []);
-  return <div className="pdp-hero"><div className="track" ref={ref} aria-label="Photos">
+  return <div className="pdp-hero"><div className="track" ref={ref} role="group" aria-label="Photos">
     {p.media.length ? p.media.map((m, k) => <div className="slide" key={m.id}>{m.kind === 'image' ? <img src={(k === 0 && variantImage) || m.w1280} alt={k === 0 ? p.title : ''} /> : <video src={m.src} poster={m.poster} controls playsInline preload="none" />}</div>)
       : <div className="slide">{p.art ? <ProductArt kind={p.art.kind} tone={p.art.tone} /> : <div className="skeleton" style={{ height: '100%' }} />}</div>}</div>
     {n > 1 && <div className="dots" aria-hidden="true">{Array.from({ length: n }, (_, k) => <i key={k} className={k === i ? 'on' : ''} />)}</div>}</div>;

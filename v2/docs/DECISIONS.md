@@ -69,3 +69,14 @@
 - **Signed links use their own secret** (`NOTIFY_SECRET`, required in production) and carry no expiry: an unsubscribe link should keep working. Order links are unchanged.
 - **The web server raises Fastify's URL-parameter limit to 600** because signed tokens exceed the default 100.
 - **Mail and push configuration lives in the environment**: `SMTP_URL`, `EMAIL_FROM`, `PUBLIC_URL`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, `NOTIFY_SECRET`, `AD_SECRET`.
+
+## Phase 10 decisions
+- **Deny by default.** A route is closed unless it is explicitly listed as open or gated for a window and role; the security test lists every registered route and fails for a new one nobody classified.
+- **One connection per transaction.** Anything called inside a transaction takes the transaction's client (`allSettings(c)`, `sellerOwed(id, c)`, `balances(id, c)`); asking the pool for a second connection while holding one deadlocks under load. The pool has a bounded wait so a mistake becomes a fast error, not a hang.
+- **Time limits live on the connection** (`statement_timeout` 30 s, `lock_timeout` 15 s, `idle_in_transaction_session_timeout` 30 s), overridable by environment, so no code path can hold a request forever.
+- **Shared answers are only for anonymous public data** (listings, search, home), 10 s, with in-flight sharing and errors never kept; `Cache-Control` is `no-store` when the cache is off and a short public max-age when on. Off in tests.
+- **Search text is a stored column kept by a trigger**, with trigram indexes, so searching does not rebuild text per row.
+- **Deleting an account keeps the sales record** (amounts, tax, ledger) because the books must balance and be kept, and removes everything that identifies the person. Staff and makers cannot self-delete, and nobody can while an order is in flight.
+- **Logs never contain secrets**: tokens and keys are redacted, ids in paths are collapsed, and every response carries a request id so a person can quote it to support.
+- **Accessibility: structure and behaviour were fixed; colour was not.** Landmarks, names and focus rings changed because they do not alter the approved look. The tag contrast shortfall comes from approved tokens, so it is put to you as a decision, not changed silently.
+- **Backups are scripts, not a service.** Custom-format dumps plus a manifest, proven by restoring into a scratch database. Scheduling and point-in-time recovery belong to the host chosen in Phase 11.

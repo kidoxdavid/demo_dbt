@@ -1,4 +1,4 @@
-import sharp from 'sharp';
+import sharp, { type Sharp, type Metadata } from 'sharp';
 import { spawn } from 'node:child_process';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -22,7 +22,7 @@ export function sniff(b: Buffer): { kind: 'image' | 'video'; type: string } | nu
 export const IMAGE_WIDTHS = [320, 640, 1280] as const;
 /** Decode, fix orientation, strip all metadata (including GPS), cap size, and make three WebP sizes plus a tiny blur-up placeholder. */
 export async function processImage(input: Buffer) {
-  let base: sharp.Sharp; let meta: sharp.Metadata;
+  let base: Sharp; let meta: Metadata;
   try { base = sharp(input, { limitInputPixels: 40_000_000, failOn: 'error' }); meta = await base.metadata(); } catch { throw new HttpError(415, 'unreadable_image'); }
   if (!meta.width || !meta.height) throw new HttpError(415, 'unreadable_image');
   const out: { label: string; data: Buffer; width: number; height: number }[] = [];

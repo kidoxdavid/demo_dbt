@@ -1,7 +1,9 @@
 import pg from 'pg';
 import { config } from './config.js';
 
-export const pool = new pg.Pool({ connectionString: config.databaseUrl, max: 10 });
+export const pool = new pg.Pool({ connectionString: config.databaseUrl, max: Number(process.env.DB_POOL_MAX ?? 20), connectionTimeoutMillis: 10_000,
+  // A slow query, a lock wait or a forgotten transaction becomes an error after these limits instead of holding a connection (and so a request) forever.
+  options: `-c statement_timeout=${process.env.DB_STATEMENT_TIMEOUT_MS ?? 30000} -c lock_timeout=${process.env.DB_LOCK_TIMEOUT_MS ?? 15000} -c idle_in_transaction_session_timeout=${process.env.DB_IDLE_TX_TIMEOUT_MS ?? 30000}` });
 export type Client = pg.PoolClient;
 /** Run fn in a transaction. Rolls back on any error. */
 export async function tx<T>(fn: (c: Client) => Promise<T>): Promise<T> {

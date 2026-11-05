@@ -33,7 +33,7 @@ export function BuyerLayout() {
   const desktop = useDesktop(); const { pathname } = useLocation(); const tab = TAB_FOR(pathname);
   return <>
     {desktop && <DesktopChrome />}
-    <div className={desktop ? 'dmain' : undefined}><Outlet /></div>
+    <div role="main" className={desktop ? 'dmain' : undefined}><Outlet /></div>
     {!desktop && tab !== null && <TabBar items={BUYER_TABS} active={tab} />}
   </>;
 }

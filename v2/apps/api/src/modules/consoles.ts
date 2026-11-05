@@ -18,9 +18,9 @@ const dateRange = z.object({ from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optio
 const PAID = `so.status NOT IN ('awaiting_payment','cancelled')`;
 
 /** Money owed to each seller, from the ledger: what they have earned, what has passed the hold after delivery (available), what was already paid out. */
-async function balances(sellerId?: string) {
-  const hold = Number((await allSettings()).payout_hold_days);
-  const rows = (await pool.query(`WITH owed AS (SELECT seller_id, -sum(amount_cents)::bigint AS owed FROM ledger_entries WHERE account='seller_payable' GROUP BY seller_id),
+async function balances(sellerId?: string, c: { query: (sql: string, p?: unknown[]) => Promise<{ rows: any[] }> } = pool) {
+  const hold = Number((await allSettings(c)).payout_hold_days);
+  const rows = (await c.query(`WITH owed AS (SELECT seller_id, -sum(amount_cents)::bigint AS owed FROM ledger_entries WHERE account='seller_payable' GROUP BY seller_id),
       elig AS (SELECT le.seller_id, -sum(le.amount_cents)::bigint AS eligible FROM ledger_entries le JOIN seller_orders so ON so.id=le.seller_order_id WHERE le.account='seller_payable' AND so.delivered_at IS NOT NULL AND so.delivered_at <= now() - ($1::int * interval '1 day') GROUP BY le.seller_id),
       paid AS (SELECT seller_id, sum(amount_cents)::bigint AS paid FROM payouts GROUP BY seller_id),
       sales AS (SELECT seller_id, sum(items_cents + shipping_cents)::bigint AS sales, sum(commission_cents)::bigint AS commission, sum(refunded_cents)::bigint AS refunded, count(*)::int AS orders FROM seller_orders so WHERE ${PAID} GROUP BY seller_id)
@@ -152,7 +152,7 @@ export function registerConsoles(app: FastifyInstance) {
     const a = requirePerm(req, 'finance.write'); const b = z.object({ sellerId: uuid, amountCents: z.number().int().min(1).max(100_000_000), reference: z.string().trim().min(1).max(120), note: z.string().trim().max(500).optional() }).strict().parse(req.body);
     const out = await tx(async c => {
       if (!(await c.query('SELECT 1 FROM sellers WHERE id=$1 FOR UPDATE', [b.sellerId])).rowCount) throw new HttpError(404, 'not_found');           // one payout at a time per seller
-      const bal = (await balances(b.sellerId)).rows[0]; if (b.amountCents > bal.availableCents) throw new HttpError(422, 'exceeds_available', { availableCents: bal.availableCents });
+      const bal = (await balances(b.sellerId, c)).rows[0]; if (b.amountCents > bal.availableCents) throw new HttpError(422, 'exceeds_available', { availableCents: bal.availableCents });
       const p = (await c.query('INSERT INTO payouts(seller_id,amount_cents,reference,note,created_by) VALUES ($1,$2,$3,$4,$5) RETURNING id, created_at AS "createdAt"', [b.sellerId, b.amountCents, b.reference, b.note ?? null, a.id])).rows[0]; const txn = randomUUID();
       await c.query(`INSERT INTO ledger_entries(txn_id,seller_id,account,amount_cents,memo) VALUES ($1,$2,'cash',$3,'payout'),($1,$2,'seller_payable',$4,'payout')`, [txn, b.sellerId, -b.amountCents, b.amountCents]);
       await audit(c, { actor: a.id, area: 'finance', action: 'payout.create', entityType: 'seller', entityId: b.sellerId, next: { amountCents: b.amountCents, reference: b.reference, payoutId: p.id }, ip: req.ip }); return p;

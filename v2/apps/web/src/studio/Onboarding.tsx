@@ -19,7 +19,7 @@ export function Onboarding() {
   const { step: s = '1' } = useParams(); const step = Math.min(5, Math.max(1, Number(s) || 1)); const { user, shop, ready } = useStudio();
   if (!ready) return <div className="pad" style={{ paddingTop: 40 }}><div className="skeleton" style={{ height: 240 }} /></div>;
   if (step > 1 && !(user && shop)) return <Navigate to="/studio/start/1" replace />;
-  return <div className="screen ob" style={{ paddingBottom: 130 }}><Progress step={step} total={5} left={LEFT[step - 1]} />
+  return <div role="main" className="screen ob" style={{ paddingBottom: 130 }}><Progress step={step} total={5} left={LEFT[step - 1]} />
     {step === 1 && <StepSell />}{step === 2 && <StepIdentity />}{step === 3 && <StepProduct />}{step === 4 && <StepShipping />}{step === 5 && <StepLive />}</div>;
 }
 

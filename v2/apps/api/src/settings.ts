@@ -24,8 +24,8 @@ export const SETTINGS = {
 export type SettingKey = keyof typeof SETTINGS;
 export const isSettingKey = (k: string): k is SettingKey => k in SETTINGS;
 
-export async function allSettings(): Promise<Record<string, unknown>> {
-  const rows = (await q('SELECT key, value FROM app_settings')).rows as { key: string; value: unknown }[]; const stored = new Map(rows.map(r => [r.key, r.value]));
+export async function allSettings(c?: { query: (sql: string) => Promise<{ rows: any[] }> }): Promise<Record<string, unknown>> {
+  const rows = (c ? await c.query('SELECT key, value FROM app_settings') : await q('SELECT key, value FROM app_settings')).rows as { key: string; value: unknown }[]; const stored = new Map(rows.map(r => [r.key, r.value]));
   return Object.fromEntries((Object.keys(SETTINGS) as SettingKey[]).map(k => { const v = stored.get(k); const ok = v !== undefined && SETTINGS[k].schema.safeParse(v).success; return [k, ok ? v : SETTINGS[k].default]; }));
 }
 

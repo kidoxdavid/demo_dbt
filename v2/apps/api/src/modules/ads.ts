@@ -57,7 +57,7 @@ export function registerAds(app: FastifyInstance) {
       if ((await c.query(`SELECT 1 FROM ad_clicks WHERE campaign_id=$1 AND ip=$2 AND charged AND created_at > now() - interval '30 minutes'`, [t.c, req.ip])).rowCount) return no('repeat_click');
       if (camp.status !== 'active') return no('campaign_not_active'); const spent = (await c.query(`SELECT coalesce(sum(spend_cents) FILTER (WHERE day=current_date),0)::int AS today, coalesce(sum(spend_cents),0)::int AS total FROM ad_daily WHERE campaign_id=$1`, [t.c])).rows[0];
       if (spent.today + t.k > camp.daily_budget_cents || (camp.total_budget_cents !== null && spent.total + t.k > camp.total_budget_cents)) return no('budget_reached');
-      await c.query('SELECT 1 FROM sellers WHERE id=$1 FOR UPDATE', [sid]); if ((await sellerOwed(sid)) < t.k) return no('low_balance');
+      await c.query('SELECT 1 FROM sellers WHERE id=$1 FOR UPDATE', [sid]); if ((await sellerOwed(sid, c)) < t.k) return no('low_balance');
       const txn = randomUUID(); await c.query(`INSERT INTO ledger_entries(txn_id,seller_id,account,amount_cents,memo) VALUES ($1,$2,'seller_payable',$3,'ad click'),($1,$2,'ad_revenue',$4,'ad click')`, [txn, sid, t.k, -t.k]);     // seller owes less, the platform earns it: sums to zero
       await c.query('UPDATE ad_clicks SET charged=true WHERE token_id=$1', [id]); await c.query(`INSERT INTO ad_daily(campaign_id,product_id,day,clicks,spend_cents) VALUES ($1,$2,current_date,1,$3) ON CONFLICT (campaign_id,product_id,day) DO UPDATE SET clicks=ad_daily.clicks+1, spend_cents=ad_daily.spend_cents+$3`, [t.c, t.p, t.k]);
       return { charged: true, reason: null };

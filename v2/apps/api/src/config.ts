@@ -12,5 +12,7 @@ export const config = {
   adSecret: process.env.AD_SECRET ?? (env === 'production' ? (() => { throw new Error('AD_SECRET must be set in production'); })() : 'dev-only-ad-secret'),
   // Signs unsubscribe links. Production must set its own.
   notifySecret: process.env.NOTIFY_SECRET ?? (env === 'production' ? (() => { throw new Error('NOTIFY_SECRET must be set in production'); })() : 'dev-only-notify-secret'),
+  // How long identical anonymous listing, search and home requests share one answer. 0 turns the cache off (the default under tests).
+  listCacheMs: Number(process.env.LIST_CACHE_MS ?? (env === 'test' ? 0 : 10_000)),
   authRateLimitMax: Number(process.env.AUTH_RATE_LIMIT_MAX ?? 10),
 };

@@ -40,7 +40,7 @@ export const BUYER_TABS: TabItem[] = [{ icon: 'home', label: 'Shop', to: '/' }, 
 export const STUDIO_TABS: TabItem[] = [{ icon: 'home', label: 'Home', to: '/studio' }, { icon: 'box', label: 'Orders', to: '/studio/orders' }, { icon: 'tag', label: 'Products', to: '/studio/products' }, { icon: 'msg', label: 'Messages', to: '/studio/messages' }, { icon: 'chart', label: 'Insights', to: '/studio/insights' }];
 
 export function Progress({ step, total = 5, left }: { step: number; total?: number; left?: string }) {
-  return <div className="pad" style={{ paddingTop: 4 }}><div className="progress" role="progressbar" aria-valuemin={1} aria-valuemax={total} aria-valuenow={step}>{Array.from({ length: total }, (_, i) => <i key={i} className={i < step ? 'on' : ''} />)}</div>
+  return <div className="pad" style={{ paddingTop: 4 }}><div className="progress" role="progressbar" aria-label={`Step ${step} of ${total}`} aria-valuemin={1} aria-valuemax={total} aria-valuenow={step}>{Array.from({ length: total }, (_, i) => <i key={i} className={i < step ? 'on' : ''} />)}</div>
     <div className="progress-cap"><span>Step {step} of {total}</span><span>{left}</span></div></div>;
 }
 export const StickyBar = ({ children, gradient }: { children: ReactNode; gradient?: boolean }) => <div className={`stickybar${gradient ? ' gradient' : ''}`}>{children}</div>;

@@ -57,4 +57,5 @@ export function registerAuth(app: FastifyInstance) {
   app.get('/api/me', async (req) => userView(requireUser(req), req.area));
   app.get('/api/admin/me', async (req) => userView(requireUser(req), req.area));
   app.get('/api/studio/me', async (req) => userView(requireUser(req), req.area));
+  for (const win of ['support', 'finance', 'marketing']) app.get(`/api/${win}/me`, async (req) => userView(requireUser(req), req.area));
 }

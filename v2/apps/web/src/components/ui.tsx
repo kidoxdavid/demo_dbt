@@ -4,7 +4,7 @@ import { Icon, type IconName } from './Icon';
 import { ProductArt } from '../art/ProductArt';
 import type { ArtKind, Tone } from '../art/tones';
 
-export const Wordmark = ({ studio, large }: { studio?: boolean; large?: boolean }) => <span className={`logo${large ? ' lg' : ''}`}>eazy<b>{studio ? 'studio' : 'stores'}</b></span>;
+export const Wordmark = ({ studio, large, word }: { studio?: boolean; large?: boolean; word?: string }) => <span className={`logo${large ? ' lg' : ''}`}>eazy<b>{word ?? (studio ? 'studio' : 'stores')}</b></span>;
 export const Chip = ({ children, variant = '' }: { children: ReactNode; variant?: '' | 'surf' | 'outline' | 'ok' }) => <span className={`chip ${variant}`.trim()}>{children}</span>;
 export const Stars = ({ n = 5 }: { n?: number }) => <span className="stars" aria-hidden="true">{'★'.repeat(n)}</span>;
 

@@ -34,3 +34,13 @@
 - **Onboarding autosaves a draft product** (900 ms after the last edit) and cannot publish until the same readiness list the product editor uses is empty. Restricted categories need the seller to tick the extra-rules box.
 - **Money screens show the seller what they earn:** items + shipping - commission; GST is shown as collected for the tax authority, not as the seller's.
 - **Payouts, messages, promotions and insights are honest placeholders**, not fake screens.
+
+## Phase 6 decisions
+- **Four windows, four sign-ins** (`/admin`, `/support`, `/finance`, `/marketing`; cookie per window; the server decides the window from the API path). A role decides who may sign in where: admin and catalogue to admin; support and admin to support; finance and admin to finance; marketing and admin to marketing.
+- **New permission `catalogue.moderate`** (admin and catalogue) for the review queue, so the catalogue role can review without being able to manage people.
+- **Sellers become payable after delivery plus `payout_hold_days`.** Available = ledger seller-payable on orders delivered at least that long ago, less payouts already made. A payout is recorded after the bank transfer is sent outside the app, and posts a balanced ledger entry (cash out, seller payable down) in one transaction under a lock on the seller, so two staff members cannot pay the same money twice.
+- **Suspending a seller hides the shop and blocks new sales at once** (every storefront query already requires an active seller); orders already paid stay with the seller to fulfil.
+- **Support can see everything about an order but change nothing about money**; finance alone can refund. Every staff action that changes something writes the audit log with who, what, old and new values and a reason.
+- **Notes are internal**: stored apart from orders, never returned by any buyer or seller route.
+- **CSV exports neutralise spreadsheet formulas** (a cell starting with = + - @ gets a leading apostrophe) and are audited.
+- **The sign-in rate limit stays at 10 a minute**; the browser flows raise it with `AUTH_RATE_LIMIT_MAX` on the development server only.

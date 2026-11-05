@@ -239,9 +239,9 @@ describe('emails and jobs', () => {
   it('order events queue emails in the same transaction; the worker sends them, retries failures, and never sends twice', async () => {
     const s = await shop([{ title: 'Mail item' }]); await paidOrder(s, [{ i: 0, qty: 1 }], 'mailtest@t.test');
     const mails = (await q(`SELECT template, subject, body, status FROM outbox_emails WHERE to_email='mailtest@t.test'`)).rows; expect(mails.map(m => m.template)).toContain('order_confirmation');
-    const sent: string[] = []; await processOutbox(async m => { if (m.to === 'mailtest@t.test') sent.push(m.subject); }); expect(sent.length).toBeGreaterThan(0);
-    const again: string[] = []; await processOutbox(async m => { again.push(m.to); }); expect(again).not.toContain('mailtest@t.test');
-    const f = await shop([{ title: 'Mail fail' }]); await paidOrder(f, [{ i: 0, qty: 1 }], 'failmail@t.test'); await processOutbox(async m => { if (m.to === 'failmail@t.test') throw new Error('smtp down'); });
+    const sent: string[] = []; await processOutbox(async m => { if (m.to === 'mailtest@t.test') sent.push(m.subject); }, 5000); expect(sent.length).toBeGreaterThan(0);
+    const again: string[] = []; await processOutbox(async m => { again.push(m.to); }, 5000); expect(again).not.toContain('mailtest@t.test');
+    const f = await shop([{ title: 'Mail fail' }]); await paidOrder(f, [{ i: 0, qty: 1 }], 'failmail@t.test'); await processOutbox(async m => { if (m.to === 'failmail@t.test') throw new Error('smtp down'); }, 5000);
     const row = (await q(`SELECT status, attempts, error FROM outbox_emails WHERE to_email='failmail@t.test' AND template='order_confirmation'`)).rows[0]; expect(row.attempts).toBe(1); expect(row.error).toMatch(/smtp/); expect(row.status).toBe('pending');
   });
   it('a seller is told about a new order', async () => {

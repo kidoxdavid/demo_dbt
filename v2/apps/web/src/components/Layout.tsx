@@ -16,9 +16,9 @@ export function BasketLink() { const { cart } = useCart(); return <Link to="/bas
 export const PhoneTop = () => <div className="pad home-top"><Link to="/"><Wordmark /></Link><span style={{ flex: 1 }} /><Link to="/saved" aria-label="Saved"><Icon name="heart" /></Link><BasketLink /></div>;
 
 function DesktopChrome() {
-  const { data } = useApi<{ categories: { slug: string; label: string }[] }>('/api/home');
+  const { data } = useApi<{ promoBar: string; categories: { slug: string; label: string }[] }>('/api/home');
   return <>
-    <div className="promo">Free shipping on orders over $75 from Canadian makers</div>
+    {data?.promoBar && <div className="promo">{data.promoBar}</div>}
     <div className="dhead"><Link to="/"><Wordmark large /></Link><SearchBox large /><span className="right"><Link to="/studio">Sell on eazystores</Link><Link to="/saved" aria-label="Saved"><Icon name="heart" /></Link><Link to="/account" aria-label="Account"><Icon name="user" /></Link><BasketLink /></span></div>
     <nav className="dnav" aria-label="Categories">{(data?.categories ?? []).map(c => <Link key={c.slug} to={`/c/${c.slug}`}>{c.label === 'Art & prints' ? 'Art & prints' : c.label}</Link>)}<Link to="/guides">Gift guides</Link></nav></>;
 }

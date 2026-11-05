@@ -10,7 +10,7 @@ export const isSellerRole = (r: string): r is SellerRole => (SELLER_ROLES as str
 export const isStaffRole = (r: string): r is StaffRole => (STAFF_ROLES as string[]).includes(r);
 
 export const ALL_PERMISSIONS = ['users.read', 'users.write', 'roles.manage', 'settings.write', 'flags.write', 'categories.write', 'audit.read',
-  'sellers.read', 'sellers.write', 'orders.read', 'orders.write', 'refunds.write', 'finance.read', 'finance.write', 'marketing.write', 'support.write'] as const;
+  'sellers.read', 'sellers.write', 'orders.read', 'orders.write', 'refunds.write', 'finance.read', 'finance.write', 'marketing.write', 'support.write', 'catalogue.moderate'] as const;
 export type Permission = (typeof ALL_PERMISSIONS)[number];
 export const SELLER_PERMISSIONS = ['seller.shop.write', 'seller.products.read', 'seller.products.write', 'seller.orders.read', 'seller.orders.write', 'seller.messages.write', 'seller.payouts.read', 'seller.staff.manage'] as const;
 export type SellerPermission = (typeof SELLER_PERMISSIONS)[number];
@@ -19,7 +19,7 @@ export const STAFF_PERMS: Record<StaffRole, Permission[]> = {
   admin: [...ALL_PERMISSIONS],
   support: ['users.read', 'audit.read', 'orders.read', 'sellers.read', 'support.write'],
   finance: ['audit.read', 'orders.read', 'finance.read', 'finance.write', 'refunds.write'],
-  catalogue: ['categories.write', 'sellers.read'],
+  catalogue: ['categories.write', 'sellers.read', 'catalogue.moderate'],
   marketing: ['marketing.write'],
 };
 export const SELLER_PERMS: Record<SellerRole, SellerPermission[]> = {

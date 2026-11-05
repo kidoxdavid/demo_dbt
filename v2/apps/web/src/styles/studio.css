@@ -50,3 +50,6 @@
 .mediarow{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}.mediarow .m{width:84px;height:84px;border-radius:12px;overflow:hidden;position:relative;border:1px solid var(--line)}.mediarow img{width:100%;height:100%;object-fit:cover;display:block}.mediarow .m button{position:absolute;top:2px;right:2px;width:22px;height:22px;border-radius:50%;background:var(--heart-bg);color:var(--heart-ink);font-size:12px}
 @media (max-width:899px){.sd{display:block}.sd-main{padding:0}.table{padding:6px 14px}.form .two{grid-template-columns:1fr}}
 @media (min-width:900px){.bottombar{left:50%;right:auto;transform:translateX(-50%);width:100%;max-width:520px}.ob{max-width:520px;margin:0 auto}}
+/* staff consoles */
+.cons-nav{display:flex;flex-direction:column;gap:4px}
+@media (max-width:899px){.cons .sd-side{position:static;width:auto;height:auto;flex-direction:row;flex-wrap:wrap;align-items:center;padding:12px 14px;border-right:0;border-bottom:1px solid var(--line)}.cons .sd-side>a:first-child{padding:0 8px 0 0}.cons-nav{flex-direction:row;overflow-x:auto;flex:1}.cons-nav .sd-nav{padding:8px 12px;white-space:nowrap}.cons .sd-shopcard{margin-top:0;width:100%}.cons .sd-main{padding:18px 14px}}

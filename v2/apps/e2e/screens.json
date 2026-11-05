@@ -1,0 +1,104 @@
+[
+ {
+  "name": "buyer-home",
+  "path": "/",
+  "viewport": [
+   390,
+   798
+  ],
+  "kind": "phone"
+ },
+ {
+  "name": "home-direction-atelier",
+  "path": "/?look=atelier",
+  "viewport": [
+   390,
+   798
+  ],
+  "kind": "phone"
+ },
+ {
+  "name": "home-direction-noir",
+  "path": "/?look=noir",
+  "viewport": [
+   390,
+   798
+  ],
+  "kind": "phone"
+ },
+ {
+  "name": "home-direction-sage",
+  "path": "/?look=sage",
+  "viewport": [
+   390,
+   798
+  ],
+  "kind": "phone"
+ },
+ {
+  "name": "dark-auto-matches-noir",
+  "ref": "home-direction-noir",
+  "path": "/",
+  "viewport": [
+   390,
+   798
+  ],
+  "kind": "phone",
+  "colorScheme": "dark"
+ },
+ {
+  "name": "design-atelier",
+  "path": "/_design",
+  "viewport": [
+   1100,
+   900
+  ],
+  "kind": "design",
+  "selector": "[data-testid=panel-atelier]",
+  "baseline": true
+ },
+ {
+  "name": "design-noir",
+  "path": "/_design",
+  "viewport": [
+   1100,
+   900
+  ],
+  "kind": "design",
+  "selector": "[data-testid=panel-noir]",
+  "baseline": true
+ },
+ {
+  "name": "design-sage",
+  "path": "/_design",
+  "viewport": [
+   1100,
+   900
+  ],
+  "kind": "design",
+  "selector": "[data-testid=panel-sage]",
+  "baseline": true
+ },
+ {
+  "name": "design-blush",
+  "path": "/_design",
+  "viewport": [
+   1100,
+   900
+  ],
+  "kind": "design",
+  "selector": "[data-testid=panel-blush]",
+  "baseline": true
+ },
+ {
+  "name": "design-sky",
+  "path": "/_design",
+  "viewport": [
+   1100,
+   900
+  ],
+  "kind": "design",
+  "selector": "[data-testid=panel-sky]",
+  "baseline": true
+ }
+]

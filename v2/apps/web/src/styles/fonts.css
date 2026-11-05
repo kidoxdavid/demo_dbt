@@ -1,0 +1,3 @@
+/* Self-hosted (SIL OFL): Fraunces (variable: optical size + weight) and Inter (variable weight). Nothing loads from Google at runtime. */
+@font-face{font-family:'Fraunces';font-style:normal;font-weight:100 900;font-display:block;src:url('/fonts/fraunces-opsz.woff2') format('woff2')}
+@font-face{font-family:'Inter';font-style:normal;font-weight:100 900;font-display:block;src:url('/fonts/inter-wght.woff2') format('woff2')}

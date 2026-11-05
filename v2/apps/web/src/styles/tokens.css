@@ -1,0 +1,16 @@
+/* DESIGN TOKENS. The only file (with src/art) allowed to contain raw colours: `npm run lint:tokens` fails the build otherwise.
+   Atelier, Noir and Sage come from the approved mockups. Blush and Sky are DEFINED, NOT MOCKED: derived (surf white, accsoft ~12% accent on bg). */
+:root,[data-theme="atelier"]{--bg:#FAF7F2;--surf:#FFFFFF;--ink:#1F1B16;--mut:#6F675C;--line:#E9E2D6;--acc:#A9532D;--accsoft:#F3E4D9;--onacc:#FFFFFF;
+  --glass:rgba(255,255,255,.72);--glass-line:rgba(0,0,0,.06);--heart-bg:rgba(255,255,255,.9);--heart-ink:#1F1B16;--ok:#3E6B54;--okfill:#E3EBDD;--scrim:rgba(31,27,22,.45);--dark-on-bg:#FAF7F2;
+  --shadow-hero:0 14px 30px rgba(0,0,0,.18);--shadow-tab:0 10px 30px rgba(0,0,0,.14);--shadow-soft:0 30px 60px rgba(40,30,20,.2)}
+[data-theme="noir"]{--bg:#15120F;--surf:#1E1A16;--ink:#F4EEE6;--mut:#A39A8D;--line:#2D2822;--acc:#C9A66B;--accsoft:#2C261D;--onacc:#15120F;
+  --glass:rgba(30,26,22,.72);--glass-line:rgba(255,255,255,.08);--heart-bg:rgba(255,255,255,.9);--heart-ink:#1F1B16;--ok:#7FB59A;--okfill:#243229;--scrim:rgba(0,0,0,.6);--dark-on-bg:#15120F}
+[data-theme="sage"]{--bg:#F3F4ED;--surf:#FFFFFF;--ink:#1E2A24;--mut:#66726A;--line:#E1E5DA;--acc:#46644F;--accsoft:#E3EBDD;--onacc:#FFFFFF;--ok:#3E6B54;--okfill:#E3EBDD}
+[data-theme="blush"]{--bg:#F7E9E5;--surf:#FFFFFF;--ink:#2A211E;--mut:#7A6A64;--line:#EBD9D3;--acc:#B4574A;--accsoft:#EFD7D2;--onacc:#FFFFFF;--ok:#3E6B54;--okfill:#E3EBDD}
+[data-theme="sky"]{--bg:#E6EEF4;--surf:#FFFFFF;--ink:#1E2933;--mut:#5F7080;--line:#D2DEE8;--acc:#3F6F96;--accsoft:#D2DFE9;--onacc:#FFFFFF;--ok:#3E6B54;--okfill:#E3EBDD}
+/* Dark mode = the Noir tokens, automatic when the system is dark and the look is Atelier or Sage, unless the buyer chose a scheme. */
+@media (prefers-color-scheme: dark){
+  :root[data-scheme="auto"][data-theme="atelier"],:root[data-scheme="auto"][data-theme="sage"]{--bg:#15120F;--surf:#1E1A16;--ink:#F4EEE6;--mut:#A39A8D;--line:#2D2822;--acc:#C9A66B;--accsoft:#2C261D;--onacc:#15120F;
+    --glass:rgba(30,26,22,.72);--glass-line:rgba(255,255,255,.08);--ok:#7FB59A;--okfill:#243229;--dark-on-bg:#15120F}
+}
+:root[data-scheme="dark"]{--bg:#15120F;--surf:#1E1A16;--ink:#F4EEE6;--mut:#A39A8D;--line:#2D2822;--acc:#C9A66B;--accsoft:#2C261D;--onacc:#15120F;--glass:rgba(30,26,22,.72);--glass-line:rgba(255,255,255,.08);--ok:#7FB59A;--okfill:#243229;--dark-on-bg:#15120F}

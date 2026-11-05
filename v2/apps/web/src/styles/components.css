@@ -1,0 +1,59 @@
+/* Shared components. Values come from the approved mockups (design/eazystores/source/lib.py); colours only via tokens. */
+.logo{font-family:Fraunces,serif;font-weight:600;font-size:22px;letter-spacing:-.02em}.logo b{color:var(--acc);font-weight:600}.logo.lg{font-size:28px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;background:var(--acc);color:var(--onacc);border-radius:999px;padding:14px 24px;font-weight:600;font-size:15px;line-height:normal;transition:filter .2s ease,transform .15s ease}
+.btn:hover{filter:brightness(1.06)}.btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}.btn.sm{padding:10px 18px;font-size:13px}.btn.block{width:100%}
+.chip{display:inline-block;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--acc);background:var(--accsoft);padding:5px 10px;border-radius:999px}
+.chip.surf{background:var(--surf)}.chip.outline{background:var(--surf);border:1px solid var(--line);color:var(--ink)}.chip.ok{background:var(--okfill);color:var(--ok)}
+.card{background:var(--surf);border:1px solid var(--line);border-radius:16px}
+.stars{color:var(--acc);font-size:12px;letter-spacing:1px}
+.ico{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.pad{padding:0 18px}.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+/* search */
+.search{display:flex;gap:10px;align-items:center;padding:12px 16px;border-radius:999px}.search.lg{padding:13px 20px;gap:12px}
+/* pills */
+.pills{display:flex;gap:8px;overflow:hidden}.pill{flex:none;font-size:13px;padding:8px 14px;border-radius:999px;border:1px solid var(--line)}
+.pill.on{background:var(--ink);color:var(--bg);font-weight:600;border-color:transparent}.pill.filter{background:var(--surf)}
+/* product card */
+.pcard{display:block}.pcard .im{aspect-ratio:1/1;border-radius:14px;overflow:hidden;position:relative}.pcard .im svg,.pcard .im img{width:100%;height:100%;display:block;object-fit:cover}
+.pcard .heart{position:absolute;top:10px;right:10px;width:32px;height:32px;border-radius:50%;background:var(--heart-bg);display:grid;place-items:center;color:var(--heart-ink)}
+.pcard .tag{position:absolute;left:10px;bottom:10px}.pcard h4{font-size:14px;font-weight:500;margin-top:10px;line-height:1.3}.pcard .by{font-size:12px;color:var(--mut);margin-top:2px}
+.pcard .pr{font-size:14px;font-weight:600;margin-top:4px}.pcard .pr s{font-weight:400;color:var(--mut);margin-left:6px;font-size:12px}
+/* glass tab bar: pinned so it never drifts in an iOS home-screen app */
+.tabbar{position:fixed;left:14px;right:14px;bottom:calc(16px + env(safe-area-inset-bottom));height:64px;border-radius:32px;background:var(--glass);-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px);border:1px solid var(--glass-line);box-shadow:var(--shadow-tab);display:flex;align-items:center;justify-content:space-around;font-size:10px;color:var(--mut);z-index:50}
+.tabbar a,.tabbar button{display:flex;flex-direction:column;align-items:center;gap:3px;color:inherit}.tabbar .on{color:var(--ink);background:var(--accsoft);padding:8px 14px;border-radius:22px}
+.tabbar.inline{position:absolute}
+/* progress, sticky bars */
+.progress{display:flex;gap:6px}.progress i{flex:1;height:4px;border-radius:2px;background:var(--line)}.progress i.on{background:var(--acc)}
+.progress-cap{font-size:12px;margin-top:8px;display:flex;justify-content:space-between;color:var(--mut)}
+.stickybar{position:fixed;left:0;right:0;bottom:0;padding:12px 18px 26px;background:var(--surf);border-top:1px solid var(--line);display:flex;gap:12px;align-items:center;z-index:40}
+.stickybar.gradient{background:linear-gradient(transparent,var(--bg) 30%);border-top:0;padding:14px 18px 30px}
+/* hero */
+.hero{border-radius:22px;background:var(--accsoft);padding:22px 20px 0;overflow:hidden;position:relative;height:300px}
+.hero h1{font-size:31px;line-height:1.08;margin-top:12px;max-width:230px}
+.hero .tile{position:absolute;overflow:hidden;box-shadow:var(--shadow-hero)}
+/* task, stat, checklist, orders (Seller Studio) */
+.task{padding:20px;flex:1}.task .n{font-size:38px}.task b{display:block;font-weight:600;font-size:15px;margin-top:2px}.task p{font-size:13px;margin-top:2px;color:var(--mut)}
+.check{display:flex;gap:10px;align-items:center;padding:8px 0;font-size:14px}.check i{width:20px;height:20px;border-radius:50%;border:1.5px solid var(--line);display:grid;place-items:center;font-size:11px;font-style:normal}
+.check.done i{background:var(--acc);color:var(--onacc);border-color:var(--acc)}.check.done span{color:var(--mut);text-decoration:line-through}
+.orderrow{display:flex;gap:14px;align-items:center;padding:12px 0;border-top:1px solid var(--line);font-size:14px}
+/* shop header */
+.shopbanner{height:150px;position:relative}.shopbanner::after{content:"";position:absolute;inset:0;background:linear-gradient(transparent 40%,rgba(0,0,0,.25))}
+.shoplogo{width:72px;height:72px;border-radius:50%;border:4px solid var(--bg);overflow:hidden;flex:none}
+.tabs{display:flex;gap:18px;margin-top:16px;font-size:14px;border-bottom:1px solid var(--line)}.tabs .on{font-weight:700;padding-bottom:10px;border-bottom:2px solid var(--acc)}
+/* skeleton (no spinners) */
+.skeleton{background:var(--line);border-radius:12px;animation:pulse 1.4s ease-in-out infinite}@keyframes pulse{50%{opacity:.55}}
+/* screens */
+.screen{min-height:100vh;padding-bottom:110px;padding-top:env(safe-area-inset-top)}
+.home-top{display:flex;align-items:center;gap:12px;padding-top:6px}
+.spotlight{padding:16px;display:flex;gap:14px;align-items:center}.round64{width:64px;height:64px;border-radius:50%;overflow:hidden;flex:none}.round64 svg{width:100%;height:100%;display:block}
+.hero .tile svg{width:100%;height:100%;display:block}
+/* /_design page */
+.dz{max-width:1100px;margin:0 auto;padding:28px 20px 80px}.dz-top{margin-bottom:24px}.dz-top p{margin-top:6px}
+.dz-panel{background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:22px;padding:24px;margin-bottom:24px}.dz-panel-head{display:flex;gap:16px;align-items:center;margin-bottom:8px}
+.dz-h{font:600 12px Inter;letter-spacing:.08em;text-transform:uppercase;color:var(--mut);margin:22px 0 10px}
+.dz-swatches{display:flex;gap:10px;flex-wrap:wrap}.dz-swatches div{width:92px;font-size:11px;color:var(--mut)}.dz-swatches i{display:block;height:44px;border-radius:12px;border:1px solid var(--line);margin-bottom:4px}
+.dz-row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.dz-cards{display:grid;grid-template-columns:repeat(2,minmax(0,200px));gap:14px}
+.dz-frame{position:relative;height:96px;transform:translateZ(0);max-width:390px;overflow:hidden;border-radius:16px;border:1px dashed var(--line)}.dz-frame.sm{margin-top:14px;height:78px}.dz-frame .tabbar{bottom:16px}.dz-frame .stickybar{bottom:0}
+.dz-icons{display:grid;grid-template-columns:repeat(auto-fill,minmax(88px,1fr));gap:12px}.dz-icons div,.dz-art div{display:flex;flex-direction:column;align-items:center;gap:6px;font-size:11px;color:var(--mut)}
+.dz-art{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:12px}.dz-art svg{width:100%;aspect-ratio:1;border-radius:14px;display:block}
+.dz-list{padding-left:18px;font-size:14px;line-height:1.7;color:var(--mut)}

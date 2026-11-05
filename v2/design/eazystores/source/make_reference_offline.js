@@ -1,3 +1,5 @@
+// DEVIATION (reported): the original used a 900px-high viewport, which cut every phone reference to 780px instead of the documented 798px
+// (the clip started 120px down the page). This variant uses 1000px so the phone references are the full 390 x 798 screen.
 // OFFLINE VARIANT of make_reference.js (identical output logic). The sandbox cannot reach Google Fonts, so the @import is answered locally with the
 // self-hosted Fraunces and Inter variable fonts (npm packages @fontsource-variable/*). Same fonts, same axes; nothing else differs.
 // Regenerates the approved mockups: sheets/*.html and reference/*.png (the 17 screens the build must match).
@@ -21,14 +23,14 @@ const JOBS = [
   ['dir_A', 520, ['home-direction-atelier']], ['dir_B', 520, ['home-direction-noir']], ['dir_C', 520, ['home-direction-sage']],
 ];
 (async () => {
-  const b = await chromium.launch();
+  const b = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {});
   for (const [n, w, names] of JOBS) {
-    const p = await newPage(b, { viewport: { width: w, height: 900 }, deviceScaleFactor: 2 });
+    const p = await newPage(b, { viewport: { width: w, height: 1000 }, deviceScaleFactor: 2 });
     await p.goto(url(n)); await p.evaluate(() => document.fonts.ready); await p.waitForTimeout(1500);
     for (let i = 0; i < names.length; i++) await phone(p, i, names[i]);
     await p.close(); console.log('done', n);
   }
-  let p = await newPage(b, { viewport: { width: 1860, height: 900 }, deviceScaleFactor: 2 });
+  let p = await newPage(b, { viewport: { width: 1860, height: 1000 }, deviceScaleFactor: 2 });
   await p.goto(url('4_seller_studio')); await p.evaluate(() => document.fonts.ready); await p.waitForTimeout(1500);
   await (await p.$('div[style*="width:1180px"]')).screenshot({ path: path.join(REF, 'studio-desktop.png') });
   await phone(p, 0, 'studio-phone'); await p.close();

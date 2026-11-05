@@ -75,20 +75,20 @@ let browser, cur;
     // --- Customer: the cart shows the tax BEFORE paying, and it follows the delivery province
     const gc = await browser.newContext({ viewport: vp, isMobile: mobile }); const g = await gc.newPage();
     await g.goto(`${BASE}/store/${slug}`); await g.getByRole('link', { name: /Candle/ }).first().click(); await g.waitForURL('**/p/**');
-    await g.getByRole('button', { name: 'Add to cart' }).click(); await g.getByRole('link', { name: 'Check out', exact: true }).click();
+    await g.getByRole('button', { name: 'Add to cart' }).click(); await g.getByRole('link', { name: /^Checkout/ }).click();
     await g.locator('.sumline').filter({ hasText: 'GST' }).waitFor();                                                 // pickup: seller province AB, GST 5% of $20
     assert.match(await g.locator('.sumline.total').innerText(), /\$21\.00/);
-    await g.getByLabel('How would you like to receive it?').selectOption('delivery');
+    await g.getByRole('radio', { name: /Delivery/ }).check();
     await g.getByText('Choose your province so we can work out tax.').waitFor();                                       // delivery needs a destination province
     await g.getByLabel('Street address').fill('1 Main St'); await g.getByLabel('City').fill('Toronto'); await g.getByLabel('Postal code').fill('M5V 2T6');
     await g.getByLabel('Province').selectOption('ON');
     await g.locator('.sumline').filter({ hasText: 'HST' }).waitFor();                                                  // ($20 + $5 delivery) x 13% = $3.25
     assert.match(await g.locator('.sumline.total').innerText(), /\$28\.25/);
     await noHScroll(g, `${name} checkout with tax`); await g.screenshot({ path: `${out}/${name}-y3-checkout-tax.png`, fullPage: true });
-    await g.getByLabel('How would you like to receive it?').selectOption('pickup');
+    await g.getByRole('radio', { name: /Pickup/ }).check();
     await g.locator('.sumline').filter({ hasText: 'GST' }).waitFor();
     await g.getByLabel('Name', { exact: true }).fill('Tax Buyer'); await g.getByLabel('Email').fill('taxbuyer@example.test');
-    await g.getByRole('button', { name: 'Continue to payment' }).click();
+    await g.getByRole('button', { name: /Place order/ }).click();
     await g.getByRole('button', { name: 'Simulate successful payment' }).click(); await g.getByText('Your order is confirmed').waitFor();
     await g.getByRole('cell', { name: 'GST' }).waitFor(); await noHScroll(g, `${name} order page with tax`);
     const confirmation = await latestMail('taxbuyer@example.test', 'order_confirmation'); assert.ok(/GST \$1\.00/.test(confirmation) && /Total \$21\.00/.test(confirmation), 'confirmation email should show tax and total');

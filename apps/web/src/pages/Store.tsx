@@ -3,28 +3,17 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { api, apiWithTotal, ApiError, errorText, money, PROVINCES } from '../api';
 import { Alert, Badge, Empty, Field } from '../ui';
 import { PCard } from './Market';
+import { useCart } from '../cart';
+import { StoreHeader, CartDrawer, FollowButton, Timeline, deliveryLines, Qty } from './CustomerUi';
 
 /** Marks customer-facing pages so the refined public theme applies (body.pub). */
 export function usePub() { useEffect(() => { document.body.classList.add('pub'); return () => document.body.classList.remove('pub'); }, []); }
 
-export type CartLine = { key: string; variantId: string; name: string; title: string; priceCents: number; qty: number; custom?: Record<string, string>; customView?: { label: string; value: string; type: string }[] };
-const key = (slug: string) => `eazy_cart_${slug}`;
-const lineKey = (variantId: string, custom?: Record<string, string>) => variantId + JSON.stringify(Object.entries(custom ?? {}).sort());
+export type { CartLine } from '../cart';
+export { useCart } from '../cart';
 /** Remember which share link brought the shopper (feeds the seller's sales-by-channel report). */
 export function rememberSource(slug: string, src: string | null) { try { if (src && /^[a-z0-9_-]{1,40}$/.test(src)) sessionStorage.setItem(`eazy_src_${slug}`, src); } catch { /* storage unavailable */ } }
 export function recalledSource(slug: string): string | undefined { try { return sessionStorage.getItem(`eazy_src_${slug}`) ?? undefined; } catch { return undefined; } }
-
-export function useCart(slug: string) {
-  const read = (): CartLine[] => { try { return (JSON.parse(localStorage.getItem(key(slug)) ?? '[]') as CartLine[]).map(l => ({ ...l, key: l.key ?? lineKey(l.variantId, l.custom) })); } catch { return []; } };
-  const [lines, setLines] = useState<CartLine[]>(read);
-  const save = (l: CartLine[]) => { setLines(l); try { localStorage.setItem(key(slug), JSON.stringify(l)); } catch { /* storage unavailable: cart lives in memory */ } };
-  return {
-    lines, subtotal: lines.reduce((n, l) => n + l.priceCents * l.qty, 0), count: lines.reduce((n, l) => n + l.qty, 0),
-    add: (l: Omit<CartLine, 'qty' | 'key'>) => { const k = lineKey(l.variantId, l.custom); save(lines.some(x => x.key === k) ? lines.map(x => x.key === k ? { ...x, qty: Math.min(x.qty + 1, 100) } : x) : [...lines, { ...l, key: k, qty: 1 }]); },
-    setQty: (k: string, q: number) => save(q <= 0 ? lines.filter(x => x.key !== k) : lines.map(x => x.key === k ? { ...x, qty: Math.min(q, 100) } : x)),
-    clear: () => save([]),
-  };
-}
 
 export function useStore(slug: string) {
   const [store, setStore] = useState<any>(null); const [missing, setMissing] = useState(false);
@@ -46,15 +35,14 @@ export function Storefront() {
   if (!store) return <div className="wrap"><p className="muted">Loading…</p></div>;
   const accent = /^#[0-9a-f]{6}$/i.test(store.theme?.accent ?? '') ? store.theme.accent : '#141414';
   const dark = store.theme?.hero === 'dark'; const spacious = store.theme?.layout === 'spacious';
-  const info = [store.fulfilment.pickup && 'Pickup', store.fulfilment.delivery && `Delivery ${store.deliveryFeeCents ? money(store.deliveryFeeCents, store.currency) : 'free'}`].filter(Boolean).join(' · ');
+  const info = [store.fulfilment.pickup && 'Pickup', store.fulfilment.delivery && ((store.deliveryRules ?? []).length ? `Delivery from ${money(Math.min(...store.deliveryRules.map((r: any) => r.priceCents)), store.currency)}` : `Delivery ${store.deliveryFeeCents ? money(store.deliveryFeeCents, store.currency) : 'free'}`)].filter(Boolean).join(' · ');
   return <div style={{ ['--btn' as any]: accent, ['--a' as any]: accent }}>
-    <header className="ptop"><div className="wrap pbar"><Link to="/" className="plogo" aria-label="Back to the marketplace">Eazy<i>Stores</i></Link>
-      <span className="pstore">{store.name}</span>
-      <div className="pright"><Link className="plink" to={`/store/${slug}/checkout`}>Cart ({cart.count})</Link></div></div></header>
+    <StoreHeader store={store} slug={slug} />
+    <CartDrawer store={store} slug={slug} />
     <section className={`shero${dark ? ' dark' : ''}`}><div className="wrap">
       <span className="kicker">{[store.category, store.city].filter(Boolean).join(' · ')}</span>
       <h1>{store.name}</h1>{store.verified && <span className="vbadge" title="EazyStores staff reviewed this seller's registration details">✓ Verified seller</span>}{store.tagline && <p className="lede">{store.tagline}</p>}
-      <p className="meta">{info}</p>
+      <p className="meta"><span>{info}</span><FollowButton slug={slug} dark={dark} /></p>
     </div></section>
     <main className="wrap">
       {products && !products.length && !everHad && <Empty title="Nothing here yet">This store hasn't added products. Check back soon.</Empty>}
@@ -64,16 +52,16 @@ export function Storefront() {
       {products && !products.length && everHad && <Empty title="No matches">Try a different word, or clear the search.</Empty>}
       <div className={`pgrid${spacious ? ' wide' : ''}`}>
         {products?.map(p => {
-          const prices = p.variants.map((x: any) => x.priceCents); const lo = Math.min(...prices), hi = Math.max(...prices);
-          return <PCard key={p.id} p={{ id: p.id, name: p.name, storeSlug: slug, storeName: p.brand || store.name, currency: store.currency, priceFrom: lo, priceTo: hi,
-            image: p.images?.[0], image2: p.images?.[1], available: p.variants.some((x: any) => x.available), madeToOrder: p.madeToOrder }} />;
+          const prices = p.variants.map((x: any) => x.priceCents); const lo = Math.min(...prices), hi = Math.max(...prices); const left = p.variants.filter((x: any) => x.left).map((x: any) => x.left);
+          const one = p.variants.length === 1 && p.variants[0].available && !p.comingSoon && !(p.customFields ?? []).length;
+          return <PCard key={p.id} p={{ id: p.id, name: p.name, storeSlug: slug, storeName: p.brand || store.name, currency: store.currency, priceFrom: lo, priceTo: hi, rating: p.rating, comingSoon: p.comingSoon, availableFrom: p.availableFrom,
+            image: p.images?.[0], image2: p.images?.[1], available: p.variants.some((x: any) => x.available), madeToOrder: p.madeToOrder, low: left.length && p.variants.every((x: any) => !x.available || x.left) ? Math.min(...left) : undefined }}
+            quick={one ? () => cart.add({ variantId: p.variants[0].id, name: p.name, title: p.variants[0].title, priceCents: p.variants[0].priceCents, image: p.images?.[0] ? `${p.images[0]}?w=480` : undefined }) : undefined} />;
         })}
       </div>
       {products && products.length < total && <p style={{ textAlign: 'center', padding: '0 0 90px' }}><button className="secondary" onClick={more}>Show more</button></p>}
     </main>
-    {cart.count > 0 && <div className="cartbar"><div className="wrap row spread"><span>{cart.count} item{cart.count > 1 ? 's' : ''} · <b>{money(cart.subtotal, store.currency)}</b></span>
-      <Link className="btn sm" to={`/store/${slug}/checkout`}>Checkout</Link></div></div>}
-  </div>;
+</div>;
 }
 
 function discountText(code: string) {
@@ -86,8 +74,8 @@ export function StoreCheckout() {
   const { slug = '' } = useParams(); const nav = useNavigate(); const { store, missing } = useStore(slug); const cart = useCart(slug);
   const [f, setF] = useState({ name: '', email: '', fulfilment: 'pickup', line1: '', city: '', region: '', postalCode: '' });
   const [err, setErr] = useState(''); const [busy, setBusy] = useState(false); const [placed, setPlaced] = useState<any>(null);
-  const [code, setCode] = useState(''); const [appliedCode, setAppliedCode] = useState('');
-  useEffect(() => { api('/api/me').then(m => setF(p => ({ ...p, name: p.name || m.fullName, email: p.email || m.email }))).catch(() => {}); }, []);   // signed-in customers are pre-filled
+  const [code, setCode] = useState(''); const [appliedCode, setAppliedCode] = useState(''); const [me, setMe] = useState<any>(null);
+  useEffect(() => { api('/api/me').then(m => { setMe(m); setF(p => ({ ...p, name: p.name || m.fullName, email: p.email || m.email })); }).catch(() => {}); }, []);   // signed-in customers are pre-filled
   useEffect(() => { if (store && !store.fulfilment.pickup && store.fulfilment.delivery) setF(p => ({ ...p, fulfilment: 'delivery' })); }, [store]);
   // The cart shows exactly what checkout will charge, including tax, by asking the same pricing code the server uses.
   const [quote, setQuote] = useState<any>(null); const [quoteErr, setQuoteErr] = useState('');
@@ -136,41 +124,52 @@ export function StoreCheckout() {
         : <Alert kind="warn">Online card payment is not available for this store yet.</Alert>}
     </main></>;
 
-  return <>
-    <header className="top"><div className="wrap"><Link to={`/store/${slug}`} className="logo">{store.name}</Link></div></header>
-    <main className="wrap" style={{ maxWidth: 640 }}>
-      <h1 style={{ marginTop: 32 }}>Your cart</h1>
-      {!cart.lines.length ? <Empty title="Your cart is empty"><Link to={`/store/${slug}`}>Keep shopping</Link></Empty> : <>
-        <section className="card"><ul className="list">{cart.lines.map(l => <li key={l.key} className="row spread">
-          <span>{l.name}{l.title !== 'Default' ? ` (${l.title})` : ''}<br /><span className="muted small">{money(l.priceCents, store.currency)} each</span>
-            {l.customView?.map(v => <span key={v.label} className="muted small" style={{ display: 'block' }}>{v.label}: {v.type === 'image' ? 'photo attached' : v.value}</span>)}</span>
-          <span className="qty"><button className="secondary" aria-label={`Decrease ${l.name}`} onClick={() => cart.setQty(l.key, l.qty - 1)}>−</button>
-            <span aria-live="polite">{l.qty}</span><button className="secondary" aria-label={`Increase ${l.name}`} onClick={() => cart.setQty(l.key, l.qty + 1)}>+</button></span></li>)}</ul>
-          <div className="sumline"><span>Subtotal</span><span>{money(quote?.subtotalCents ?? cart.subtotal, store.currency)}</span></div>
-          {quote?.discountCents > 0 && <div className="sumline"><span>Discount ({quote.discountCode})</span><span>−{money(quote.discountCents, store.currency)}</span></div>}
-          <div className="sumline"><span>Delivery{quote?.shippingRule ? ` (${quote.shippingRule})` : ''}</span><span>{money(quote?.shippingCents ?? shipping, store.currency)}</span></div>
-          {quote?.taxLines?.map((t: any) => <div className="sumline" key={t.name}><span>{t.name}</span><span>{money(t.cents, store.currency)}</span></div>)}
-          <div className="sumline total"><span>Total</span><span>{money(quote?.totalCents ?? cart.subtotal + shipping, store.currency)}</span></div>
-          <form className="row" style={{ marginTop: 10 }} onSubmit={e => { e.preventDefault(); setAppliedCode(code.trim()); }}>
-            <input aria-label="Discount code" placeholder="Discount code" value={code} onChange={e => setCode(e.target.value.toUpperCase())} style={{ flex: 1 }} maxLength={40} />
-            <button type="submit" className="secondary">Apply</button>{appliedCode && <button type="button" className="ghost" onClick={() => { setAppliedCode(''); setCode(''); }}>Remove</button>}</form>
-          {quoteErr && <p className="muted small" role="status">{quoteErr}</p>}
-          <p className="muted small">{store.chargesTax ? 'Tax is worked out for your province. Final prices are confirmed when you place the order.' : 'This seller does not charge sales tax. Final prices are confirmed when you place the order.'}</p></section>
-        <form className="card" onSubmit={submit}>
+  const cur = store.currency; const accent = /^#[0-9a-f]{6}$/i.test(store.theme?.accent ?? '') ? store.theme.accent : '#141414';
+  const rules = (store.deliveryRules ?? []).length > 0; const delPrice = f.fulfilment === 'delivery' && quote ? money(quote.shippingCents, cur) : rules ? 'Price depends on where you live' : store.deliveryFeeCents ? money(store.deliveryFeeCents, cur) : 'Free';
+  const total = quote?.totalCents ?? cart.subtotal + shipping;
+  return <div style={{ ['--btn' as any]: accent }}>
+    <StoreHeader store={store} slug={slug} /><CartDrawer store={store} slug={slug} />
+    <main className="wrap" style={{ maxWidth: 1100 }}>
+      {!cart.lines.length ? <Empty title="Your cart is empty"><Link to={`/store/${slug}`}>Keep shopping at {store.name}</Link></Empty> :
+      <form className="co" onSubmit={submit}>
+        <div>
+          <h1 style={{ fontSize: '1.5rem', margin: '4px 0 12px' }}>Checkout</h1>
           {err && <Alert kind="err">{err}</Alert>}
-          <Field label="Name">{id => <input id={id} required autoComplete="name" value={f.name} onChange={e => setF({ ...f, name: e.target.value })} />}</Field>
-          <Field label="Email" hint="We'll send your order status here.">{id => <input id={id} type="email" required autoComplete="email" value={f.email} onChange={e => setF({ ...f, email: e.target.value })} />}</Field>
-          <Field label="How would you like to receive it?">{id => <select id={id} value={f.fulfilment} onChange={e => setF({ ...f, fulfilment: e.target.value })}>
-            {store.fulfilment.pickup && <option value="pickup">Pickup</option>}{store.fulfilment.delivery && <option value="delivery">Delivery ({money(store.deliveryFeeCents, store.currency)})</option>}</select>}</Field>
-          {f.fulfilment === 'delivery' && <>
-            <Field label="Street address">{id => <input id={id} required autoComplete="address-line1" value={f.line1} onChange={e => setF({ ...f, line1: e.target.value })} />}</Field>
-            <Field label="City">{id => <input id={id} required autoComplete="address-level2" value={f.city} onChange={e => setF({ ...f, city: e.target.value })} />}</Field>
-            <Field label="Province">{id => <select id={id} required autoComplete="address-level1" value={f.region} onChange={e => setF({ ...f, region: e.target.value })}><option value="">Choose…</option>{PROVINCES.map(([c, n]) => <option key={c} value={c}>{n}</option>)}</select>}</Field>
-            <Field label="Postal code">{id => <input id={id} required autoComplete="postal-code" value={f.postalCode} onChange={e => setF({ ...f, postalCode: e.target.value })} />}</Field></>}
-          <p><button disabled={busy || !!quoteErr || (!store.fulfilment.pickup && !store.fulfilment.delivery)}>{busy ? 'Placing order…' : 'Continue to payment'}</button></p>
-          {!store.fulfilment.pickup && !store.fulfilment.delivery && <Alert kind="warn">This store hasn't set up delivery or pickup yet.</Alert>}
-        </form></>}
-    </main></>;
+          {!me && <p className="loginhint">Have an account? <Link to={`/login?next=${encodeURIComponent(`/store/${slug}/checkout`)}`}>Log in</Link> to fill this in and track your orders. Or just check out as a guest.</p>}
+          <fieldset className="costep" style={{ border: '1px solid var(--line)' }}><h2><i>1</i>Your details</h2>
+            <Field label="Name">{id => <input id={id} required autoComplete="name" value={f.name} onChange={e => setF({ ...f, name: e.target.value })} />}</Field>
+            <Field label="Email" hint="We send your order updates here.">{id => <input id={id} type="email" required autoComplete="email" value={f.email} onChange={e => setF({ ...f, email: e.target.value })} />}</Field></fieldset>
+          <fieldset className="costep" style={{ border: '1px solid var(--line)' }}><legend className="sr-only">How would you like to receive it?</legend><h2><i>2</i>How would you like it?</h2>
+            <div className="optcards" role="radiogroup" aria-label="Delivery method">
+              {store.fulfilment.pickup && <label className={`optcard${f.fulfilment === 'pickup' ? ' on' : ''}`}><input type="radio" name="ful" checked={f.fulfilment === 'pickup'} onChange={() => setF({ ...f, fulfilment: 'pickup' })} /><span>Pickup<small>Collect it from {store.name}{store.city ? ` in ${store.city}` : ''}. We will tell you when it is ready.</small></span><span className="p">Free</span></label>}
+              {store.fulfilment.delivery && <label className={`optcard${f.fulfilment === 'delivery' ? ' on' : ''}`}><input type="radio" name="ful" checked={f.fulfilment === 'delivery'} onChange={() => setF({ ...f, fulfilment: 'delivery' })} /><span>Delivery<small>{quote?.shippingRule && f.fulfilment === 'delivery' ? quote.shippingRule : 'Sent to your address'}</small></span><span className="p">{delPrice}</span></label>}</div>
+            {f.fulfilment === 'delivery' && <>
+              <Field label="Street address">{id => <input id={id} required autoComplete="address-line1" value={f.line1} onChange={e => setF({ ...f, line1: e.target.value })} />}</Field>
+              <div className="grid2"><Field label="City">{id => <input id={id} required autoComplete="address-level2" value={f.city} onChange={e => setF({ ...f, city: e.target.value })} />}</Field>
+                <Field label="Province">{id => <select id={id} required autoComplete="address-level1" value={f.region} onChange={e => setF({ ...f, region: e.target.value })}><option value="">Choose…</option>{PROVINCES.map(([c, n]) => <option key={c} value={c}>{n}</option>)}</select>}</Field></div>
+              <Field label="Postal code">{id => <input id={id} required autoComplete="postal-code" value={f.postalCode} onChange={e => setF({ ...f, postalCode: e.target.value })} />}</Field></>}
+            {!store.fulfilment.pickup && !store.fulfilment.delivery && <Alert kind="warn">This store has not set up delivery or pickup yet.</Alert>}</fieldset>
+          <fieldset className="costep" style={{ border: '1px solid var(--line)' }}><h2><i>3</i>Review and pay</h2>
+            <p className="muted small" style={{ margin: '4px 0 0' }}>Check the summary, add a discount code if you have one, then place your order. You will pay on the next screen.</p></fieldset>
+        </div>
+        <aside><div className="sumcard"><h2 style={{ fontSize: '1.05rem', margin: '0 0 8px' }}>Order summary</h2>
+          <ul className="sumlines">{cart.lines.map(l => <li key={l.key}><div className="sumimg">{l.image ? <img src={l.image} alt="" /> : <span aria-hidden>{l.name.slice(0, 1)}</span>}</div>
+            <div><b>{l.name}</b>{l.title !== 'Default' && <span className="muted small" style={{ display: 'block' }}>{l.title}</span>}{l.customView?.map(v => <span key={v.label} className="muted small" style={{ display: 'block' }}>{v.label}: {v.type === 'image' ? 'photo attached' : v.value}</span>)}
+              <div className="qty"><button type="button" className="secondary" aria-label={`Decrease ${l.name}`} onClick={() => cart.setQty(l.key, l.qty - 1)}>−</button><span aria-live="polite">{l.qty}</span><button type="button" className="secondary" aria-label={`Increase ${l.name}`} onClick={() => cart.setQty(l.key, l.qty + 1)}>+</button></div></div>
+            <span>{money(l.priceCents * l.qty, cur)}</span></li>)}</ul>
+          <div className="row" style={{ margin: '4px 0 8px' }}>
+            <input aria-label="Discount code" placeholder="Discount code" value={code} onChange={e => setCode(e.target.value.toUpperCase())} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); setAppliedCode(code.trim()); } }} style={{ flex: 1 }} maxLength={40} />
+            <button type="button" className="secondary" onClick={() => setAppliedCode(code.trim())}>Apply</button>{appliedCode && <button type="button" className="ghost" onClick={() => { setAppliedCode(''); setCode(''); }}>Remove</button>}</div>
+          <div className="sumline"><span>Subtotal</span><span>{money(quote?.subtotalCents ?? cart.subtotal, cur)}</span></div>
+          {quote?.discountCents > 0 && <div className="sumline"><span>Discount ({quote.discountCode})</span><span>−{money(quote.discountCents, cur)}</span></div>}
+          <div className="sumline"><span>Delivery{quote?.shippingRule ? ` (${quote.shippingRule})` : ''}</span><span>{money(quote?.shippingCents ?? shipping, cur)}</span></div>
+          {quote?.taxLines?.map((t: any) => <div className="sumline" key={t.name}><span>{t.name}</span><span>{money(t.cents, cur)}</span></div>)}
+          <div className="sumline total"><span>Total</span><span>{money(total, cur)}</span></div>
+          {quoteErr && <p className="alert warn" role="status">{quoteErr}</p>}
+          <button className="placebtn" disabled={busy || !!quoteErr || (!store.fulfilment.pickup && !store.fulfilment.delivery)}>{busy ? 'Placing order…' : `Place order · ${money(total, cur)}`}</button>
+          <div className="trust"><span>🔒 Secure checkout</span><span>↩ Sold by {store.name}</span>{store.chargesTax && <span>Tax shown for your province</span>}</div></div></aside>
+      </form>}
+    </main></div>;
 }
 
 export function OrderStatus() {
@@ -181,7 +180,7 @@ export function OrderStatus() {
     {err && <Alert kind="err">Order not found.</Alert>}
     {o && <><h1>Order #{o.number}</h1>
       {o.status === 'paid' && <Alert kind="ok">Thank you! Your order is confirmed. (Simulated payment in this development build.)</Alert>}
-      <section className="card"><div className="row spread"><b>Status</b><Badge s={o.status} /></div>
+      <section className="card"><div className="row spread"><b>Status</b><Badge s={o.status} /></div><Timeline status={o.status} fulfilment={o.fulfilment} />
         <table><tbody>{o.items.map((i: any, n: number) => <tr key={n}><td>{i.name} × {i.quantity}</td><td>{money(i.unit_price_cents * i.quantity, o.currency)}</td></tr>)}
           <tr><td>Delivery</td><td>{money(o.shipping_cents, o.currency)}</td></tr>{o.tax_lines?.map((t: any) => <tr key={t.name}><td>{t.name}</td><td>{money(t.cents, o.currency)}</td></tr>)}<tr><td><b>Total</b></td><td><b>{money(o.total_cents, o.currency)}</b></td></tr>
           {o.refunded_cents > 0 && <tr><td>Refunded</td><td>−{money(o.refunded_cents, o.currency)}</td></tr>}</tbody></table>

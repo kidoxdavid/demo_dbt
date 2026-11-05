@@ -306,3 +306,33 @@ export function AiStoreText() {
         <button type="button" className="ghost sm" onClick={() => { api(`/api/seller/ai/drafts/${res.id}/decision`, { body: { decision: 'discarded' } }).catch(() => {}); setRes(null); }}>Discard</button></div></div>}
   </form>;
 }
+
+/* ---------------- Demand: waitlists, followers and drops ---------------- */
+export function Demand() {
+  const [d, setD] = useState<any>(null); const [products, setProducts] = useState<any[]>([]); const [err, setErr] = useState(''); const [msg, setMsg] = useState(''); const [pid, setPid] = useState(''); const [when_, setWhen] = useState('');
+  const load = useCallback(() => { api('/api/seller/demand').then(setD).catch(e => setErr(e?.status === 403 ? 'Only the owner and managers can see demand.' : errorText(e))); api('/api/seller/products?limit=100').then(setProducts).catch(() => {}); }, []);
+  useEffect(() => { load(); }, [load]);
+  async function schedule(e: FormEvent, cancel = false, id = pid) {
+    e.preventDefault(); setErr(''); setMsg('');
+    try { await api(`/api/seller/products/${id}/drop`, { method: 'PUT', body: { availableFrom: cancel ? null : new Date(when_).toISOString() } }); setMsg(cancel ? 'Drop cancelled. It can be bought now.' : 'Drop scheduled. Shoppers can see it and join the waitlist, but not buy until then.'); setPid(''); setWhen(''); load(); }
+    catch (x) { setErr(errorText(x).replace('(drop_in_past)', '— pick a time in the future.')); }
+  }
+  if (!d) return err ? <Alert kind="err">{err}</Alert> : <p className="muted">Loading…</p>;
+  const upcoming = d.products.filter((p: any) => p.availableFrom && new Date(p.availableFrom) > new Date());
+  return <>
+    <div className="pagehead"><div><div className="eyebrow">Demand</div><h1>Waitlists and drops</h1></div></div>
+    {err && <Alert kind="err">{err}</Alert>}{msg && <Alert kind="ok">{msg}</Alert>}
+    <div className="grid"><div className="card stat accent"><div className="n">{d.followers}</div><div className="l">People following your store</div></div>
+      <div className="card stat"><div className="n">{d.products.reduce((n: number, p: any) => n + p.waiting, 0)}</div><div className="l">Waiting for something</div></div>
+      <div className="card stat"><div className="n">{upcoming.length}</div><div className="l">Drops scheduled</div></div></div>
+    <section className="card"><h2>Demand before you make it</h2><p className="muted small">When something is sold out or about to drop, shoppers can ask to be told. Make or restock what people are waiting for, and they are emailed automatically, once.</p>
+      {!d.products.length ? <p className="muted">Nobody is waiting yet. Sold-out products and scheduled drops show a “Notify me” box to shoppers.</p> :
+        <div className="table-scroll"><table><thead><tr><th>Product</th><th>Waiting</th><th>In stock</th><th>Status</th><th></th></tr></thead><tbody>{d.products.map((p: any) => <tr key={p.id}><td>{p.name}</td><td><b>{p.waiting}</b>{p.notified > 0 && <span className="muted small"> ({p.notified} told)</span>}</td><td>{p.available}</td>
+          <td>{p.availableFrom && new Date(p.availableFrom) > new Date() ? <Badge s="scheduled" /> : p.available <= 0 ? <Badge s="sold out" /> : <Badge s="live" />}</td>
+          <td>{p.availableFrom && new Date(p.availableFrom) > new Date() && <button className="ghost sm" onClick={e => schedule(e, true, p.id)}>Cancel drop</button>}</td></tr>)}</tbody></table></div>}</section>
+    <form className="card" onSubmit={e => schedule(e)}><h2>Schedule a drop</h2><p className="muted small">The product is visible straight away but cannot be bought until the time you pick. Followers and everyone on its waitlist are emailed the moment it goes live.</p>
+      <div className="grid2"><Field label="Product">{id => <select id={id} required value={pid} onChange={e => setPid(e.target.value)}><option value="">Choose…</option>{products.filter((p: any) => p.status === 'active').map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}</select>}</Field>
+        <Field label="Goes live on">{id => <input id={id} type="datetime-local" required value={when_} onChange={e => setWhen(e.target.value)} />}</Field></div>
+      <p><button disabled={!pid || !when_}>Schedule drop</button></p></form>
+  </>;
+}

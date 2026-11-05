@@ -115,11 +115,11 @@ async function openNav(page, name, exact = false) {
     await g.waitForURL('**/p/**');
     await g.getByRole('button', { name: '100ml', exact: true }).click();
     await g.getByRole('button', { name: 'Add to cart' }).click();
-    await g.getByRole('link', { name: 'Check out', exact: true }).click();
+    await g.getByRole('link', { name: /^Checkout/ }).click();
     await g.locator('.sumline.total').filter({ hasText: '$140.00' }).waitFor();
     await g.getByLabel('Name').fill('Guest Buyer');
     await g.getByLabel('Email').fill('guest@example.test');
-    await g.getByLabel('How would you like to receive it?').selectOption('delivery');
+    await g.getByRole('radio', { name: /Delivery/ }).check();
     await g.locator('.sumline.total').filter({ hasText: '$145.00' }).waitFor();
     await g.getByLabel('Street address').fill('1 Main St');
     await g.getByLabel('City').fill('Calgary');
@@ -127,7 +127,7 @@ async function openNav(page, name, exact = false) {
     await g.getByLabel('Postal code').fill('T2T 2T2');
     await noHScroll(g, `${name} checkout`);
     await g.screenshot({ path: `${out}/${name}-5-checkout.png`, fullPage: true });
-    await g.getByRole('button', { name: 'Continue to payment' }).click();
+    await g.getByRole('button', { name: /Place order/ }).click();
     await g.getByRole('heading', { name: /Pay for order/ }).waitFor();
     await g.getByText('No real money moves').waitFor();   // simulated payment is clearly labelled
     await g.screenshot({ path: `${out}/${name}-6-pay-simulated.png` });
@@ -180,7 +180,7 @@ async function openNav(page, name, exact = false) {
     await g.waitForURL('**/p/**');
     await g.locator('h1', { hasText: 'Oud Noir' }).waitFor();
     await g.getByRole('button', { name: 'Add to cart' }).click();
-    await g.getByRole('link', { name: 'Check out', exact: true }).waitFor();
+    await g.getByRole('link', { name: /^Checkout/ }).waitFor();
     await noHScroll(g, `${name} product page`);
     await g.screenshot({ path: `${out}/${name}-12-product-page.png`, fullPage: true });
     await seller.close(); await guest.close();

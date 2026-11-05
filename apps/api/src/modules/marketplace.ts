@@ -95,7 +95,7 @@ export function registerMarketplace(app: FastifyInstance) {
     const p = await withTx({ tenantId: s.tenant_id }, async c => (await c.query(
       `SELECT p.id, p.name, p.description, p.brand, p.attributes, p.made_to_order AS "madeToOrder", p.custom_fields AS "customFields", p.available_from AS "availableFrom", (p.available_from > now()) AS "comingSoon",
         (SELECT json_agg(json_build_object('id',v.id,'title',v.title,'options',v.options,'priceCents',v.price_cents,
-           'available',(NOT v.track_inventory) OR (l.on_hand-l.reserved>0)) ORDER BY v.created_at)
+           'available',(NOT v.track_inventory) OR (l.on_hand-l.reserved>0),'left',CASE WHEN v.track_inventory AND l.on_hand-l.reserved BETWEEN 1 AND 5 THEN l.on_hand-l.reserved END) ORDER BY v.created_at)
          FROM product_variants v JOIN inventory_levels l ON l.variant_id=v.id WHERE v.product_id=p.id) AS variants,
         (SELECT coalesce(json_agg('/media/'||m.storage_key ORDER BY m.position),'[]'::json) FROM product_media m WHERE m.product_id=p.id) AS images,
         (SELECT json_build_object('avg', round(avg(r.rating)::numeric,1)::float, 'count', count(*)::int) FROM product_reviews r WHERE r.product_id=p.id AND r.status='published') AS rating

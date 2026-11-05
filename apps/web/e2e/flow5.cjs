@@ -58,11 +58,11 @@ async function noHScroll(page, label) {
     await c.getByLabel('Your name').fill('Cleo Customer'); await c.getByLabel('Email').fill(cust); await c.getByLabel('Password').fill(pw); await c.getByRole('button', { name: 'Create account' }).click();
     await c.getByRole('heading', { name: 'Linen Tote' }).waitFor();                                                                  // sent back to the product
     await c.getByLabel('Save to favourites').click(); await c.getByLabel('Remove from favourites').waitFor();
-    await c.getByRole('button', { name: 'Add to cart' }).click(); await c.getByRole('link', { name: 'Check out' }).click();
+    await c.getByRole('button', { name: 'Add to cart' }).click(); await c.getByRole('link', { name: /^Checkout/ }).click();
     await c.getByLabel('Discount code').fill('SAVE10'); await c.getByRole('button', { name: 'Apply' }).click(); await c.getByText('Discount (SAVE10)').waitFor();
     assert.equal(await c.getByLabel('Email').inputValue(), cust);                                                                    // pre-filled from the account
     await noHScroll(c, `${name} checkout`); await shot(c, 'checkout');
-    await c.getByRole('button', { name: 'Continue to payment' }).click(); await c.getByRole('button', { name: 'Simulate successful payment' }).click(); await c.waitForURL(/\/order\//);
+    await c.getByRole('button', { name: /Place order/ }).click(); await c.getByRole('button', { name: 'Simulate successful payment' }).click(); await c.waitForURL(/\/order\//);
     await go(c, '/account', 'account'); await c.getByText('Linen Tote', { exact: false }).first().waitFor(); await c.getByRole('heading', { name: 'Favourites' }).waitFor(); await shot(c, 'account');
     await c.getByRole('link', { name: 'Review' }).first().click(); await c.getByRole('heading', { name: 'Review this product' }).waitFor();
     await c.getByRole('button', { name: '5 stars' }).click(); await c.getByLabel('Headline (optional)').fill('Lovely tote'); await c.getByLabel('Your review (optional)').fill('Sturdy and well made.');

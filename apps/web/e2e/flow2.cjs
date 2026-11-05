@@ -126,11 +126,11 @@ async function openNav(page, name, exact = false) {
     await g.getByText('Attached: sketch.png').waitFor();
     await noHScroll(g, `${name} product page with options`); await g.screenshot({ path: `${out}/${name}-x3-customer-options.png`, fullPage: true });
     await g.getByRole('button', { name: 'Add to cart' }).click();
-    await g.getByRole('link', { name: 'Check out', exact: true }).click();
+    await g.getByRole('link', { name: /^Checkout/ }).click();
     await g.getByText('Name to print: MAYA').waitFor(); await g.getByText('Reference photo: photo attached').waitFor();
     await noHScroll(g, `${name} checkout with customised line`);
     await g.getByLabel('Name', { exact: true }).fill('Gift Buyer'); await g.getByLabel('Email').fill('gift@example.test');
-    await g.getByRole('button', { name: 'Continue to payment' }).click();
+    await g.getByRole('button', { name: /Place order/ }).click();
     await g.getByRole('button', { name: 'Simulate successful payment' }).click(); await g.getByText('Your order is confirmed').waitFor();
 
     // --- Seller: sees the customer's answers and photo; partial refund through the UI

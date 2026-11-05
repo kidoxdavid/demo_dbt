@@ -5,14 +5,14 @@ import { Alert, Badge, Empty, Field } from '../ui';
 import { SecurityPanel } from './Security';
 import { IcoBox, IcoCog, IcoHome, IcoLink, IcoReceipt, IcoUpload, IcoPos, IcoMore, IcoStar, IcoTag, IcoChart } from '../icons';
 import { KeepHero, Profit, OrderKeep, PriceHint } from './ProfitPages';
-import { MorePage, Discounts, ShippingRules, Pos, Reviews, Plan, Assist, AiPhotoDraft, AiStoreText } from './SellerExtra';
+import { Demand, MorePage, Discounts, ShippingRules, Pos, Reviews, Plan, Assist, AiPhotoDraft, AiStoreText } from './SellerExtra';
 
 type Biz = { business: any; store: any; role: string };
 const NAV = [
   { to: '/dashboard', label: 'Overview', Icon: IcoHome, end: true }, { to: '/dashboard/products', label: 'Products', Icon: IcoBox },
   { to: '/dashboard/orders', label: 'Orders', Icon: IcoReceipt }, { to: '/dashboard/profit', label: 'Profit', Icon: IcoChart }, { to: '/dashboard/pos', label: 'Sell', Icon: IcoPos },
   { to: '/dashboard/discounts', label: 'Discounts', Icon: IcoTag }, { to: '/dashboard/delivery', label: 'Delivery', Icon: IcoBox },
-  { to: '/dashboard/reviews', label: 'Reviews', Icon: IcoStar }, { to: '/dashboard/assist', label: 'Insights', Icon: IcoChart },
+  { to: '/dashboard/demand', label: 'Demand', Icon: IcoStar }, { to: '/dashboard/reviews', label: 'Reviews', Icon: IcoStar }, { to: '/dashboard/assist', label: 'Insights', Icon: IcoChart },
   { to: '/dashboard/plan', label: 'Plan', Icon: IcoTag },
   { to: '/dashboard/share', label: 'Share', Icon: IcoLink }, { to: '/dashboard/import', label: 'Import', Icon: IcoUpload },
   { to: '/dashboard/settings', label: 'Settings', Icon: IcoCog },
@@ -59,6 +59,7 @@ export function SellerShell() {
           <Route path="pos" element={<Pos />} />
           <Route path="discounts" element={<Discounts />} />
           <Route path="delivery" element={<ShippingRules />} />
+          <Route path="demand" element={<Demand />} />
           <Route path="reviews" element={<Reviews />} />
           <Route path="assist" element={<Assist />} />
           <Route path="plan" element={<Plan />} />

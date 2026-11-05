@@ -4,6 +4,7 @@ import { api, ApiError, errorText, money } from '../api';
 import { Alert, Badge, Empty, Field } from '../ui';
 import { usePub } from './Store';
 import { PubHeader } from './Market';
+import { resetWish } from './CustomerUi';
 
 const safeNext = (n: string | null) => (n && /^\/[a-zA-Z0-9/_?=&.%-]*$/.test(n) && !n.startsWith('//') ? n : '/account');
 export const Stars = ({ avg, count }: { avg: number | null; count: number }) => !count ? null :
@@ -20,7 +21,7 @@ export function CustomerSignup() {
   usePub(); const nav = useNavigate(); const [sp] = useSearchParams();
   const [f, setF] = useState({ fullName: '', email: '', password: '' }); const [err, setErr] = useState(''); const [busy, setBusy] = useState(false);
   async function submit(e: FormEvent) { e.preventDefault(); setErr(''); setBusy(true);
-    try { await api('/api/auth/signup-customer', { body: f }); nav(safeNext(sp.get('next'))); } catch (x) { setErr(errorText(x)); } finally { setBusy(false); } }
+    try { await api('/api/auth/signup-customer', { body: f }); resetWish(); nav(safeNext(sp.get('next'))); } catch (x) { setErr(errorText(x)); } finally { setBusy(false); } }
   return <><PubHeader /><main className="wrap" style={{ maxWidth: 520 }}>
     <span className="kicker" style={{ marginTop: 44 }}>Customers</span><h1 style={{ margin: '12px 0 8px' }}>Create an account</h1>
     <p className="muted">Keep your orders in one place, save favourites, and review what you bought. You can still check out as a guest.</p>
@@ -77,7 +78,7 @@ export function Account() {
   async function remove(id: string) { await api(`/api/account/wishlist/${id}`, { method: 'DELETE' }).catch(() => {}); load(); }
   async function close(e: FormEvent) { e.preventDefault(); setErr('');
     try { await api('/api/account/close', { body: { password: pw, confirm: 'CLOSE' } }); nav('/'); } catch (x) { setErr(errorText(x).replace('(seller_account)', '— this is a seller account. Close your business from its Settings.')); } }
-  async function logout() { await api('/api/auth/logout', { method: 'POST', body: {} }); nav('/'); }
+  async function logout() { await api('/api/auth/logout', { method: 'POST', body: {} }); resetWish(); nav('/'); }
   return <><PubHeader /><main className="wrap" style={{ maxWidth: 820 }}>
     <span className="kicker" style={{ marginTop: 36 }}>Your account</span><h1 style={{ margin: '10px 0 4px' }}>{me?.fullName ?? 'Account'}</h1>
     <p className="muted">{me?.email} {me && !me.emailVerified && <Badge s="unverified" />} · <button className="textbtn" onClick={logout}>Log out</button></p>

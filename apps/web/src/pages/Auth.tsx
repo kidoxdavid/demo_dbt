@@ -1,3 +1,4 @@
+import { resetWish } from './CustomerUi';
 import { FormEvent, useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { api, ApiError, errorText } from '../api';
@@ -93,6 +94,7 @@ export function Login() {
   const [challenge, setChallenge] = useState<string | null>(null); const [code, setCode] = useState(''); const [recovery, setRecovery] = useState(false);
   const [err, setErr] = useState(''); const [busy, setBusy] = useState(false);
   async function finish() {
+    resetWish();
     // Staff accounts have no business of their own: send them to the admin area.
     const hasBusiness = await api('/api/seller/business').then(() => true).catch(() => false);
     const isStaff = hasBusiness ? false : await api('/api/admin/me').then(() => true).catch(() => false);

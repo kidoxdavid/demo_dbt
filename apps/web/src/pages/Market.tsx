@@ -1,4 +1,5 @@
-import { Stars, WishHeart, ReviewsSection } from './Customer';
+import { Stars, ReviewsSection } from './Customer';
+import { Heart, StoreHeader, CartDrawer, FollowButton, NotifyForm, Qty, deliveryLines } from './CustomerUi';
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api, ApiError, errorText, money } from '../api';
@@ -31,16 +32,17 @@ export function PubHeader({ q, categories = [], onSearch }: { q?: string; catego
   </header>;
 }
 
-export function PCard({ p }: { p: any }) {
+export function PCard({ p, quick }: { p: any; quick?: () => void }) {
   const price = p.priceTo && p.priceTo !== p.priceFrom ? `From ${money(p.priceFrom, p.currency)}` : money(p.priceFrom, p.currency);
-  return <Link className="pc" to={`/store/${p.storeSlug}/p/${p.id}`} aria-label={`${p.name}, ${price}${p.available ? '' : ', sold out'}`}>
+  const drop = p.comingSoon && p.availableFrom ? new Date(p.availableFrom).toLocaleDateString('en-CA', { month: 'short', day: 'numeric' }) : null;
+  return <div className="pcw"><Link className="pc" to={`/store/${p.storeSlug}/p/${p.id}`} aria-label={`${p.name}, ${price}${drop ? `, drops ${drop}` : p.available ? '' : ', sold out'}`}>
     <div className="pc-img">
       {p.image ? <img className="a" src={thumb(p.image)} alt="" loading="lazy" /> : <div className="ph" aria-hidden>{p.name.slice(0, 1)}</div>}
       {p.image2 && <img className="b" src={thumb(p.image2)} alt="" loading="lazy" />}
-      {!p.available ? <span className="tag">Sold out</span> : p.madeToOrder ? <span className="tag">Made to order</span> : null}
+      {drop ? <span className="tag drop">Drops {drop}</span> : !p.available ? <span className="tag">Sold out</span> : p.low ? <span className="tag low">Only {p.low} left</span> : p.madeToOrder ? <span className="tag">Made to order</span> : null}
     </div>
     <div className="pc-meta"><span className="pc-store">{p.storeName}</span><span className="pc-name">{p.name}</span>{p.rating?.count > 0 && <Stars avg={p.rating.avg} count={p.rating.count} />}<span className="pc-price">{price}</span></div>
-  </Link>;
+  </Link><Heart productId={p.id} />{quick && <button type="button" className="quickadd" onClick={quick} aria-label={`Add ${p.name} to cart`}>+</button>}</div>;
 }
 
 function Home({ data, items, onAll }: { data: any; items: any[]; onAll: () => void }) {
@@ -113,8 +115,10 @@ export function ProductPage() {
   const { slug = '', id = '' } = useParams(); const { store, missing } = useStore(slug); const cart = useCart(slug);
   const [sp] = useSearchParams(); useEffect(() => rememberSource(slug, sp.get('src')), [slug, sp]);
   const [custom, setCustom] = useState<Record<string, string>>({}); const [fileNames, setFileNames] = useState<Record<string, string>>({}); const [cerr, setCerr] = useState(''); const [uploading, setUploading] = useState(false);
+  const [qty, setQty] = useState(1); const [more, setMore] = useState<any[]>([]);
   const [p, setP] = useState<any>(null); const [gone, setGone] = useState(false); const [vid, setVid] = useState(''); const [img, setImg] = useState(0); const [added, setAdded] = useState(false);
-  useEffect(() => { api(`/api/public/stores/${slug}/products/${id}`).then(d => { setP(d); setVid(d.variants[0].id); }).catch(() => setGone(true)); }, [slug, id]);
+  useEffect(() => { setQty(1); setImg(0); api(`/api/public/stores/${slug}/products/${id}`).then(d => { setP(d); setVid((d.variants.find((x: any) => x.available) ?? d.variants[0]).id); }).catch(() => setGone(true)); }, [slug, id]);
+  useEffect(() => { api(`/api/public/stores/${slug}/products?limit=12`).then(r => setMore(r.filter((x: any) => x.id !== id).slice(0, 6))).catch(() => {}); }, [slug, id]);
   if (missing || gone) return <><PubHeader /><div className="wrap"><Empty title="Product not found">It may have been removed. <Link to="/">Back to the marketplace</Link></Empty></div></>;
   if (!p || !store) return <><PubHeader /><div className="wrap"><p className="muted">Loading…</p></div></>;
   const v = p.variants.find((x: any) => x.id === vid) ?? p.variants[0];
@@ -137,11 +141,11 @@ export function ProductPage() {
     for (const f of fields) if (f.required && !(custom[f.key] ?? '').trim()) { setCerr(`Please fill in “${f.label}”.`); return; }
     const answers = Object.fromEntries(Object.entries(custom).filter(([, val]) => val.trim() !== ''));
     const view = fields.filter(f => answers[f.key]).map(f => ({ label: f.label, type: f.type, value: f.type === 'image' ? (fileNames[f.key] ?? 'photo') : answers[f.key] }));
-    cart.add({ variantId: v.id, name: p.name, title: v.title, priceCents: v.priceCents, ...(fields.length ? { custom: answers, customView: view } : {}) });
-    setAdded(true); setTimeout(() => setAdded(false), 3000);
+    cart.add({ variantId: v.id, name: p.name, title: v.title, priceCents: v.priceCents, image: p.images[0] ? `${p.images[0]}?w=480` : undefined, ...(fields.length ? { custom: answers, customView: view } : {}) }, qty);
   };
   return <div style={{ ['--btn' as any]: accent }}>
-    <PubHeader />
+    <StoreHeader store={store} slug={slug} />
+    <CartDrawer store={store} slug={slug} />
     <main className="wrap pdp2">
       <nav className="crumbs" aria-label="Breadcrumb"><Link to="/">Marketplace</Link><span aria-hidden> / </span><Link to={`/store/${slug}`}>{store.name}</Link></nav>
       <div className="pdp2-grid">
@@ -151,7 +155,7 @@ export function ProductPage() {
         </div>
         <div className="pinfo2">
           <Link className="kicker" to={`/store/${slug}`}>{p.brand && p.brand !== store.name ? `${p.brand} · ` : ''}{store.name}</Link>
-          <div className="row spread"><h1 style={{ margin: 0 }}>{p.name}</h1><WishHeart productId={p.id} /></div>
+          <div className="row spread"><h1 style={{ margin: 0 }}>{p.name}</h1><Heart productId={p.id} className="big-heart" /></div>
           {p.rating?.count > 0 && <a href="#rv-h" style={{ textDecoration: 'none' }}><Stars avg={p.rating.avg} count={p.rating.count} /></a>}
           <div className="pprice">{money(v.priceCents, store.currency)}</div>
           {p.madeToOrder && <p className="note2">Made to order. Allow extra time for the maker to prepare your piece.</p>}
@@ -168,17 +172,23 @@ export function ProductPage() {
             </div>)}
             {cerr && <p className="alert err" role="alert">{cerr}</p>}
           </fieldset>}
-          <button className="buy2" disabled={!v.available || uploading} onClick={add}>{uploading ? 'Uploading photo…' : v.available ? 'Add to cart' : 'Sold out'}</button>
-          {added && <p className="added" role="status">Added to your cart. <Link to={`/store/${slug}/checkout`}>Check out</Link></p>}
+          {p.comingSoon
+            ? <div className="dropbox"><b>Drops {new Date(p.availableFrom).toLocaleString('en-CA', { weekday: 'long', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</b><p className="muted small" style={{ margin: '4px 0 0' }}>You can see it now, but it cannot be bought until then.</p></div>
+            : v.left ? <p className="stockline" role="status">Only {v.left} left</p> : null}
+          {p.comingSoon ? <NotifyForm slug={slug} productId={p.id} kind="drop" />
+            : !v.available && !p.variants.some((x: any) => x.available) ? <><button className="buy2" disabled>Sold out</button><NotifyForm slug={slug} productId={p.id} kind="restock" /></>
+            : <div className="buyrow">{v.available && <Qty value={qty} onChange={setQty} max={v.left ?? 20} />}<button className="buy2" disabled={!v.available || uploading} onClick={add}>{uploading ? 'Uploading photo…' : v.available ? `Add to cart · ${money(v.priceCents * qty, store.currency)}` : 'This option is sold out'}</button></div>}
+          <ul className="delinfo" aria-label="Delivery">{deliveryLines(store).map((l: string) => <li key={l}>{l}</li>)}</ul>
           <div className="acc">
             {p.description && <details open><summary>Description</summary><p>{p.description}</p></details>}
             {attrs.length > 0 && <details open><summary>Details</summary><dl className="attrs2">{attrs.map(([k, val]) => <div key={k}><dt>{k.replace(/_/g, ' ')}</dt><dd>{typeof val === 'boolean' ? (val ? 'Yes' : 'No') : String(val)}</dd></div>)}</dl></details>}
-            <details><summary>Delivery and pickup</summary><p>{[store.fulfilment.pickup && 'Pickup available', store.fulfilment.delivery && `Delivery ${store.deliveryFeeCents ? money(store.deliveryFeeCents, store.currency) : 'free'}`].filter(Boolean).join(' · ')}. Sold and fulfilled by {store.name}{store.city ? `, ${store.city}` : ''}.</p></details>
+            <details hidden><summary>Delivery and pickup</summary><p>{[store.fulfilment.pickup && 'Pickup available', store.fulfilment.delivery && `Delivery ${store.deliveryFeeCents ? money(store.deliveryFeeCents, store.currency) : 'free'}`].filter(Boolean).join(' · ')}. Sold and fulfilled by {store.name}{store.city ? `, ${store.city}` : ''}.</p></details>
           </div>
         </div>
       </div>
       <ReviewsSection slug={slug} productId={p.id} />
     </main>
-    {cart.count > 0 && <div className="cartbar"><div className="wrap row spread"><span>{cart.count} item{cart.count > 1 ? 's' : ''} · <b>{money(cart.subtotal, store.currency)}</b></span><Link className="btn sm" to={`/store/${slug}/checkout`}>Checkout</Link></div></div>}
+    {more.length > 0 && <section className="wrap morefrom"><h2>More from {store.name}</h2><div className="pgrid four">{more.map((x: any) => <PCard key={x.id} p={{ id: x.id, name: x.name, storeSlug: slug, storeName: x.brand || store.name, currency: store.currency, priceFrom: Math.min(...x.variants.map((y: any) => y.priceCents)), priceTo: Math.max(...x.variants.map((y: any) => y.priceCents)), image: x.images?.[0], image2: x.images?.[1], available: x.variants.some((y: any) => y.available), comingSoon: x.comingSoon, availableFrom: x.availableFrom, madeToOrder: x.madeToOrder, rating: x.rating }} />)}</div></section>}
+    {!p.comingSoon && v.available && <div className="stickybuy"><b>{money(v.priceCents * qty, store.currency)}</b><button onClick={add} disabled={uploading} aria-label="Add selected option">Add</button></div>}
   </div>;
 }

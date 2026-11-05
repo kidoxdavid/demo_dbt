@@ -387,3 +387,59 @@ body.seller .plogo{font-size:1.35rem}body.seller .side .plogo{padding:2px 12px 2
 body.pub .rate button,body.pub .rate button:hover{background:transparent;border:0;box-shadow:none;color:#d4d0c8;font-size:2rem;line-height:1;text-transform:none;letter-spacing:0;border-radius:6px}
 body.pub .rate button.on{color:#b0762f}body.pub .rate button:focus-visible{outline:2px solid #3347e0}
 body.pub .heart,body.pub .heart:hover{background:#fff;color:#141414;border:1px solid var(--line);font-size:1.2rem;text-transform:none;letter-spacing:0;padding:0;min-width:44px}body.pub .heart.on{color:#c2410c}
+
+/* =====================================================================
+   Denser, more colourful pass. Seller/admin: smaller type and controls on desktop, tinted stat cards, coloured actions.
+   Public: tighter hero, more products per row. Phones keep 44px touch targets.
+   ===================================================================== */
+body.seller{--accent:#3347e0;--accent-soft:#eef0ff;--c1:#eef0ff;--c2:#e6f6ee;--c3:#fff3da;--c4:#fde8ee;--c5:#e3f4f8;--c6:#f1e9fb;--app-bg:#f3f4f8}
+body.seller button:not(.secondary):not(.ghost):not(.danger):not(.textbtn):not(.heart):not(.cat),body.seller .btn:not(.secondary):not(.ghost){background:var(--accent);border-color:var(--accent)}
+body.seller button:not(.secondary):not(.ghost):not(.danger):not(.textbtn):hover{background:#2437c4;border-color:#2437c4}
+body.seller .side{background:linear-gradient(180deg,#1c2150,#12163a);border-right:0;color:#e8eaff}
+body.seller .side .plogo,body.seller .side .plogo i{color:#fff}
+body.seller .side a.nav{color:#c9cdf5}body.seller .side a.nav svg{color:#8f97e8}
+body.seller .side a.nav:hover{background:rgba(255,255,255,.08);color:#fff}body.seller .side a.nav.active{background:#3347e0;color:#fff}body.seller .side a.nav.active svg{color:#fff}
+body.seller .side .foot{background:rgba(255,255,255,.07);border-color:rgba(255,255,255,.12);color:#e8eaff}body.seller .side .foot a{color:#fff}body.seller .side .foot .muted{color:#a6acec}
+body.seller .side .foot button.secondary{background:rgba(255,255,255,.1);color:#fff;border-color:rgba(255,255,255,.25)}
+body.seller .grid>.stat:nth-child(6n+1){background:var(--c1)}body.seller .grid>.stat:nth-child(6n+2){background:var(--c2)}body.seller .grid>.stat:nth-child(6n+3){background:var(--c3)}
+body.seller .grid>.stat:nth-child(6n+4){background:var(--c4)}body.seller .grid>.stat:nth-child(6n+5){background:var(--c5)}body.seller .grid>.stat:nth-child(6n+6){background:var(--c6)}
+body.seller .grid>.stat.accent{background:linear-gradient(135deg,#3347e0,#6a3fd1);border-color:transparent}
+body.seller .grid>.stat{border-color:rgba(20,20,60,.08)}
+body.seller .card{border-top:2px solid var(--accent-soft)}body.seller .plan.current{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+body.seller table thead th{background:#f3f4fb;color:#4a4f86}body.seller tbody tr:hover{background:#f8f9ff}
+body.seller .eyebrow{color:var(--accent)}body.seller a{color:#2437c4}body.seller .side a,body.seller .morelink{color:inherit}
+body.seller .badge.paid,body.seller .badge.completed,body.seller .badge.published,body.seller .badge.active,body.seller .badge.succeeded{background:#d9f3e4;color:#0b5a30}
+body.seller .badge.processing,body.seller .badge.ready{background:#dde3ff;color:#2437c4}body.seller .badge.shipped{background:#e8defa;color:#5a2eb0}
+body.seller .badge.counter,body.seller .badge.scheduled{background:#d8f1f6;color:#0d5e70}body.seller .badge.trialing{background:#fde8c8;color:#7a4a00}
+@media(min-width:900px){
+  body.seller{font-size:14px;line-height:1.45}
+  body.seller .app{grid-template-columns:200px 1fr}body.seller .main{padding:18px 24px 40px}
+  body.seller .side{padding:14px 10px}body.seller .side a.nav{min-height:32px;font-size:.85rem;padding:0 10px}body.seller .side .plogo{padding:0 10px 14px;font-size:1.2rem}
+  body.seller h1{font-size:1.55rem}body.seller h2{font-size:1.1rem}body.seller h3{font-size:1rem}body.seller .pagehead{margin-bottom:10px}
+  body.seller .card{padding:12px 14px;margin-bottom:10px}body.seller .stat{padding:10px 12px}body.seller .stat .n{font-size:1.5rem}body.seller .stat .l{font-size:.62rem;margin-top:3px}
+  body.seller .grid{gap:10px;grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+  body.seller button,body.seller .btn{min-height:32px;padding:0 12px;font-size:.82rem}
+  body.seller input,body.seller select,body.seller textarea{min-height:34px;padding:6px 9px;font-size:14px}body.seller textarea{min-height:64px}
+  body.seller label{margin:9px 0 4px;font-size:.74rem}body.seller .check{min-height:30px;margin:4px 0}
+  body.seller th,body.seller td{padding:6px 8px}body.seller table{font-size:.82rem}
+  body.seller .list li{padding:7px 0}body.seller .variant-row{padding:2px 10px 10px;margin:6px 0;gap:8px}
+  body.seller .alert{padding:8px 12px;margin:8px 0}body.seller .badge{font-size:.58rem;padding:2px 7px}
+  body.seller .thumb{width:52px;height:52px}body.seller .empty{padding:24px 12px}body.seller .plans{gap:10px}body.seller .plan .price{font-size:1.4rem}
+  body.seller .grid2{gap:8px 12px}body.seller .chip{min-height:30px;min-width:36px;padding:0 8px}
+}
+@media(min-width:1500px){body.seller .grid2{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:899px){body.seller .card{padding:14px}body.seller .stat .n{font-size:1.6rem}body.seller .grid>.stat{padding:12px 14px}}
+body.seller .tabbar{background:rgba(255,255,255,.97)}body.seller .tabbar a.active{color:var(--accent)}body.seller .mtop{background:#1c2150}body.seller .mtop .plogo,body.seller .mtop .plogo i,body.seller .mtop button{color:#fff}
+
+/* Public: shorter store hero, more per row, accent-coloured actions */
+.shero{padding:clamp(28px,5vw,56px) 0 clamp(20px,3vw,32px)}.shero h1{font-size:clamp(2.2rem,6vw,4.2rem);margin:10px 0}.shero .lede{font-size:1.05rem}
+.pgrid{gap:22px 14px;padding-bottom:48px}@media(min-width:760px){.pgrid{grid-template-columns:repeat(4,1fr);gap:26px 16px}}@media(min-width:1100px){.pgrid{grid-template-columns:repeat(5,1fr)}.pgrid.wide{grid-template-columns:repeat(4,1fr)}}@media(min-width:1500px){.pgrid{grid-template-columns:repeat(6,1fr)}}
+.products.spacious{gap:28px 18px}@media(min-width:1000px){.products.spacious{grid-template-columns:repeat(4,1fr)}}
+body.pub .wrap{max-width:1360px}body.pub .mkt-hero{padding-top:28px;padding-bottom:18px}body.pub .mkt-hero h1{font-size:clamp(1.8rem,4.5vw,3rem)}
+body.pub .pc-meta .pc-price{color:var(--btn,#2437c4);font-weight:650}body.pub .stars{color:#e0a000}
+body.pub .tag{background:#fff2c9;color:#6b4a00}
+@media(min-width:900px){body.seller .main{max-width:none;margin:0}}
+@media(min-width:1300px){.products.spacious,.products{grid-template-columns:repeat(5,1fr)}}
+.products.spacious{gap:22px 14px}@media(min-width:560px){.products.spacious{grid-template-columns:repeat(3,1fr)}}
+@media(min-width:1300px){.pgrid,.pgrid.wide{grid-template-columns:repeat(5,1fr)}}@media(min-width:1700px){.pgrid,.pgrid.wide{grid-template-columns:repeat(6,1fr)}}
+body.seller .thumb button{position:absolute;top:2px;right:2px;width:20px;min-width:20px;height:20px;min-height:20px;padding:0;border-radius:50%;background:rgba(20,20,30,.78);border-color:transparent;font-size:.8rem;line-height:1}

@@ -45,7 +45,7 @@ export function PCard({ p }: { p: any }) {
 
 function Home({ data, items, onAll }: { data: any; items: any[]; onAll: () => void }) {
   const feature = data.stores[0];
-  const perStore = useMemo(() => { const seen = new Set<string>(); return items.filter(p => p.available && !seen.has(p.storeSlug) && seen.add(p.storeSlug)).slice(0, 4); }, [items]);
+  const perStore = useMemo(() => { const seen = new Set<string>(); return items.filter(p => p.available && !seen.has(p.storeSlug) && seen.add(p.storeSlug)).slice(0, 12); }, [items]);
   const tiles = data.categories.map((c: any) => ({ ...c, store: data.stores.find((s: any) => s.category === c.name) })).filter((t: any) => t.store?.covers?.[0]);
   return <>
     {feature && <section className="fhero" style={{ ['--a' as any]: accentOf(feature.theme) }}>
@@ -64,13 +64,13 @@ function Home({ data, items, onAll }: { data: any; items: any[]; onAll: () => vo
       <section className="band2" aria-labelledby="cats"><div className="band2-head"><h2 id="cats">Shop by category</h2></div>
         <div className="tiles">{tiles.map((t: any) => <Link key={t.name} className="tile2" to={`/?category=${encodeURIComponent(t.name)}`}>
           <img src={thumb(t.store.covers[0])} alt="" loading="lazy" /><span className="tile2-label"><b>{t.name}</b><small>{t.stores} {t.stores === 1 ? 'maker' : 'makers'}</small></span></Link>)}</div></section>
+      {perStore.length > 0 && <section className="band2" aria-labelledby="new"><div className="band2-head"><h2 id="new">New this week</h2><button className="textbtn" onClick={onAll}>View all products →</button></div>
+        <div className="pgrid four">{perStore.map(p => <PCard key={p.id} p={p} />)}</div></section>}
       <section className="band2" aria-labelledby="makers"><div className="band2-head"><h2 id="makers">The makers</h2><span className="muted small">{data.stores.length} independent {data.stores.length === 1 ? 'brand' : 'brands'}</span></div>
         <ul className="makers">{data.stores.map((s: any) => <li key={s.slug}><Link to={`/store/${s.slug}`} className="maker">
           <span className="maker-name"><i className="dot" style={{ background: accentOf(s.theme) }} aria-hidden />{s.name}{s.verified && <span className="vtick" title="Verified seller: EazyStores staff reviewed their registration details">✓ Verified</span>}</span>
           <span className="maker-meta">{[s.category, s.city].filter(Boolean).join(' · ')}</span>
           <span className="maker-imgs" aria-hidden>{s.covers.slice(0, 3).map((u: string) => <img key={u} src={thumb(u)} alt="" loading="lazy" />)}</span></Link></li>)}</ul></section>
-      {perStore.length > 0 && <section className="band2" aria-labelledby="new"><div className="band2-head"><h2 id="new">New this week</h2><button className="textbtn" onClick={onAll}>View all products →</button></div>
-        <div className="pgrid four">{perStore.map(p => <PCard key={p.id} p={p} />)}</div></section>}
     </div>
   </>;
 }

@@ -40,6 +40,10 @@ function ShipCard({ productId }: { productId: string }) {
     {data && <button className="muted" style={{ marginLeft: 'auto', fontSize: 12 }} onClick={() => { setPostal(''); store.set(''); }}>Change</button>}</div>;
 }
 
+/** Arriving from a sponsored card carries a signed token: tell the server once (it charges the maker, or not), then tidy the address. */
+function useAdClick() {
+  useEffect(() => { const t = new URLSearchParams(location.search).get('ad'); if (!t) return; history.replaceState(null, '', location.pathname); api('/api/ads/click', { method: 'POST', body: { token: t } }).catch(() => {}); }, []);
+}
 function Reviews({ productId }: { productId: string }) {
   const [limit, setLimit] = useState(5); const { data, error } = useApi<ReviewData>(`/api/products/${productId}/reviews?limit=${limit}`);
   if (error || !data) return null;
@@ -54,7 +58,7 @@ function AskMaker({ shop, productId, title }: { shop: string; productId: string;
   return <div className="rv-form"><b style={{ fontSize: 14 }}>About “{title}”</b><div style={{ marginTop: 10 }}><Conversation messages={[]} me="buyer" onSend={send} placeholder="Is it dishwasher safe? Can you make it in blue?" />{err && null}</div></div>;
 }
 export function ProductPage() {
-  const { id = '' } = useParams(); const nav = useNavigate(); const desktop = useDesktop(); const { data: p, error } = useApi<Product>(`/api/products/${id}`);
+  const { id = '' } = useParams(); useAdClick(); const nav = useNavigate(); const desktop = useDesktop(); const { data: p, error } = useApi<Product>(`/api/products/${id}`);
   const { add } = useCart(); const { savedProducts, toggleSaved, say, card } = useSession(); const [opts, setOpts] = useState<Record<string, string>>({}); const [pers, setPers] = useState<Record<string, string>>({}); const [busy, setBusy] = useState(false); const [msg, setMsg] = useState('');
   useEffect(() => { if (p) setOpts(p.defaultOptions); window.scrollTo(0, 0); }, [p?.id]);          // eslint-disable-line react-hooks/exhaustive-deps
   const variant = useMemo(() => p?.variants.find(v => Object.entries(opts).every(([k, x]) => v.options[k] === x)) ?? (p && !p.options.length ? p.variants[0] : undefined), [p, opts]);

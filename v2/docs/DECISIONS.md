@@ -52,3 +52,11 @@
 - **Conversations are threads**: per order (one per seller order, works with the order link) or per buyer, shop and product. Email to the other side is throttled to one pending message email per thread. Staff see conversations only through the order (support, read only).
 - **The shop window hides seller roles**, so "you cannot message your own shop" asks the database, not the session.
 - **Every storefront field a new shop may leave empty (tagline, city, story) must be null-safe**: the new-shop path is now part of the browser flows.
+
+## Phase 8 decisions
+- **Ads are paid from earnings, not a wallet.** A charged click debits the seller's ledger balance (`seller_payable`) and credits `ad_revenue`, so there is no card top-up to build before a payment provider exists, finance sees ad revenue next to commission, and payouts automatically shrink by what was spent. A campaign stops serving when the seller's earnings cannot cover the next click.
+- **Generalised second price with a floor.** The winner pays one cent over the next bid, at least `ads_min_bid_cents`, at most its own bid. The price is fixed when the ad is served and signed into the click token, so a click always costs what the shopper's page promised.
+- **Only billable clicks are counted.** A replayed, expired or forged token does nothing; a repeat click from the same address on a campaign within 30 minutes and any click by the seller's own team are filtered (not counted, not charged); a click after a budget is used up or the balance is empty is not charged. Impressions count when an ad is served.
+- **Restricted categories cannot be advertised** (toys, perfume, hair), and a staff stop is a hard stop the seller cannot undo.
+- **Sponsored pieces take a fixed slot and replace their organic copy**; organic ranking is never changed by a bid.
+- **`AD_SECRET` must be set in production** (the server refuses to start without it); development uses a fixed dev-only secret.

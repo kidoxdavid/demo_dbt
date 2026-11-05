@@ -15,9 +15,10 @@ import { ShopPage } from './screens/Shop';
 import { SessionProvider } from './session';
 import { ConsoleLayout, ConsoleLogin, ConsoleProvider } from './console/ConsoleShell';
 import { AdminOverview, ModerationPage, PeoplePage, PersonPage, SellerPage, SellersPage, SettingsPage } from './console/Admin';
-import { FinanceOverview, HomeEditor, Reports, SellerBalances, Synonyms } from './console/FinanceMarketing';
+import { AdsAdmin, FinanceOverview, HomeEditor, Reports, SellerBalances, Synonyms } from './console/FinanceMarketing';
 import { OrderSearch, OrderView, PeopleLookup, PersonView } from './console/Support';
 import { AuditPage } from './console/shared';
+import { AdEditor, AdsPage } from './studio/Ads';
 import { Dashboard } from './studio/Dashboard';
 import { Inbox, InboxThread, StudioReviews } from './studio/Inbox';
 import { Onboarding } from './studio/Onboarding';
@@ -38,11 +39,11 @@ function Routed() {
     <Route path="/studio" element={<StudioProvider><Outlet /></StudioProvider>}>
       <Route path="login" element={<StudioLogin />} /><Route path="start" element={<Navigate to="/studio/start/1" replace />} /><Route path="start/:step" element={<Onboarding />} />
       <Route element={<StudioLayout />}><Route index element={<Dashboard />} /><Route path="orders" element={<OrdersPage />} /><Route path="orders/:id" element={<OrderDetail />} /><Route path="products" element={<ProductsPage />} /><Route path="products/new" element={<NewProduct />} /><Route path="products/:id" element={<ProductEditor />} />
-        <Route path="shop" element={<ShopSettings />} /><Route path="shipping" element={<ShippingPage />} /><Route path="messages" element={<Inbox />} /><Route path="messages/:id" element={<InboxThread />} /><Route path="reviews" element={<StudioReviews />} /><Route path="promotions" element={<Soon what="promotions" />} /><Route path="insights" element={<Soon what="insights" />} /><Route path="payouts" element={<Soon what="payouts" />} /></Route></Route>
+        <Route path="shop" element={<ShopSettings />} /><Route path="shipping" element={<ShippingPage />} /><Route path="messages" element={<Inbox />} /><Route path="messages/:id" element={<InboxThread />} /><Route path="reviews" element={<StudioReviews />} /><Route path="ads" element={<AdsPage />} /><Route path="ads/:id" element={<AdEditor />} /><Route path="promotions" element={<Soon what="promotions" />} /><Route path="insights" element={<Soon what="insights" />} /><Route path="payouts" element={<Soon what="payouts" />} /></Route></Route>
     <Route path="/admin" element={<ConsoleProvider area="admin" />}><Route path="login" element={<ConsoleLogin />} /><Route element={<ConsoleLayout />}><Route index element={<AdminOverview />} /><Route path="users" element={<PeoplePage />} /><Route path="users/:id" element={<PersonPage />} /><Route path="sellers" element={<SellersPage />} /><Route path="sellers/:id" element={<SellerPage />} /><Route path="moderation" element={<ModerationPage />} /><Route path="settings" element={<SettingsPage />} /><Route path="audit" element={<AuditPage />} /></Route></Route>
     <Route path="/support" element={<ConsoleProvider area="support" />}><Route path="login" element={<ConsoleLogin />} /><Route element={<ConsoleLayout />}><Route index element={<OrderSearch />} /><Route path="orders/:id" element={<OrderView />} /><Route path="users" element={<PeopleLookup />} /><Route path="users/:id" element={<PersonView />} /><Route path="audit" element={<AuditPage />} /></Route></Route>
     <Route path="/finance" element={<ConsoleProvider area="finance" />}><Route path="login" element={<ConsoleLogin />} /><Route element={<ConsoleLayout />}><Route index element={<FinanceOverview />} /><Route path="sellers" element={<SellerBalances />} /><Route path="orders" element={<OrderSearch />} /><Route path="orders/:id" element={<OrderView />} /><Route path="reports" element={<Reports />} /><Route path="audit" element={<AuditPage />} /></Route></Route>
-    <Route path="/marketing" element={<ConsoleProvider area="marketing" />}><Route path="login" element={<ConsoleLogin />} /><Route element={<ConsoleLayout />}><Route index element={<HomeEditor />} /><Route path="synonyms" element={<Synonyms />} /></Route></Route>
+    <Route path="/marketing" element={<ConsoleProvider area="marketing" />}><Route path="login" element={<ConsoleLogin />} /><Route element={<ConsoleLayout />}><Route index element={<HomeEditor />} /><Route path="ads" element={<AdsAdmin />} /><Route path="synonyms" element={<Synonyms />} /></Route></Route>
     <Route element={<BuyerLayout />}>
       <Route path="/" element={<Home />} /><Route path="/c/:slug" element={<CategoryPage />} /><Route path="/search" element={<SearchPage />} /><Route path="/p/:id" element={<ProductPage />} />
       <Route path="/basket" element={<BasketPage />} /><Route path="/checkout" element={<CheckoutPage />} /><Route path="/orders/:token" element={<OrderPage />} />

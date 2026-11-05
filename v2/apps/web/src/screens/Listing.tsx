@@ -21,8 +21,9 @@ function Sheet({ title, onClose, children }: { title: string; onClose: () => voi
 export function ProductList({ base, empty, bare }: { base: Record<string, string>; empty?: React.ReactNode; bare?: boolean }) {
   const [sp, setSp] = useSearchParams(); const desktop = useDesktop(); const { card } = useSession();
   const f: Record<string, string> = { ...base }; for (const [k, v] of sp) if (k !== 'q' || !base.q) f[k] = v;
-  const key = JSON.stringify(f); const [res, setRes] = useState<Result | null>(null); const [items, setItems] = useState<ApiCard[]>([]); const [busy, setBusy] = useState(false); const [open, setOpen] = useState<string | null>(null);
-  useEffect(() => { let live = true; setRes(null); setItems([]); api<Result>(`/api/products?${new URLSearchParams({ ...f, limit: String(PAGE) })}`).then(r => { if (live) { setRes(r); setItems(r.items); } }); return () => { live = false; }; }, [key]);
+  const key = JSON.stringify(f); const [ads, setAds] = useState<(ApiCard & { token: string })[]>([]); const [res, setRes] = useState<Result | null>(null); const [items, setItems] = useState<ApiCard[]>([]); const [busy, setBusy] = useState(false); const [open, setOpen] = useState<string | null>(null);
+  useEffect(() => { let live = true; setRes(null); setItems([]); api<Result>(`/api/products?${new URLSearchParams({ ...f, limit: String(PAGE) })}`).then(r => { if (live) { setRes(r); setItems(r.items); } });
+    setAds([]); if (!bare && (f.category || f.q)) api<{ items: (ApiCard & { token: string })[] }>(`/api/ads?${new URLSearchParams(f.category ? { placement: 'category', category: f.category } : { placement: 'search', q: f.q })}`).then(r => { if (live) setAds(r.items); }, () => {}); return () => { live = false; }; }, [key]);
   const more = async () => { setBusy(true); try { const r = await api<Result>(`/api/products?${new URLSearchParams({ ...f, limit: String(PAGE), offset: String(items.length) })}`); setItems(x => [...x, ...r.items]); } finally { setBusy(false); } };
   const set = (patch: Record<string, string | null>) => { const n = new URLSearchParams(sp); for (const [k, v] of Object.entries(patch)) v === null ? n.delete(k) : n.set(k, v); setSp(n, { replace: true }); setOpen(null); };
   const facets = res?.facets ?? []; const quick = QUICK.map(k => facets.find(x => x.key === k)).filter(Boolean) as Facet[]; const rest = facets.filter(x => !QUICK.includes(x.key));
@@ -46,11 +47,13 @@ export function ProductList({ base, empty, bare }: { base: Record<string, string
     {res?.fuzzy && <p className="muted" style={{ fontSize: 13, marginTop: 12 }}>No exact matches. Showing close ones.</p>}
     {!res ? <div className={desktop ? 'grid4' : 'grid2 list'} style={{ marginTop: 16 }}>{Array.from({ length: 6 }, (_, i) => <div key={i} className="skeleton" style={{ aspectRatio: '1', borderRadius: 14 }} />)}</div>
       : items.length === 0 ? <div className="empty">{empty ?? <><h2 className="serif">Nothing here yet</h2><p>Try removing a filter.</p></>}</div>
-      : <><div className={desktop ? 'grid4' : 'grid2 list'} style={{ marginTop: 16 }}>{items.map(c => <ProductCard key={c.id} p={card(c)} />)}</div>
+      : <><div className={desktop ? 'grid4' : 'grid2 list'} style={{ marginTop: 16 }}>{withAds(items, ads).map(c => 'token' in c ? <ProductCard key={`ad-${c.id}`} p={{ ...card(c), chip: 'Sponsored', href: `/p/${c.id}?ad=${encodeURIComponent((c as any).token)}` }} /> : <ProductCard key={c.id} p={card(c)} />)}</div>
         {items.length < res.total && <Button variant="ghost" className="more" onClick={more} disabled={busy}>{busy ? 'Loading…' : `Show more (${res.total - items.length} left)`}</Button>}</>}
     <ListMeta res={res} />
   </>;
 }
+/** Sponsored pieces go in after the 2nd and the 6th result, clearly marked; the rest of the order is untouched. */
+function withAds(items: ApiCard[], ads: (ApiCard & { token: string })[]): (ApiCard | (ApiCard & { token: string }))[] { const used = ads.slice(0, 2); const out: (ApiCard | (ApiCard & { token: string }))[] = items.filter(i => !used.some(a => a.id === i.id)); used.forEach((a, i) => { const at = [2, 7][i]; out.splice(Math.min(at, out.length), 0, a); }); return out; }
 function ListMeta({ res }: { res: Result | null }) { useEffect(() => { document.dispatchEvent(new CustomEvent('list-meta', { detail: res ? { total: res.total, makers: res.makers } : null })); }, [res]); return null; }
 function useListMeta() { const [m, set] = useState<{ total: number; makers: number } | null>(null); useEffect(() => { const h = (e: Event) => set((e as CustomEvent).detail); document.addEventListener('list-meta', h); return () => document.removeEventListener('list-meta', h); }, []); return m; }
 function PriceForm({ sp, onApply }: { sp: URLSearchParams; onApply: (p: Record<string, string | null>) => void }) {

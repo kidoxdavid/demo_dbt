@@ -17,7 +17,7 @@ export const NAV: Record<ConsoleArea, { to: string; label: string; icon: IconNam
   admin: [{ to: '', label: 'Overview', icon: 'home', end: true }, { to: '/users', label: 'People', icon: 'user' }, { to: '/sellers', label: 'Sellers', icon: 'store' }, { to: '/moderation', label: 'Review queue', icon: 'shield' }, { to: '/settings', label: 'Settings', icon: 'tag' }, { to: '/audit', label: 'Audit log', icon: 'chart' }],
   support: [{ to: '', label: 'Orders', icon: 'box', end: true }, { to: '/users', label: 'People', icon: 'user' }, { to: '/audit', label: 'Audit log', icon: 'chart' }],
   finance: [{ to: '', label: 'Overview', icon: 'home', end: true }, { to: '/sellers', label: 'Seller balances', icon: 'wallet' }, { to: '/orders', label: 'Orders and refunds', icon: 'box' }, { to: '/reports', label: 'GST and exports', icon: 'chart' }, { to: '/audit', label: 'Audit log', icon: 'shield' }],
-  marketing: [{ to: '', label: 'Home page', icon: 'home', end: true }, { to: '/synonyms', label: 'Search words', icon: 'search' }],
+  marketing: [{ to: '', label: 'Home page', icon: 'home', end: true }, { to: '/ads', label: 'Ads', icon: 'chart' }, { to: '/synonyms', label: 'Search words', icon: 'search' }],
 };
 const WORD: Record<ConsoleArea, string> = { admin: 'admin', support: 'support', finance: 'finance', marketing: 'marketing' };
 

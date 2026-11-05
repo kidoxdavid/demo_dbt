@@ -13,7 +13,7 @@ const Spark = ({ daily }: { daily: { day: string; cents: number }[] }) => {
 export function FinanceOverview() {
   const { data: o } = useApi<any>('/api/finance/overview'); if (!o) return <div className="skeleton" style={{ height: 200 }} />;
   return <Page title="Finance" sub="Straight from the ledger. Every entry balances to zero.">
-    <div style={{ display: 'flex', gap: 16, marginTop: 18, flexWrap: 'wrap' }}><Stat n={money(o.ledger.cash)} l="Cash received" sub="Payments in, refunds and payouts out" /><Stat n={money(o.ledger.sellerPayable)} l="Owed to sellers" sub={`${money(o.availableToPay)} can be paid now`} /><Stat n={money(o.ledger.commissionRevenue)} l="Commission earned" /><Stat n={money(o.ledger.taxPayable)} l="GST to remit" /></div>
+    <div style={{ display: 'flex', gap: 16, marginTop: 18, flexWrap: 'wrap' }}><Stat n={money(o.ledger.cash)} l="Cash received" sub="Payments in, refunds and payouts out" /><Stat n={money(o.ledger.sellerPayable)} l="Owed to sellers" sub={`${money(o.availableToPay)} can be paid now`} /><Stat n={money(o.ledger.commissionRevenue)} l="Commission earned" /><Stat n={money(o.ledger.adRevenue ?? 0)} l="Ad revenue" sub="Clicks charged to sellers" /><Stat n={money(o.ledger.taxPayable)} l="GST to remit" /></div>
     <div className="card sd-card" style={{ marginTop: 16 }}><div className="hd" style={{ display: 'flex', justifyContent: 'space-between' }}><b>Last 30 days</b><span className="muted" style={{ fontSize: 13 }}>{o.last30.orders} seller orders · {money(o.last30.sales)} sales · {money(o.last30.commission)} commission</span></div><Spark daily={o.daily} /></div>
     <p className="muted" style={{ fontSize: 13, marginTop: 14 }}>Sellers become payable {o.payoutHoldDays} days after delivery (a setting).</p></Page>;
 }
@@ -67,6 +67,16 @@ export function HomeEditor() {
       : <Button size="sm" variant="ghost" style={{ marginTop: 12 }} onClick={() => setF({ ...f, spotlight: { shop: '', quote: '' } })}>Add a spotlight</Button>}</div></Page>;
 }
 
+const SERVING: Record<string, string> = { serving: 'Running', paused: 'Paused', ended: 'Ended', blocked: 'Stopped by staff', budget_reached: 'Total budget reached', daily_budget_reached: 'Daily budget reached', low_balance: 'Seller balance too low' };
+/** Every seller's campaigns. Staff can stop one that breaks the advertising rules (the seller sees the reason and cannot restart it) and later release it. */
+export function AdsAdmin() {
+  const { data, reload } = useApi<any[]>('/api/marketing/ads'); const [open, setOpen] = useState<string | null>(null); const [reason, setReason] = useState(''); const [err, setErr] = useState(''); const [busy, setBusy] = useState(false);
+  const act = async (id: string, kind: 'block' | 'unblock') => { setErr(''); setBusy(true); try { await api(`/api/marketing/ads/${id}/${kind}`, { method: 'POST', body: { reason: reason.trim() } }); setOpen(null); setReason(''); reload(); } catch (e) { setErr(fail(e)); } finally { setBusy(false); } };
+  return <Page title="Ads" sub="Sponsored placement bought by sellers. Clicks are charged against the seller's earnings; the money shows as ad revenue in finance.">{err && <div className="err" role="alert">{err}</div>}
+    <Rows empty="No campaigns yet.">{(data ?? []).map(c => <div key={c.id} className="tr" style={{ flexWrap: 'wrap', alignItems: 'flex-start' }}><div className="t"><b>{c.shop ?? c.seller} · {c.name}</b><div>{c.products.length} pieces · bid {money(c.bidCents)} · {c.impressions} views · {c.clicks} clicks · {money(c.spendCents)} spent</div>{c.blockedReason && <div style={{ color: 'var(--ink)' }}>Stopped: “{c.blockedReason}”</div>}</div><Chip variant={c.serving === 'serving' ? 'ok' : 'outline'}>{SERVING[c.serving] ?? c.serving}</Chip>
+      {c.status !== 'ended' && <Button size="sm" variant="ghost" onClick={() => setOpen(open === c.id ? null : c.id)}>{c.status === 'blocked' ? 'Release…' : 'Stop…'}</Button>}
+      {open === c.id && <div style={{ flexBasis: '100%', display: 'flex', gap: 10 }}><input className="field" aria-label="Reason" placeholder="Reason (the seller sees it)" value={reason} onChange={e => setReason(e.target.value)} /><Button size="sm" disabled={busy || reason.trim().length < 3} onClick={() => act(c.id, c.status === 'blocked' ? 'unblock' : 'block')}>{c.status === 'blocked' ? 'Release campaign' : 'Stop campaign'}</Button></div>}</div>)}</Rows></Page>;
+}
 export function Synonyms() {
   const { data, reload } = useApi<{ term: string; related: string[] }[]>('/api/marketing/synonyms'); const [term, setTerm] = useState(''); const [related, setRelated] = useState(''); const [err, setErr] = useState(''); const [busy, setBusy] = useState(false);
   const add = async () => { setErr(''); setBusy(true); try { await api('/api/marketing/synonyms', { method: 'PUT', body: { term: term.trim(), related: related.split(',').map(x => x.trim()).filter(Boolean) } }); setTerm(''); setRelated(''); reload(); } catch (e) { setErr(fail(e)); } finally { setBusy(false); } };

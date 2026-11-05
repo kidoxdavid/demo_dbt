@@ -20,7 +20,7 @@ const body = async page => page.locator('body').innerText();
 
   // ---------------------------------------------------------------- support
   await page.goto(`${BASE}/support`); await page.waitForSelector('.table .tr'); await page.fill('input[aria-label="Order number, name or email"]', '10001'); await page.waitForFunction(() => document.querySelectorAll('.table .tr').length === 1);
-  await page.locator('.table .tr').first().click(); await page.waitForSelector('text=maya@demo.test'); const t = await body(page); ok(t.includes('Maya R.') && t.includes('maya@demo.test'), 'support sees the buyer, name and email, which sellers never do');
+  await page.locator('.table .tr').first().click(); await page.waitForSelector('text=maya@demo.test'); await page.waitForSelector('text=Payments and refunds'); const t = await body(page); ok(t.includes('Maya R.') && t.includes('maya@demo.test'), 'support sees the buyer, name and email, which sellers never do');
   await page.fill('#note-body', 'Buyer asked for a gift receipt'); await page.getByRole('button', { name: 'Save note' }).click(); await page.waitForSelector('text=Buyer asked for a gift receipt'); ok(true, 'an internal note saves');
   await page.getByRole('button', { name: 'Resend the confirmation' }).click(); await page.waitForSelector('text=Confirmation email queued.'); ok(true, 'the confirmation can be resent');
   ok((await page.getByRole('button', { name: 'Refund…' }).count()) === 0, 'support has no refund button');

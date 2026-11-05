@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Client } from '../db.js';
-export type Account = 'cash' | 'seller_payable' | 'commission_revenue' | 'tax_payable';
+export type Account = 'cash' | 'seller_payable' | 'commission_revenue' | 'tax_payable' | 'ad_revenue';
 export interface Entry { account: Account; amountCents: number }
 /** Post one balanced transaction. Debits positive, credits negative; the database rejects it at commit if it does not sum to zero. */
 export async function postTxn(c: Client, o: { orderId: string; sellerOrderId: string; sellerId: string; memo: string; entries: Entry[] }) {

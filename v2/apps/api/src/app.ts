@@ -16,6 +16,9 @@ import { registerCategories } from './modules/categories.js';
 import { registerCatalogue } from './modules/catalogue.js';
 import { registerStudio } from './modules/studio.js';
 import { registerStudioProducts } from './modules/studioProducts.js';
+import { registerCart } from './modules/cart.js';
+import { registerOrders } from './modules/orders.js';
+import { registerStudioOrders } from './modules/studioOrders.js';
 
 
 /** The window a request belongs to. API paths decide it (so a header can never turn a shop session into an admin one); only /api/auth/* reads the x-area header. */
@@ -29,6 +32,9 @@ export async function buildApp(opts: { authRateLimitMax?: number } = {}) {
   await app.register(helmet, { contentSecurityPolicy: false });
   await app.register(cookie);
   await app.register(rateLimit, { global: false });
+  // Keep the exact bytes of every JSON body: payment webhooks are signed over the raw text, not over a re-serialised copy.
+  app.removeContentTypeParser('application/json');
+  app.addContentTypeParser('application/json', { parseAs: 'string' }, (req, body, done) => { (req as any).rawBody = body; try { done(null, body ? JSON.parse(body as string) : {}); } catch (e: any) { e.statusCode = 400; done(e, undefined); } });
   (app as any).authLimit = { rateLimit: { max: opts.authRateLimitMax ?? config.authRateLimitMax, timeWindow: '1 minute' } };
 
   app.setErrorHandler((err: any, _req, reply) => {
@@ -59,6 +65,6 @@ export async function buildApp(opts: { authRateLimitMax?: number } = {}) {
   });
 
   app.get('/health', async () => ({ ok: true }));
-  registerAuth(app); registerPublicConfig(app); registerCategories(app); registerCatalogue(app); registerStudio(app); registerStudioProducts(app); registerAdmin(app);
+  registerAuth(app); registerPublicConfig(app); registerCategories(app); registerCatalogue(app); registerStudio(app); registerStudioProducts(app); registerCart(app); registerOrders(app); registerStudioOrders(app); registerAdmin(app);
   return app;
 }

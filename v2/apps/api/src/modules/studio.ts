@@ -46,6 +46,7 @@ export function registerStudio(app: FastifyInstance) {
       const slug = await freeSlug(c, name); const shop = (await c.query('INSERT INTO shops(seller_id,slug,name) VALUES ($1,$2,$3) RETURNING id, slug, name', [seller.id, slug, name])).rows[0];
       await c.query(`INSERT INTO user_roles(user_id,role,seller_id) VALUES ($1,'seller_owner',$2)`, [u.rows[0].id, seller.id]);
       for (const cat of cats) await c.query('INSERT INTO seller_categories(seller_id,category_id) VALUES ($1,$2)', [seller.id, cat.id]);
+      await c.query(`INSERT INTO shipping_profiles(seller_id,name,is_default,base_cents,transit_days_min,transit_days_max) VALUES ($1,'Standard shipping',true,900,5,8)`, [seller.id]);        // a sensible default so a first product can be published straight away
       await audit(c, { actor: u.rows[0].id, area: 'studio', action: 'seller.signup', entityType: 'seller', entityId: seller.id, next: { shop: shop.slug, categories: b.categories }, ip: req.ip });
       return { userId: u.rows[0].id as string, sellerId: seller.id as string, shop };
     });

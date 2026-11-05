@@ -6,6 +6,7 @@ import { hashPassword, passwordProblem, sha256, verifyPassword } from '../securi
 import { canAccessArea, type Area, type RoleGrant } from '../permissions.js';
 import { cookieName, requireUser } from '../guards.js';
 import { openSession } from '../session.js';
+import { mergeGuestCart } from '../lib/cartStore.js';
 
 const email = z.string().trim().toLowerCase().email().max(254);
 const LOCK_AFTER = 5; const LOCK_MINUTES = 15;
@@ -25,7 +26,7 @@ export function registerAuth(app: FastifyInstance) {
       if (!r.rowCount) throw new HttpError(409, 'email_in_use');
       await audit(c, { actor: r.rows[0].id, area: 'shop', action: 'user.signup', entityType: 'user', entityId: r.rows[0].id, ip: req.ip }); return r.rows[0];
     });
-    await openSession(reply, user.id, 'shop', req.ip, req.headers['user-agent']);
+    await openSession(reply, user.id, 'shop', req.ip, req.headers['user-agent']); await mergeGuestCart(user.id, req.cookies['es_cart'], reply);
     return reply.code(201).send({ user: { id: user.id, email: b.email, fullName: b.fullName, area: 'shop', roles: [] } });
   });
 
@@ -43,7 +44,7 @@ export function registerAuth(app: FastifyInstance) {
     const roles = (await q('SELECT id, role, seller_id FROM user_roles WHERE user_id=$1', [u.id])).rows.map(r => ({ id: r.id, role: r.role, sellerId: r.seller_id }) as RoleGrant);
     if (!canAccessArea(roles, area)) throw new HttpError(403, 'not_allowed_in_area');
     await q('UPDATE users SET failed_logins=0, locked_until=NULL WHERE id=$1', [u.id]);
-    await openSession(reply, u.id, area, req.ip, req.headers['user-agent']);
+    await openSession(reply, u.id, area, req.ip, req.headers['user-agent']); if (area === 'shop') await mergeGuestCart(u.id, req.cookies['es_cart'], reply);
     await audit(pool, { actor: u.id, area, action: 'auth.login', entityType: 'user', entityId: u.id, ip: req.ip });
     return userView({ id: u.id, email: u.email, fullName: u.full_name, roles: area === 'shop' ? [] : roles }, area);
   });

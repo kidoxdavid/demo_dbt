@@ -49,6 +49,11 @@ export async function seedDemoCatalogue(c: Client, password: string) {
     await c.query(`UPDATE shops SET policies=$2 WHERE id=$1`, [shop, JSON.stringify({ returns: { template: 'standard', text: 'Returns accepted within 14 days of delivery if the item is unused and in its original packaging.' } })]);
     if (owner) { const u = (await c.query('INSERT INTO users(email,password_hash,full_name) VALUES ($1,$2,$3) ON CONFLICT (email) DO UPDATE SET full_name=EXCLUDED.full_name RETURNING id', [owner.split('|')[0], hash, owner.split('|')[1]])).rows[0].id;
       await c.query(`INSERT INTO user_roles(user_id,role,seller_id) VALUES ($1,'seller_owner',$2) ON CONFLICT DO NOTHING`, [u, seller]); }
+    // Shipping and processing times for the brief's two featured shops; everyone else gets a $9.00 flat default.
+    const feat: Record<string, { free: number | null; tmin: number; tmax: number; pmin: number; pmax: number }> = { 'clay-ember': { free: null, tmin: 5, tmax: 8, pmin: 2, pmax: 3 }, 'harper-pine': { free: 3500, tmin: 5, tmax: 7, pmin: 1, pmax: 2 } };
+    const f = feat[s.slug] ?? { free: null, tmin: 5, tmax: 8, pmin: 2, pmax: 3 };
+    await c.query(`INSERT INTO shipping_profiles(seller_id,name,is_default,base_cents,free_over_cents,transit_days_min,transit_days_max) VALUES ($1,'Standard shipping',true,900,$2,$3,$4)`, [seller, f.free, f.tmin, f.tmax]);
+    await c.query('UPDATE shops SET processing_days_min=$2, processing_days_max=$3 WHERE id=$1', [shop, f.pmin, f.pmax]);
     shopIds.set(s.slug, { shop, seller }); return { shop, seller };
   };
   await mkShop(SHOPS[0], 'amara@clayember.test|Amara Okafor'); for (const s of SHOPS.slice(1)) await mkShop(s);

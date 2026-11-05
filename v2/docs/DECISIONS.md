@@ -10,3 +10,11 @@
 9. **Search is exact-first.** Typo tolerance only runs when nothing matches exactly. Synonyms are a human-verified table (wig and hair piece, mug and cup, ...); a pair is added only after someone checks it.
 10. **Public media is served only if attached to something live**; sellers see their own drafts through the studio media route. File names and declared types are ignored: the first bytes decide, and images are re-encoded (metadata and GPS stripped, orientation fixed).
 11. **A seller has one shop** in v2 (multi-shop is out of scope).
+
+## Phase 3 decisions
+- Payment rows stay `pending` when an unpaid order expires, so a late provider success can still be settled (re-reserve stock, or refund in full if it is gone).
+- Orders become paid only from a verified, idempotent webhook (HMAC over the raw body, event ids deduplicated). The dev-only simulate route signs a real event and goes through the same path; it does not exist in production.
+- Validation failures return 400 `validation_failed`; business-rule failures return 409/422 with a code.
+- Basket shows items + shipping; GST is added at checkout (shown as a note in the basket).
+- Default shipping profile for a new shop is $9.00 flat, 5 to 8 days transit.
+- Only a mock payment provider exists. A Stripe adapter must implement `PaymentProvider` in `lib/payments.ts`.

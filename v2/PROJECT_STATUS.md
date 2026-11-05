@@ -9,7 +9,12 @@ Verified by 43 API tests in total (23 new): seller sign-up through the studio wi
 Not done here: collections and gift guides, reviews, shipping profiles and delivery estimates (commerce phase), CSV import (studio phase), email and push.
 Run `npm run seed:demo -w apps/api` for the demo shops. Seller login: amara@clayember.test (password demo-password-2026).
 
+## Phase 3 (commerce core): done
+Verified by 67 API tests in total (24 new, real Postgres): guest and signed-in baskets with merge on sign-in, one-of-a-kind / vacation / sold-out refused at add-to-basket, shipping profiles (flat, per item, weight, free-over) and the per-product delivery estimate, checkout split per seller with exact integer-cent GST and commission, Idempotency-Key replay, a replaced unpaid checkout, the last unit going to exactly one of two parallel checkouts, stock committed on payment and released on failure or expiry, webhook signature check (401), duplicate events applied once, amount mismatch refused, late payment after expiry (stock re-taken, or refunded when gone), 503 when no provider is configured, an append-only double-entry ledger whose unbalanced transactions are rejected at commit, buyer order privacy (no commission shown), seller order flow with tracking and per-seller isolation, partial refunds with exact tax and commission shares (unit by unit adds up to the line), over-refund refused, refund idempotency, provider failure leaving nothing refunded, cancel-and-restock, the email outbox (queued in the same transaction, retried, never sent twice).
+Bugs the tests found and fixed: (1) expired orders marked their payment failed, so a provider "succeeded" arriving later was ignored (money taken, order cancelled, no refund); the payment now stays pending until the provider answers. (2) New shops' default shipping profile had a $0 base (silent free shipping); it is now $9.00 flat, 5 to 8 days.
+Not done here: a Stripe adapter (only the mock provider exists; production refuses it), real email delivery (a simulated sender is used), payouts, disputes, order screens in the web app (Phases 4 and 5).
+
 ## Not verified
-Nothing in v2 has run on a real device, with Stripe, with real email or with push notifications.
+Nothing in v2 has run on a real device, with Stripe, with real email or with push notifications. Money movement is simulated by the mock provider.
 ## Next
-Phase 3: commerce core (cart per seller, checkout, stock reservations, seller orders, payments with a mock provider and webhook, ledger, refunds, notifications outbox, jobs, shipping profiles and delivery estimates).
+Phase 4: design mockup gate and buyer storefront (home with curated picks, category, product, basket, checkout, shop looks), built against the 12 remaining reference screens.

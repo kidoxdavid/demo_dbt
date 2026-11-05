@@ -57,6 +57,12 @@ export const templates: Record<string, (d: Data) => Mail> = {
     html: shell('Payment did not go through', `<p>The <b>${esc(d.plan)}</b> plan payment of <b>${esc(money(d.amount, d.currency))}</b> did not go through.</p><p>We will retry daily. If it is still unpaid after ${esc(d.graceDays)} days, your store moves to the free Starter plan. Nothing is deleted.</p>`, d.url, 'Open billing') }),
   billing_downgraded: d => ({ subject: 'Your store moved to the Starter plan', text: `Your ${oneLine(d.plan)} plan could not be paid, so your store moved to the free Starter plan. Nothing was deleted; paid features are switched off and Starter limits apply to new products. You can upgrade again any time:\n${d.url}`,
     html: shell('Moved to the Starter plan', `<p>Your <b>${esc(d.plan)}</b> plan could not be paid, so your store moved to the free Starter plan.</p><p>Nothing was deleted. Paid features are switched off and Starter limits apply to new products.</p>`, d.url, 'Upgrade again') }),
+  back_in_stock: d => ({ subject: `Back in stock: ${oneLine(d.name)}`, text: `${oneLine(d.name)} from ${oneLine(d.storeName)} is available again. You asked to be told. Stock can go quickly:\n${d.url}`,
+    html: shell('Back in stock', `<p><b>${esc(d.name)}</b> from ${esc(d.storeName)} is available again. You asked us to tell you.</p><p style="font-size:13px;color:#77746e">Stock can go quickly.</p>`, d.url, 'Shop it now') }),
+  drop_live: d => ({ subject: `It's live: ${oneLine(d.name)}`, text: `${oneLine(d.name)} from ${oneLine(d.storeName)} just dropped. You asked to be first to know:\n${d.url}`,
+    html: shell('The drop is live', `<p><b>${esc(d.name)}</b> from ${esc(d.storeName)} just dropped. You asked to be first to know.</p>`, d.url, 'Shop the drop') }),
+  new_drop: d => ({ subject: `New from ${oneLine(d.storeName)}: ${oneLine(d.name)}`, text: `${oneLine(d.storeName)}, a maker you follow, just released ${oneLine(d.name)}:\n${d.url}\n\nYou can unfollow any time from your account.`,
+    html: shell('New from a maker you follow', `<p><b>${esc(d.storeName)}</b> just released <b>${esc(d.name)}</b>.</p><p style="font-size:13px;color:#77746e">You can unfollow any time from your account.</p>`, d.url, 'Take a look') }),
   low_stock: d => ({ subject: `Low stock: ${oneLine(d.name)}`, text: `${oneLine(d.name)} (${oneLine(d.variant)}) is down to ${d.available} available.\nRestock: ${d.url}`,
     html: shell('Low stock', `<p><b>${esc(d.name)}</b> (${esc(d.variant)}) is down to <b>${esc(d.available)}</b> available.</p>`, d.url, 'Manage products') }),
 };

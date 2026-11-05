@@ -31,7 +31,7 @@ export function registerMarketplace(app: FastifyInstance) {
            AND (p.name ILIKE $2 ESCAPE '\\' OR p.brand ILIKE $2 ESCAPE '\\' OR s.name ILIKE $2 ESCAPE '\\' OR b.category ILIKE $2 ESCAPE '\\') LIMIT 1`, [q.category ?? null, like])).rowCount! > 0;
       const fuzzy = !exactExists;
       const products = (await c.query(
-        `SELECT p.id, p.name, p.brand, p.made_to_order AS "madeToOrder", s.slug AS "storeSlug", s.name AS "storeName",
+        `SELECT p.id, p.name, p.brand, p.made_to_order AS "madeToOrder", p.available_from AS "availableFrom", (p.available_from > now()) AS "comingSoon", s.slug AS "storeSlug", s.name AS "storeName",
                 b.category, b.currency,
                 (SELECT min(v.price_cents) FROM product_variants v WHERE v.product_id=p.id) AS price_from,
                 (SELECT max(v.price_cents) FROM product_variants v WHERE v.product_id=p.id) AS "priceTo",
@@ -93,7 +93,7 @@ export function registerMarketplace(app: FastifyInstance) {
     const s = await withTx({}, async c => (await c.query('SELECT tenant_id FROM stores WHERE slug=$1', [slug])).rows[0]); // RLS: published only
     if (!s) throw new HttpError(404, 'not_found');
     const p = await withTx({ tenantId: s.tenant_id }, async c => (await c.query(
-      `SELECT p.id, p.name, p.description, p.brand, p.attributes, p.made_to_order AS "madeToOrder", p.custom_fields AS "customFields",
+      `SELECT p.id, p.name, p.description, p.brand, p.attributes, p.made_to_order AS "madeToOrder", p.custom_fields AS "customFields", p.available_from AS "availableFrom", (p.available_from > now()) AS "comingSoon",
         (SELECT json_agg(json_build_object('id',v.id,'title',v.title,'options',v.options,'priceCents',v.price_cents,
            'available',(NOT v.track_inventory) OR (l.on_hand-l.reserved>0)) ORDER BY v.created_at)
          FROM product_variants v JOIN inventory_levels l ON l.variant_id=v.id WHERE v.product_id=p.id) AS variants,

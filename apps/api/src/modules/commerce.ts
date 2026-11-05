@@ -6,6 +6,7 @@ import { withTx, audit, type Ctx } from '../lib/db.js';
 import { HttpError } from '../lib/errors.js';
 import { getProvider } from '../lib/payments.js';
 import { reservationMinutes, uploadDir, maxImageBytes, uploadRateLimitMax } from '../config.js';
+import { notifyWaitlists } from './drops.js';
 import { priceCart } from '../lib/pricing.js';
 import { enqueue, ownerEmail, url as mailUrl } from '../lib/mail.js';
 import { customFieldsIn, withKeys, validateCustom, isUuid, type Field } from '../lib/custom.js';
@@ -29,7 +30,7 @@ const productIn = z.object({
   name: z.string().trim().min(1).max(200), description: z.string().max(10000).optional(), brand: z.string().max(100).optional(),
   attributes: z.record(z.string(), z.union([z.string().max(500), z.number(), z.boolean()])).default({}),
   madeToOrder: z.boolean().default(false), status: z.enum(['draft', 'active']).default('draft'), customFields: customFieldsIn.default([]),
-  variants: z.array(variantIn).min(1).max(100),
+  variants: z.array(variantIn).min(1).max(100), availableFrom: z.string().datetime().nullable().optional(),
 }).strict();
 
 /** Release stock reserved by an unpaid order. Caller holds a tx and has locked the order row. */
@@ -189,8 +190,8 @@ export function registerCommerce(app: FastifyInstance, deps: { tenantCtx: (r: Fa
     const out = await withTx(t, async c => {
       if (b.status === 'active') await assertProductLimit(c, t.tenantId, 1);
       const p = (await c.query(
-        `INSERT INTO products(tenant_id,name,description,brand,attributes,made_to_order,status,custom_fields) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
-        [t.tenantId, b.name, b.description ?? null, b.brand ?? null, JSON.stringify(b.attributes), b.madeToOrder, b.status, JSON.stringify(withKeys(b.customFields))])).rows[0];
+        `INSERT INTO products(tenant_id,name,description,brand,attributes,made_to_order,status,custom_fields,available_from) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
+        [t.tenantId, b.name, b.description ?? null, b.brand ?? null, JSON.stringify(b.attributes), b.madeToOrder, b.status, JSON.stringify(withKeys(b.customFields)), b.availableFrom ?? null])).rows[0];
       for (const v of b.variants) {
         const row = await c.query(
           `INSERT INTO product_variants(tenant_id,product_id,title,sku,options,price_cents,cost_cents,track_inventory,low_stock_threshold,weight_grams,barcode)
@@ -247,13 +248,15 @@ export function registerCommerce(app: FastifyInstance, deps: { tenantCtx: (r: Fa
     const t = await tenantCtx(req); can(t, ['owner', 'manager', 'staff']);
     const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
     const b = z.object({ delta: z.number().int().min(-1_000_000).max(1_000_000).refine(n => n !== 0), note: z.string().max(300).optional() }).strict().parse(req.body);
-    return withTx(t, async c => {
+    const result = await withTx(t, async c => {
       const r = await c.query('UPDATE inventory_levels SET on_hand = on_hand + $2 WHERE variant_id=$1 RETURNING on_hand, reserved', [id, b.delta])
         .catch(e => { if (e.code === '23514') throw new HttpError(409, 'stock_below_reserved_or_negative'); throw e; });
       if (!r.rowCount) throw new HttpError(404, 'not_found');
       await c.query(`INSERT INTO inventory_movements(tenant_id,variant_id,delta,reason,actor_user_id,note) VALUES ($1,$2,$3,'adjustment',$4,$5)`, [t.tenantId, id, b.delta, t.userId, b.note ?? null]);
       return r.rows[0];
     });
+    if (b.delta > 0) await notifyWaitlists({ tenantId: t.tenantId }).catch(e => console.error('waitlist notify failed', e));      // restocked: tell the people waiting
+    return result;
   });
 
   // ---------------- Seller: orders & dashboard ----------------
@@ -361,7 +364,7 @@ export function registerCommerce(app: FastifyInstance, deps: { tenantCtx: (r: Fa
       const exactExists = !like || (await c.query(`SELECT 1 FROM products p WHERE p.status='active' AND (p.name ILIKE $1 ESCAPE '\\' OR p.brand ILIKE $1 ESCAPE '\\' OR p.description ILIKE $1 ESCAPE '\\') LIMIT 1`, [like])).rowCount! > 0;
       const fuzzy = !exactExists;                                  // typo tolerance only when nothing matches exactly
       const rows = (await c.query(
-      `SELECT p.id,p.name,p.description,p.brand,p.attributes,p.made_to_order AS "madeToOrder",p.custom_fields AS "customFields",
+      `SELECT p.id,p.name,p.description,p.brand,p.attributes,p.made_to_order AS "madeToOrder",p.custom_fields AS "customFields", p.available_from AS "availableFrom", (p.available_from > now()) AS "comingSoon",
         (SELECT min(v.price_cents) FROM product_variants v WHERE v.product_id=p.id) AS price_from,
         (SELECT json_agg(json_build_object('id',v.id,'title',v.title,'options',v.options,'priceCents',v.price_cents,
            'available',(NOT v.track_inventory) OR (l.on_hand-l.reserved>0)))
@@ -407,9 +410,10 @@ export function registerCommerce(app: FastifyInstance, deps: { tenantCtx: (r: Fa
       if (!info.fulfilment?.[b.fulfilment === 'pickup' ? 'pickup' : 'delivery']) throw new HttpError(422, 'fulfilment_not_offered');
       // Price comes from the database, never the client.
       const rows = (await c.query(
-        `SELECT v.id, v.title, v.price_cents, v.cost_cents, v.weight_grams, p.name, p.custom_fields FROM product_variants v JOIN products p ON p.id=v.product_id
+        `SELECT v.id, v.title, v.price_cents, v.cost_cents, v.weight_grams, p.name, p.custom_fields, (p.available_from > now()) AS upcoming FROM product_variants v JOIN products p ON p.id=v.product_id
          WHERE v.id = ANY($1::uuid[]) AND p.status='active'`, [reserveLines.map(l => l.variantId)])).rows;
       if (rows.length !== reserveLines.length) throw new HttpError(422, 'item_unavailable');
+      if (rows.some(r => r.upcoming)) throw new HttpError(422, 'not_released');                    // a drop cannot be bought before its time
       // Customer answers are validated against the product's CURRENT fields; uploaded images must be unattached and belong to this store.
       const candidateUploads = [...new Set(lines.flatMap(l => Object.values(l.custom)).filter(isUuid))];
       const availableUploads = new Set<string>(candidateUploads.length ? (await c.query('SELECT id FROM custom_uploads WHERE id = ANY($1::uuid[]) AND order_id IS NULL', [candidateUploads])).rows.map(r => r.id as string) : []);
@@ -459,8 +463,9 @@ export function registerCommerce(app: FastifyInstance, deps: { tenantCtx: (r: Fa
     const qty = new Map<string, number>(); for (const i of b.items) qty.set(i.variantId, (qty.get(i.variantId) ?? 0) + i.quantity);
     return withTx({ tenantId: s.tenant_id }, async c => {
       const info = (await c.query(`SELECT b.region AS biz_region, b.tax_federal, b.tax_provincial FROM businesses b`)).rows[0];
-      const rows = (await c.query(`SELECT v.id, v.price_cents, v.weight_grams FROM product_variants v JOIN products p ON p.id=v.product_id WHERE v.id = ANY($1::uuid[]) AND p.status='active'`, [[...qty.keys()]])).rows;
+      const rows = (await c.query(`SELECT v.id, v.price_cents, v.weight_grams, (p.available_from > now()) AS upcoming FROM product_variants v JOIN products p ON p.id=v.product_id WHERE v.id = ANY($1::uuid[]) AND p.status='active'`, [[...qty.keys()]])).rows;
       if (rows.length !== qty.size) throw new HttpError(422, 'item_unavailable');
+      if (rows.some(r => r.upcoming)) throw new HttpError(422, 'not_released');
       const priced = await priceCart(c, { fulfilment: b.fulfilment, destRegion: b.region, sellerRegion: info.biz_region, federal: info.tax_federal, provincial: info.tax_provincial, flatDeliveryFeeCents: s.delivery_fee_cents,
         code: b.discountCode, email: b.email, lines: rows.map(r => ({ variantId: r.id, qty: qty.get(r.id) ?? 0, priceCents: r.price_cents, weightGrams: r.weight_grams })) });
       return { subtotalCents: priced.subtotalCents, discountCents: priced.discountCents, discountCode: priced.discountCode, shippingCents: priced.shippingCents, shippingRule: priced.shippingRule,

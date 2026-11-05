@@ -1,6 +1,7 @@
 import { buildApp } from './app.js';
 import { config } from './config.js';
 import { releaseExpiredReservations, cleanupOrphanUploads } from './modules/commerce.js';
+import { notifyWaitlists } from './modules/drops.js';
 import { runBilling } from './lib/billing.js';
 import { processOutbox, mailMode } from './lib/mail.js';
 const app = await buildApp();
@@ -8,6 +9,7 @@ setInterval(() => releaseExpiredReservations().catch(e => console.error('reserva
 setInterval(() => cleanupOrphanUploads().catch(e => console.error('upload cleanup failed', e)), 3_600_000).unref();
 setInterval(() => processOutbox().catch(e => console.error('email sender failed', e)), 15_000).unref();
 setInterval(() => runBilling().then(r => { if (Object.keys(r).length) console.log('billing run', r); }).catch(e => console.error('billing run failed', e)), 3_600_000).unref();
+setInterval(() => notifyWaitlists().catch(e => console.error('waitlist notify failed', e)), 60_000).unref();
 console.log(`Email mode: ${mailMode()}${mailMode() === 'simulated' ? ' (messages are recorded but NOT sent; set SMTP_URL)' : ''}`);
 await app.listen({ port: config.port, host: '0.0.0.0' });
 console.log(`EazyStores API on :${config.port}`);

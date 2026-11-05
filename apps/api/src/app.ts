@@ -25,6 +25,7 @@ import { registerBilling } from './modules/billing.js';
 import { registerAssist } from './modules/assist.js';
 import { registerAi } from './modules/ai.js';
 import { registerProfit } from './modules/profit.js';
+import { registerDrops } from './modules/drops.js';
 import { issueToken } from './lib/tokens.js';
 import { enqueue, url as mailUrl } from './lib/mail.js';
 const SLUG = /^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$/;
@@ -417,6 +418,7 @@ export async function buildApp() {
   registerAssist(app, { tenantCtx });
   registerAi(app, { tenantCtx });
   registerProfit(app, { tenantCtx });
+  registerDrops(app, { tenantCtx, authenticate });
   registerImport(app, { tenantCtx });
   registerMarketplace(app);
   registerRefunds(app, { tenantCtx });

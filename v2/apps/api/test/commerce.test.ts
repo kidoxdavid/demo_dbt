@@ -149,6 +149,12 @@ describe('checkout, payment and the ledger', () => {
     const late = await pay(ob.payment.ref); expect(late.json().status).not.toBe('paid');
     expect((await q('SELECT status FROM payments WHERE provider_ref=$1', [ob.payment.ref])).rows[0].status).not.toBe('pending'); expect(await stock(s.items[1].variantId)).toEqual({ on_hand: 0, reserved: 0 });
   });
+  it('a pinned development clock moves delivery dates only, never the stock hold', async () => {
+    const prev = process.env.EAZY_FAKE_NOW; process.env.EAZY_FAKE_NOW = '2020-01-01T12:00:00Z';
+    try { const s = await shop([{ title: 'Pinned clock' }]); const b = buyer(); const cart = (await b.add(s.items[0].variantId)).json(); expect(cart.sellers[0].eta.min.startsWith('2020-01')).toBe(true);
+      const o = (await b.checkout()).json(); expect(new Date(o.expiresAt).getTime()).toBeGreaterThan(Date.now()); }
+    finally { if (prev === undefined) delete process.env.EAZY_FAKE_NOW; else process.env.EAZY_FAKE_NOW = prev; }
+  });
   it('payments are refused when no provider is configured', async () => {
     const prev = process.env.PAYMENT_PROVIDER; process.env.PAYMENT_PROVIDER = 'none';
     try { const s = await shop([{ title: 'No pay' }]); const b = buyer(); await b.add(s.items[0].variantId); expect((await b.checkout()).statusCode).toBe(503); }

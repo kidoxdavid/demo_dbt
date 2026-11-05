@@ -18,3 +18,11 @@
 - Basket shows items + shipping; GST is added at checkout (shown as a note in the basket).
 - Default shipping profile for a new shop is $9.00 flat, 5 to 8 days transit.
 - Only a mock payment provider exists. A Stripe adapter must implement `PaymentProvider` in `lib/payments.ts`.
+
+## Phase 4 decisions
+- **Home is curated by settings**: `home_picks_phone`, `home_picks_desktop` (product ids; empty = newest), `home_categories` (tile label, art, tone) and `home_spotlight` (shop, quote, art). The demo seed sets them so the phone and desktop mockups (which differ in the fourth card) both reproduce. An admin screen for them comes with Phase 6.
+- **One request builds the home page** (`GET /api/home`). The delivery dates in the demo screens need a fixed "today": `EAZY_FAKE_NOW` pins the clock in development and tests only (ignored in production).
+- **Pottery gets Material and Size filters** (and every category can use `freeShipping=true`, meaning the shop's default profile ships that piece free on its own) so the filter row of the category mockup is real, not painted.
+- **Hearts and Follow are real now** (migration 006, `/api/me/saved`, `/api/shops/:slug/follow`): guests are sent to sign in and returned to the page.
+- **Demo seed gained a Clay & Ember candle**, because the basket mockup has that shop selling a candle (2 makers, ships separately).
+- The checkout screen has a **test-mode payment panel** that exists only while the mock provider is active; with no provider, checkout answers 503 and the screen says payments are not connected.

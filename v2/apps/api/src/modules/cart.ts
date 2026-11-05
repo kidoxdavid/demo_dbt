@@ -5,6 +5,7 @@ import { HttpError } from '../errors.js';
 import { cartFor } from '../lib/cartStore.js';
 import { priceCart } from '../lib/cart.js';
 import { DEFAULT_PROFILE, POSTAL, deliveryWindow, shippingCents, type Profile } from '../lib/shipping.js';
+import { now as clockNow } from '../lib/clock.js';
 import { VISIBLE } from '../lib/cards.js';
 
 const view = (cart: Awaited<ReturnType<typeof priceCart>>) => ({
@@ -53,7 +54,7 @@ export function registerCart(app: FastifyInstance) {
     const p = (await pool.query(`SELECT p.seller_id, p.shipping_profile_id, v.price_cents, v.weight_g, s.processing_days_min, s.processing_days_max FROM products p JOIN shops s ON s.id=p.shop_id JOIN sellers se ON se.id=p.seller_id
       JOIN LATERAL (SELECT price_cents, weight_g FROM variants WHERE product_id=p.id AND status='active' ORDER BY price_cents LIMIT 1) v ON true WHERE p.id=$1 AND ${VISIBLE}`, [id])).rows[0]; if (!p) throw new HttpError(404, 'not_found');
     const prof = ((await pool.query('SELECT * FROM shipping_profiles WHERE seller_id=$1 AND (id=$2 OR is_default) ORDER BY (id=$2) DESC NULLS LAST LIMIT 1', [p.seller_id, p.shipping_profile_id])).rows[0] ?? DEFAULT_PROFILE) as Profile;
-    const w = deliveryWindow(new Date(), { min: p.processing_days_min, max: p.processing_days_max }, prof); const cents = shippingCents(prof, [{ quantity: 1, weightG: p.weight_g ?? 0 }], p.price_cents);
+    const w = deliveryWindow(clockNow(), { min: p.processing_days_min, max: p.processing_days_max }, prof); const cents = shippingCents(prof, [{ quantity: 1, weightG: p.weight_g ?? 0 }], p.price_cents);
     return { postal: postal.toUpperCase().slice(0, 3), shippingCents: cents, free: cents === 0, shipsInDays: { min: p.processing_days_min, max: p.processing_days_max }, arrives: { min: w.min, max: w.max }, freeOverCents: prof.free_over_cents };
   });
 }

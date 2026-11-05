@@ -4,6 +4,7 @@ import { HttpError } from '../errors.js';
 import { allSettings } from '../settings.js';
 import { allocateToLines, priceCart, type PricedCart } from './cart.js';
 import { postTxn, saleEntries } from './ledger.js';
+import { now as clockNow } from './clock.js';
 import { enqueue } from './outbox.js';
 import { getProvider } from './payments.js';
 import { POSTAL, PROVINCES, normalisePostal } from './shipping.js';
@@ -34,12 +35,13 @@ export interface CheckoutInput { cartId: string; userId: string | null; email: s
 /** Turn a cart into an order: reserve stock (stable lock order), snapshot every line, split per seller, compute GST and commission in integer cents. The provider is called AFTER the commit. */
 export async function checkout(i: CheckoutInput) {
   const provider = getProvider(); if (!provider) throw new HttpError(503, 'payments_not_configured');
+  // Real time for the stock hold; the pinned dev clock only moves delivery dates.
   const now = i.now ?? new Date(); const settings = await allSettings(); const holdMinutes = settings.reservation_minutes as number;
   if (i.idempotencyKey) { const hit = (await pool.query('SELECT id FROM orders WHERE idempotency_key=$1', [i.idempotencyKey])).rows[0]; if (hit) return { ...(await orderSummary(hit.id)), replay: true }; }
   const created = await tx(async c => {
     await c.query('SELECT 1 FROM carts WHERE id=$1 FOR UPDATE', [i.cartId]);                          // one checkout per cart at a time
     for (const old of (await c.query(`SELECT id FROM orders WHERE cart_id=$1 AND status='awaiting_payment' FOR UPDATE`, [i.cartId])).rows) await cancelUnpaid(c, old.id, 'replaced by a new checkout');
-    const cart: PricedCart = await priceCart(c, i.cartId, now); if (!cart.count) throw new HttpError(422, 'cart_empty');
+    const cart: PricedCart = await priceCart(c, i.cartId, i.now ?? clockNow()); if (!cart.count) throw new HttpError(422, 'cart_empty');
     const bad = cart.groups.flatMap(g => g.lines.filter(l => l.issue).map(l => ({ variantId: l.variantId, title: l.title, issue: l.issue }))); if (bad.length) throw new HttpError(409, bad.some(b => b.issue === 'out_of_stock') ? 'out_of_stock' : 'items_unavailable', bad);
     // Reserve stock. Variants are locked in id order, so two checkouts can never deadlock; the UPDATE only succeeds if enough is free.
     const need = new Map<string, number>(); for (const g of cart.groups) for (const l of g.lines) if (l.tracksStock) need.set(l.variantId, (need.get(l.variantId) ?? 0) + l.quantity);

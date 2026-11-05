@@ -1,0 +1,112 @@
+{
+ "shop": {
+  "name": "Clay & Ember",
+  "slug": "clay-ember",
+  "tagline": "Wheel-thrown stoneware from Calgary",
+  "story": "Small-batch pottery, thrown and glazed by hand in my garage studio. Every piece is food-safe and one of a kind.",
+  "city": "Calgary",
+  "region": "AB",
+  "look": "atelier",
+  "logo": null,
+  "banner": null,
+  "badges": [],
+  "verifiedMaker": true,
+  "rating": {
+   "avg": 4.9,
+   "count": 128
+  },
+  "vacation": false,
+  "policies": null,
+  "processing": {
+   "minDays": 2,
+   "maxDays": 3
+  },
+  "productCount": 4
+ },
+ "items": [
+  {
+   "id": "00000000-0000-4000-8000-000000000001",
+   "title": "Bud vase",
+   "seller": {
+    "name": "Clay & Ember",
+    "slug": "clay-ember"
+   },
+   "priceCents": 4800,
+   "wasCents": null,
+   "chip": null,
+   "photo": null,
+   "photoBlur": null,
+   "art": {
+    "kind": "pottery",
+    "tone": "blush"
+   },
+   "oneOfAKind": false,
+   "madeToOrder": false,
+   "available": true,
+   "rating": null
+  },
+  {
+   "id": "00000000-0000-4000-8000-000000000002",
+   "title": "Speckled mug",
+   "seller": {
+    "name": "Clay & Ember",
+    "slug": "clay-ember"
+   },
+   "priceCents": 3400,
+   "wasCents": null,
+   "chip": null,
+   "photo": null,
+   "photoBlur": null,
+   "art": {
+    "kind": "pottery",
+    "tone": "sand"
+   },
+   "oneOfAKind": false,
+   "madeToOrder": false,
+   "available": true,
+   "rating": null
+  },
+  {
+   "id": "00000000-0000-4000-8000-000000000003",
+   "title": "Planter",
+   "seller": {
+    "name": "Clay & Ember",
+    "slug": "clay-ember"
+   },
+   "priceCents": 4200,
+   "wasCents": null,
+   "chip": null,
+   "photo": null,
+   "photoBlur": null,
+   "art": {
+    "kind": "planter",
+    "tone": "sage"
+   },
+   "oneOfAKind": false,
+   "madeToOrder": false,
+   "available": true,
+   "rating": null
+  },
+  {
+   "id": "00000000-0000-4000-8000-000000000004",
+   "title": "Serving bowl",
+   "seller": {
+    "name": "Clay & Ember",
+    "slug": "clay-ember"
+   },
+   "priceCents": 6400,
+   "wasCents": null,
+   "chip": null,
+   "photo": null,
+   "photoBlur": null,
+   "art": {
+    "kind": "pottery",
+    "tone": "warm"
+   },
+   "oneOfAKind": false,
+   "madeToOrder": false,
+   "available": true,
+   "rating": null
+  }
+ ]
+}

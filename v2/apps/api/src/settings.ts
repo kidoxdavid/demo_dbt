@@ -10,6 +10,12 @@ export const SETTINGS = {
   gst_bps: { schema: z.number().int().min(0).max(3000), default: 500, public: false, help: 'GST in basis points (500 = 5%).' },
   platform_look: { schema: z.enum(['atelier', 'noir', 'sage']), default: 'atelier', public: true, help: 'The look of the storefront.' },
   home_section_order: { schema: z.array(z.enum(['hero', 'categories', 'new', 'spotlight', 'trust', 'guides', 'recent'])).min(1).max(8), default: ['hero', 'categories', 'new', 'spotlight', 'trust'], public: true, help: 'Order of the home page sections.' },
+  home_categories: { schema: z.array(z.object({ slug: z.string().max(60), label: z.string().max(30), kind: z.enum(['pottery', 'perfume', 'print', 'toy', 'print3d', 'hair', 'candle', 'jewel', 'planter', 'scarf']), tone: z.enum(['warm', 'sand', 'blush', 'sage', 'sky', 'butter', 'stone', 'ink']) })).max(12),
+    default: [{ slug: 'art-prints', label: 'Art & prints', kind: 'print', tone: 'warm' }, { slug: 'pottery-ceramics', label: 'Pottery', kind: 'pottery', tone: 'blush' }, { slug: 'perfume-fragrance', label: 'Perfume', kind: 'perfume', tone: 'butter' }, { slug: 'hair-wigs', label: 'Hair', kind: 'hair', tone: 'stone' },
+      { slug: 'toys-games', label: 'Toys', kind: 'toy', tone: 'butter' }, { slug: '3d-printing', label: '3D printed', kind: 'print3d', tone: 'sky' }, { slug: 'jewellery', label: 'Jewellery', kind: 'jewel', tone: 'sage' }, { slug: 'candles-home-fragrance', label: 'Candles', kind: 'candle', tone: 'sand' }], public: true, help: 'Category tiles on the home page and in the phone pill row.' },
+  home_picks_phone: { schema: z.array(z.string().uuid()).max(12), default: [], public: false, help: 'Curated "New from makers" on phones (product ids). Empty = newest.' },
+  home_picks_desktop: { schema: z.array(z.string().uuid()).max(12), default: [], public: false, help: 'Curated "New from makers" on desktop (product ids). Empty = newest.' },
+  home_spotlight: { schema: z.object({ shop: z.string().max(60), quote: z.string().max(400), art: z.object({ kind: z.string().max(20), tone: z.string().max(20) }).optional() }).nullable(), default: null, public: false, help: 'Maker spotlight: shop slug and a short quote.' },
   currency: { schema: z.literal('CAD'), default: 'CAD', public: true, help: 'All money is integer cents in this currency.' },
 } as const;
 export type SettingKey = keyof typeof SETTINGS;

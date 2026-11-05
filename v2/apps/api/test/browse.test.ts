@@ -86,7 +86,7 @@ describe('listing, filters and search', () => {
 describe('the demo catalogue from the brief', () => {
   it('seeds the fixed shops and products, reaches 412 pieces from 38 makers, and is idempotent', async () => {
     await q(`UPDATE products SET status='hidden' WHERE seller_id NOT IN (SELECT seller_id FROM shops WHERE false)`);          // earlier tests in this shared database made newer products: set them aside
-    expect(await tx(c => seedDemoCatalogue(c, PW))).toBe(true); expect(await tx(c => seedDemoCatalogue(c, PW))).toBe(false);
+    await tx(c => seedDemoCatalogue(c, PW)); expect(await tx(c => seedDemoCatalogue(c, PW))).toBe(false);        // seeded once (maybe by an earlier test file), never twice
     const newest = await get('/api/products?sort=new&limit=5'); expect(newest.items.map((i: any) => i.title)).toEqual(['Dusk over the hills, A4 print', 'Cedar & fig soy candle', 'Geometric desk planter', 'Body wave bundle, 18 in', 'Amber & oud eau de parfum, 50 ml']);
     expect(newest.items[0]).toMatchObject({ priceCents: 3800, chip: 'Limited', seller: { name: 'Harper & Pine' }, art: { kind: 'print', tone: 'warm' } }); expect(newest.items[1]).toMatchObject({ priceCents: 2600, chip: 'Handmade' }); expect(newest.items[2].chip).toBeNull();
     expect(newest.items[3]).toMatchObject({ priceCents: 11800, wasCents: 14000, seller: { name: 'Crown Hair Co.' } }); expect(newest.items[4]).toMatchObject({ priceCents: 9600, wasCents: 11000 });

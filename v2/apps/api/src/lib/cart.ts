@@ -3,6 +3,7 @@ import { pool } from '../db.js';
 import { allSettings } from '../settings.js';
 import { mediaUrl } from './media.js';
 import { allocate, percentOf } from './money.js';
+import { now as clockNow } from './clock.js';
 import { DEFAULT_PROFILE, deliveryWindow, shippingCents, type Profile } from './shipping.js';
 
 export type Issue = 'unavailable' | 'vacation' | 'out_of_stock';
@@ -13,7 +14,7 @@ export interface PricedGroup { sellerId: string; shopId: string; shop: { name: s
 export interface PricedCart { groups: PricedGroup[]; itemsCents: number; shippingCents: number; taxCents: number; totalCents: number; count: number; blocked: boolean }
 
 /** Price a cart from the database (never from anything the browser sent): current prices, availability, per-seller shipping, delivery window, GST and commission. */
-export async function priceCart(c: Client | typeof pool, cartId: string, now = new Date()): Promise<PricedCart> {
+export async function priceCart(c: Client | typeof pool, cartId: string, now = clockNow()): Promise<PricedCart> {
   const settings = await allSettings(); const gst = settings.gst_bps as number; const defaultCommission = settings.commission_bps as number;
   const rows = (await c.query(`SELECT ci.id AS item_id, ci.quantity, ci.personalisation, v.id AS variant_id, v.price_cents, v.compare_at_cents, v.options, v.sku, v.weight_g, v.tracks_stock, v.status AS vstatus, v.image_media_id,
       v.stock_on_hand - v.stock_reserved AS avail, p.id AS product_id, p.title, p.status AS pstatus, p.moderation_status, p.tax_class, p.one_of_a_kind, p.shipping_profile_id, p.art_kind, p.art_tone,

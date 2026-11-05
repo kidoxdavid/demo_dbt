@@ -14,7 +14,12 @@ Verified by 67 API tests in total (24 new, real Postgres): guest and signed-in b
 Bugs the tests found and fixed: (1) expired orders marked their payment failed, so a provider "succeeded" arriving later was ignored (money taken, order cancelled, no refund); the payment now stays pending until the provider answers. (2) New shops' default shipping profile had a $0 base (silent free shipping); it is now $9.00 flat, 5 to 8 days.
 Not done here: a Stripe adapter (only the mock provider exists; production refuses it), real email delivery (a simulated sender is used), payouts, disputes, order screens in the web app (Phases 4 and 5).
 
+## Phase 4 (buyer storefront): done
+Built from live API data: home (phone and desktop), category with real filters (price, material, size, handmade, free shipping, more, sort) and "show more", search, product page (photos or illustration, options and swatches, delivery estimate by postal code, personalisation, one-of-a-kind and sold-out states), basket (per-maker groups, delivery windows, quantity, gift note), checkout with a test-mode payment step, order status page, sign in / create account, saved pieces, followed shops, shop page in the shop's look (Atelier, Noir, Sage, Blush, Sky).
+Verified: **17 visual-regression screens pass** (all at or under 0.35% differing pixels; the limit is 1.5%): see `docs/DESIGN.md`. `apps/e2e/flow.mjs` drives a real browser through 25 checks: guest buys a piece end to end (add, quantity, gift note, bad postal code refused, GST shown, test payment, order page), a guest is sent to sign in to save, sign-up returns to the page, hearts, saved list, filters in the URL, follow, search and empty search, sign out, desktop navigation and a friendly page for an unknown piece. API: 74 tests pass (7 new: home, curated picks, free-shipping filter, material and size facets, saved pieces, follows, the pinned-clock regression).
+Not done: reviews, the "Meet the makers" and gift-guide pages, order chat, real card payments (Stripe adapter), real email, buyer order-history detail beyond the status page, desktop screens other than home have no mockup (built from the same tokens, not pixel-tested). Seller onboarding and the studio are Phase 5.
+
 ## Not verified
 Nothing in v2 has run on a real device, with Stripe, with real email or with push notifications. Money movement is simulated by the mock provider.
 ## Next
-Phase 4: design mockup gate and buyer storefront (home with curated picks, category, product, basket, checkout, shop looks), built against the 12 remaining reference screens.
+Phase 5: seller onboarding and the Studio (four onboarding steps and two studio screens have references), then Phase 6 consoles.

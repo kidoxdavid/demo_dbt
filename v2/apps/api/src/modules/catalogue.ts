@@ -11,7 +11,7 @@ const bool = z.enum(['true', 'false', '1', '0']).transform(v => v === 'true' || 
 const listQuery = z.object({
   q: z.string().trim().max(80).optional(), category: z.string().regex(SLUG).optional(), shop: z.string().regex(SLUG).optional(),
   minPrice: z.coerce.number().int().min(0).optional(), maxPrice: z.coerce.number().int().min(0).optional(),
-  handmade: bool.optional(), oneOfAKind: bool.optional(), madeToOrder: bool.optional(), inStock: bool.optional(), rating: z.coerce.number().min(1).max(5).optional(),
+  handmade: bool.optional(), oneOfAKind: bool.optional(), madeToOrder: bool.optional(), freeShipping: bool.optional(), inStock: bool.optional(), rating: z.coerce.number().min(1).max(5).optional(),
   sort: z.enum(['featured', 'new', 'price_asc', 'price_desc', 'popular', 'relevance']).optional(),
   limit: z.coerce.number().int().min(1).max(60).default(24), offset: z.coerce.number().int().min(0).max(10_000).default(0),
 }).passthrough();
@@ -31,6 +31,7 @@ async function buildWhere(f: z.infer<typeof listQuery>, raw: Record<string, unkn
   if (f.shop) w.push(`s.slug = ${add(f.shop)}`);
   if (f.minPrice !== undefined) w.push(`v.price_cents >= ${add(f.minPrice)}`); if (f.maxPrice !== undefined) w.push(`v.price_cents <= ${add(f.maxPrice)}`);
   if (f.handmade) w.push('p.handmade'); if (f.oneOfAKind) w.push('p.one_of_a_kind'); if (f.madeToOrder) w.push('p.made_to_order');
+  if (f.freeShipping) w.push(`EXISTS (SELECT 1 FROM shipping_profiles sp WHERE sp.seller_id=p.seller_id AND sp.is_default AND (sp.base_cents=0 OR sp.free_over_cents <= v.price_cents))`);       // ships free for this piece on its own
   if (f.inStock) w.push(`EXISTS (SELECT 1 FROM variants x WHERE x.product_id=p.id AND x.status='active' AND (NOT x.tracks_stock OR x.stock_on_hand - x.stock_reserved > 0))`);
   if (f.rating) w.push(`s.rating_avg >= ${add(f.rating)}`);
   for (const [k, v] of Object.entries(raw)) {                                   // attribute filters: ?attr.material=wood,pla&attr.handmade=true

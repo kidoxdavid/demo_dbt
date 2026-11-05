@@ -25,6 +25,8 @@ const PRODUCTS: Prod[] = [
   { shop: 'layer-lab', title: 'Geometric desk planter', cat: '3d-printing', extra: ['plants-planters'], price: 2400, art: ['print3d', 'sky'], hoursAgo: 3, desc: 'A faceted desk planter printed in recycled PLA. Drainage insert included.', attrs: { material: 'pla', print_to_order: false, finish: 'sanded', width_cm: 10, height_cm: 9, depth_cm: 10 }, stock: 35, sales: 44 },
   { shop: 'crown-hair-co', title: 'Body wave bundle, 18 in', cat: 'hair-wigs', price: 11800, was: 14000, art: ['hair', 'stone'], hoursAgo: 4, desc: 'Double-drawn body wave bundle, 18 inch, 100 g. Can be coloured and heat styled.', attrs: { length_in: 18, texture: 'body-wave', hair_type: 'human', origin: 'Ethically sourced, Vietnam', weight_g: 100, sold_as_set: false }, stock: 18, sales: 120 },
   { shop: 'maison-nuit', title: 'Amber & oud eau de parfum, 50 ml', cat: 'perfume-fragrance', price: 9600, was: 11000, art: ['perfume', 'butter'], hoursAgo: 5, desc: 'Warm amber over smoked oud with a trace of vanilla. 50 ml.', attrs: { volume_ml: 50, concentration: 'eau-de-parfum', fragrance_family: 'amber', notes: 'Oud, amber, vanilla', flammable: true }, stock: 22, sales: 58 },
+  // The basket mockup has Clay & Ember selling a candle too (poured in their own seconds): a second, older product so the basket shows two makers
+  { shop: 'clay-ember', title: 'Cedar & fig candle', cat: 'candles-home-fragrance', price: 2600, handmade: true, art: ['candle', 'sand'], hoursAgo: 30, desc: 'Cedar and fig, poured into a small stoneware pot. 200 g.', attrs: { wax: 'soy', scent: 'Cedar and fig', burn_time_h: 40, weight_g: 200 }, stock: 20 },
   // Category page: Pottery & ceramics (these six lead the listing, in this order)
   { shop: 'clay-ember', title: 'Speckled stoneware mug', cat: 'pottery-ceramics', price: 3400, ooak: true, art: ['pottery', 'blush'], hoursAgo: 10, desc: 'A wheel-thrown mug with a speckled oatmeal glaze. 350 ml. No two are alike.', attrs: { technique: 'wheel-thrown', dishwasher_safe: true, microwave_safe: true, height_cm: 9, width_cm: 8 }, stock: 1, madeIn: 'Alberta', handmade: true },
   { shop: 'kiln-co', title: 'Tall bud vase, matte glaze', cat: 'pottery-ceramics', price: 4800, art: ['pottery', 'sand'], hoursAgo: 11, desc: 'A tall, narrow vase with a soft matte glaze for a single stem.', attrs: { technique: 'wheel-thrown', height_cm: 24, width_cm: 8 }, stock: 9 },
@@ -69,7 +71,12 @@ export async function seedDemoCatalogue(c: Client, password: string) {
   };
   const addVariant = (p: string, price: number, stock: number, was?: number, options: Record<string, string> = {}, position = 0) =>
     c.query('INSERT INTO variants(product_id,position,options,price_cents,compare_at_cents,stock_on_hand) VALUES ($1,$2,$3,$4,$5,$6)', [p, position, JSON.stringify(options), price, was ?? null, stock]);
-  for (const o of PRODUCTS) { const p = await insertProduct(o.shop, { ...o, handmade: o.handmade, madeIn: o.madeIn }); await addVariant(p, o.price, o.stock ?? 5, o.was); }
+  const VARIANT_LABELS: Record<string, Record<string, string>> = { 'Dusk over the hills, A4 print': { Size: 'A4 print', Frame: 'Unframed' }, 'Cedar & fig soy candle': { Size: '200 g' }, 'Cedar & fig candle': { Size: '200 g' } };
+  for (const o of PRODUCTS) {
+    const p = await insertProduct(o.shop, { ...o, handmade: o.handmade, madeIn: o.madeIn }); const opts = VARIANT_LABELS[o.title];
+    if (opts) for (const [i, [name, value]] of Object.entries(opts).entries()) { const oid = (await c.query(`INSERT INTO product_options(product_id,position,name) VALUES ($1,$2,$3) RETURNING id`, [p, i, name])).rows[0].id; await c.query('INSERT INTO product_option_values(option_id,position,value,is_default) VALUES ($1,0,$2,true)', [oid, value]); }
+    await addVariant(p, o.price, o.stock ?? 5, o.was, opts ?? {});
+  }
 
   // The product-page hero: sizes x glazes, Medium + Terracotta pre-selected, one variant running low (the studio "1 left" card)
   const vase = await insertProduct(BUD_VASE.shop, { ...BUD_VASE, art: ['pottery', 'blush'], desc: 'A tall, slender bud vase thrown on the wheel and finished in a warm terracotta glaze. Made to hold a single stem or a small handful of dried flowers. Watertight, with a glazed interior.',
@@ -85,8 +92,13 @@ export async function seedDemoCatalogue(c: Client, password: string) {
   for (let i = 1; i <= FILLER_SHOPS; i++) { const n = String(i).padStart(2, '0'); await mkShop({ slug: `ceramics-maker-${n}`, name: `Ceramics Maker ${n}`, city: ['Calgary', 'Toronto', 'Halifax', 'Ottawa', 'Regina'][i % 5], region: ['AB', 'ON', 'NS', 'ON', 'SK'][i % 5], tagline: 'Small-batch ceramics', rating: [4.5 + (i % 5) / 10, 5 + i] }); }
   for (let i = 0; i < FILLER_PRODUCTS; i++) {
     const slug = `ceramics-maker-${String((i % FILLER_SHOPS) + 1).padStart(2, '0')}`; const title = `${wordsA[i % wordsA.length]} ${wordsB[(i * 7) % wordsB.length]} ${Math.floor(i / 12) + 1}`;
-    const p = await insertProduct(slug, { title, cat: 'pottery-ceramics', handmade: i % 3 === 0, art: ['pottery', FILLER_WORDS.tone[i % 6]], hoursAgo: 100 + i, sales: i % 17, attrs: { technique: ['wheel-thrown', 'hand-built', 'slip-cast'][i % 3], dishwasher_safe: i % 2 === 0 } });
+    const p = await insertProduct(slug, { title, cat: 'pottery-ceramics', handmade: i % 3 === 0, art: ['pottery', FILLER_WORDS.tone[i % 6]], hoursAgo: 100 + i, sales: i % 17, attrs: { material: ['stoneware', 'porcelain', 'earthenware', 'terracotta'][i % 4], size: ['small', 'medium', 'large'][i % 3], technique: ['wheel-thrown', 'hand-built', 'slip-cast'][i % 3], dishwasher_safe: i % 2 === 0 } });
     await addVariant(p, 1800 + ((i * 137) % 9000), 3 + (i % 9));
   }
+  // Curated home: phones show the first four newest, the desktop row swaps the hair bundle for the perfume (the two mockups differ), and the spotlight is Clay & Ember.
+  const idOf = async (t: string) => (await c.query('SELECT id FROM products WHERE title=$1', [t])).rows[0].id as string; const titles = { dusk: 'Dusk over the hills, A4 print', cedar: 'Cedar & fig soy candle', planter: 'Geometric desk planter', hair: 'Body wave bundle, 18 in', perfume: 'Amber & oud eau de parfum, 50 ml' };
+  const [d, ce, pl, h, pf] = await Promise.all(Object.values(titles).map(idOf)); const put = (k: string, v: unknown) => c.query(`INSERT INTO app_settings(key,value) VALUES ($1,$2) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value`, [k, JSON.stringify(v)]);
+  await put('home_picks_phone', [d, ce, pl, h]); await put('home_picks_desktop', [d, ce, pl, pf]);
+  await put('home_spotlight', { shop: 'clay-ember', art: { kind: 'pottery', tone: 'warm' }, quote: '\u201cI started throwing pots in my garage during winter. Now every mug I make finds a home somewhere in Canada.\u201d Amara, Calgary' });
   return true;
 }

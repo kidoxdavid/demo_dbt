@@ -100,5 +100,94 @@
   "kind": "design",
   "selector": "[data-testid=panel-sky]",
   "baseline": true
+ },
+ {
+  "name": "buyer-category",
+  "path": "/c/pottery-ceramics",
+  "viewport": [
+   390,
+   798
+  ],
+  "kind": "phone",
+  "waitFor": ".pcard"
+ },
+ {
+  "name": "buyer-product",
+  "productTitle": "Tall bud vase in terracotta glaze",
+  "path": "/",
+  "viewport": [
+   390,
+   798
+  ],
+  "kind": "phone",
+  "waitFor": ".buybar",
+  "storage": {
+   "es_postal": "T2N 1N4"
+  }
+ },
+ {
+  "name": "buyer-basket",
+  "path": "/basket",
+  "viewport": [
+   390,
+   798
+  ],
+  "kind": "phone",
+  "waitFor": ".bline",
+  "cart": [
+   {
+    "title": "Tall bud vase in terracotta glaze"
+   },
+   {
+    "title": "Cedar & fig candle"
+   },
+   {
+    "title": "Dusk over the hills, A4 print"
+   }
+  ]
+ },
+ {
+  "name": "buyer-home-desktop",
+  "path": "/",
+  "viewport": [
+   1280,
+   900
+  ],
+  "kind": "desktop",
+  "fullPage": true,
+  "waitFor": ".dspot"
+ },
+ {
+  "name": "shop-look-atelier",
+  "path": "/shop/clay-ember?look=atelier",
+  "viewport": [
+   390,
+   798
+  ],
+  "kind": "phone",
+  "fixture": "shop-atelier",
+  "waitFor": ".pcard"
+ },
+ {
+  "name": "shop-look-noir",
+  "path": "/shop/clay-ember?look=noir",
+  "viewport": [
+   390,
+   798
+  ],
+  "kind": "phone",
+  "fixture": "shop-noir",
+  "waitFor": ".pcard"
+ },
+ {
+  "name": "shop-look-sage",
+  "path": "/shop/clay-ember?look=sage",
+  "viewport": [
+   390,
+   798
+  ],
+  "kind": "phone",
+  "fixture": "shop-sage",
+  "waitFor": ".pcard"
  }
 ]

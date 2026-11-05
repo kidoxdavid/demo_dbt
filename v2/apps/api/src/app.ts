@@ -14,6 +14,8 @@ import { registerAdmin } from './modules/admin.js';
 import { registerPublicConfig } from './modules/publicConfig.js';
 import { registerCategories } from './modules/categories.js';
 import { registerCatalogue } from './modules/catalogue.js';
+import { registerHome } from './modules/home.js';
+import { registerSaved } from './modules/saved.js';
 import { registerStudio } from './modules/studio.js';
 import { registerStudioProducts } from './modules/studioProducts.js';
 import { registerCart } from './modules/cart.js';
@@ -65,6 +67,6 @@ export async function buildApp(opts: { authRateLimitMax?: number } = {}) {
   });
 
   app.get('/health', async () => ({ ok: true }));
-  registerAuth(app); registerPublicConfig(app); registerCategories(app); registerCatalogue(app); registerStudio(app); registerStudioProducts(app); registerCart(app); registerOrders(app); registerStudioOrders(app); registerAdmin(app);
+  registerAuth(app); registerPublicConfig(app); registerCategories(app); registerCatalogue(app); registerHome(app); registerSaved(app); registerStudio(app); registerStudioProducts(app); registerCart(app); registerOrders(app); registerStudioOrders(app); registerAdmin(app);
   return app;
 }

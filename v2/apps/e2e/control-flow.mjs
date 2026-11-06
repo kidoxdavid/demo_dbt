@@ -38,4 +38,13 @@ await row('Commission').getByRole('button', { name: 'Change' }).click(); await a
 ok((await row('Commission').innerText()).includes('12.5%'), 'commission 12.5% saved and shown');
 await row('Commission').getByRole('button', { name: 'Change' }).click(); await admin.fill('#st-val', '10'); await admin.getByRole('button', { name: 'Save' }).click(); await admin.waitForSelector('text=Commission saved.');
 await row('Free shipping from').getByRole('button', { name: 'Change' }).click(); await admin.fill('#st-val', 'abc'); await admin.getByRole('button', { name: 'Save' }).click(); await admin.waitForSelector('[role=alert]'); ok(true, 'a non-number is refused with a plain message');
+
+// 5. Roles: the admin turns a permission off for a role, a marketing user feels it at once, and resetting restores it
+const mk = await (await browser.newContext({ viewport: { width: 1280, height: 900 }, locale: 'en-CA' })).newPage(); await mk.goto(`${BASE}/marketing/login`); await mk.fill('#cl-email', 'marketing@eazystores.test'); await mk.fill('#cl-pw', PW); await mk.getByRole('button', { name: 'Sign in' }).click(); await mk.waitForSelector('.sd-side');
+await admin.goto(`${BASE}/admin/roles`); await admin.waitForSelector('text=Roles and access'); ok((await admin.locator('b', { hasText: 'Support' }).count()) >= 1, 'every role is listed on the roles page');
+await admin.locator('.card', { hasText: 'Marketing' }).filter({ has: admin.getByRole('button', { name: 'Edit' }) }).first().getByRole('button', { name: 'Edit' }).click();
+await admin.getByRole('switch', { name: /Marketing: Edit the home page/ }).click(); await admin.getByRole('button', { name: 'Save changes' }).click(); await admin.waitForSelector('text=Saved. It applies');
+await mk.goto(`${BASE}/marketing/ads`); await mk.waitForSelector('[role=alert], .err, .empty', { timeout: 15000 }); ok(!(await mk.locator('.tr').count()), 'marketing loses access to its tools right after the admin switches the permission off');
+await admin.getByRole('button', { name: 'Back to default' }).click(); await admin.waitForSelector('text=Back to the default.');
+await mk.goto(`${BASE}/marketing/ads`); await mk.waitForSelector('h1'); ok(true, 'and gets it back when reset');
 await browser.close(); console.log(log.join('\n')); console.log(fails.length ? `\n${fails.length} FAILED:\n${fails.join('\n')}` : '\nAll control flow checks passed.'); process.exit(fails.length ? 1 : 0);

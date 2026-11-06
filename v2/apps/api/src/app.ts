@@ -22,6 +22,8 @@ import { registerConsoles } from './modules/consoles.js';
 import { registerEngagement } from './modules/engagement.js';
 import { registerAds } from './modules/ads.js';
 import { registerPromotions } from './modules/promotions.js';
+import { registerRoles } from './modules/roles.js';
+import { ensureRoleConfig } from './lib/roleConfig.js';
 import { registerNotifications } from './modules/notifications.js';
 import { registerPrivacy } from './modules/privacy.js';
 import { registerStudioDashboard } from './modules/studioDashboard.js';
@@ -75,7 +77,7 @@ export async function buildApp(opts: { authRateLimitMax?: number; webDir?: strin
   });
   // Load this window's session. Roles only count in a window they belong to, so a shop session never carries staff or seller power.
   app.addHook('preHandler', async (req) => {
-    const raw = req.cookies[cookieName(req.area)]; if (!raw) return;
+    const raw = req.cookies[cookieName(req.area)]; if (!raw) return; await ensureRoleConfig();
     const s = (await q(`SELECT s.id AS sid, s.last_seen_at, u.id, u.email, u.full_name FROM sessions s JOIN users u ON u.id=s.user_id
                         WHERE s.token_hash=$1 AND s.area=$2 AND s.expires_at>now() AND u.status='active'`, [sha256(raw), req.area])).rows[0]; if (!s) return;
     const grants = (await q('SELECT id, role, seller_id FROM user_roles WHERE user_id=$1', [s.id])).rows.map(r => ({ id: r.id, role: r.role, sellerId: r.seller_id }) as RoleGrant);
@@ -91,7 +93,7 @@ export async function buildApp(opts: { authRateLimitMax?: number; webDir?: strin
   app.get('/health', async () => ({ ok: true }));
   app.get('/healthz', async () => ({ ok: true }));                                                                       // liveness: the process is up
   app.get('/readyz', async (_req, reply) => { try { await q('SELECT 1'); return { ok: true }; } catch { return reply.code(503).send({ ok: false }); } });          // readiness: the database answers
-  registerAuth(app); registerPublicConfig(app); registerCategories(app); registerCatalogue(app); registerHome(app); registerSaved(app); registerStudio(app); registerStudioDashboard(app); registerStudioProducts(app); registerCart(app); registerOrders(app); registerStudioOrders(app); registerAdmin(app); registerConsoles(app); registerEngagement(app); registerAds(app); registerPromotions(app); registerNotifications(app); registerPrivacy(app);
+  registerAuth(app); registerPublicConfig(app); registerCategories(app); registerCatalogue(app); registerHome(app); registerSaved(app); registerStudio(app); registerStudioDashboard(app); registerStudioProducts(app); registerCart(app); registerOrders(app); registerStudioOrders(app); registerAdmin(app); registerConsoles(app); registerEngagement(app); registerAds(app); registerPromotions(app); registerRoles(app); registerNotifications(app); registerPrivacy(app);
   if (webDir) await registerWeb(app, webDir);
   return app;
 }

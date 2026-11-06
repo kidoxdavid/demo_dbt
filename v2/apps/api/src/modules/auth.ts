@@ -4,6 +4,7 @@ import { audit, pool, q, tx } from '../db.js';
 import { HttpError } from '../errors.js';
 import { requireFlag } from '../settings.js';
 import { hashPassword, passwordProblem, sha256, verifyPassword } from '../security.js';
+import { ensureRoleConfig } from '../lib/roleConfig.js';
 import { canAccessArea, type Area, type RoleGrant } from '../permissions.js';
 import { cookieName, requireUser } from '../guards.js';
 import { openSession } from '../session.js';
@@ -44,7 +45,7 @@ export function registerAuth(app: FastifyInstance) {
       return deny();
     }
     const roles = (await q('SELECT id, role, seller_id FROM user_roles WHERE user_id=$1', [u.id])).rows.map(r => ({ id: r.id, role: r.role, sellerId: r.seller_id }) as RoleGrant);
-    if (!canAccessArea(roles, area)) throw new HttpError(403, 'not_allowed_in_area');
+    await ensureRoleConfig(); if (!canAccessArea(roles, area)) throw new HttpError(403, 'not_allowed_in_area');
     await q('UPDATE users SET failed_logins=0, locked_until=NULL WHERE id=$1', [u.id]);
     await openSession(reply, u.id, area, req.ip, req.headers['user-agent']); if (area === 'shop') await mergeGuestCart(u.id, req.cookies['es_cart'], reply);
     await audit(pool, { actor: u.id, area, action: 'auth.login', entityType: 'user', entityId: u.id, ip: req.ip });

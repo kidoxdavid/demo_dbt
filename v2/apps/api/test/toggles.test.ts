@@ -23,8 +23,9 @@ describe('every toggle is real', () => {
     const admin = await login(app, 'admin', { role: 'admin' }); const list = (await app.inject({ method: 'GET', url: '/api/admin/flags', ...ck('admin', admin.cookie) })).json();
     expect(list.map((f: any) => f.key).sort()).toEqual([...FLAGS].sort()); expect(list.every((f: any) => f.label && f.help && f.portal && typeof f.enabled === 'boolean')).toBe(true);
     const support = await login(app, 'support', { role: 'support' }); expect((await app.inject({ method: 'PUT', url: '/api/admin/flags/reviews', payload: { enabled: false }, ...ck('support', support.cookie) })).statusCode).toBe(401);   // support has no admin-window session at all
+    const before = Number((await q(`SELECT count(*) n FROM audit_log WHERE action='flag.update' AND entity_id='wishlists'`)).rows[0].n);
     expect((await setFlag(admin.cookie, 'wishlists', false)).statusCode).toBe(200); expect((await app.inject({ method: 'GET', url: '/api/flags' })).json().wishlists).toBe(false);
-    expect(Number((await q(`SELECT count(*) n FROM audit_log WHERE action='flag.update' AND entity_id='wishlists'`)).rows[0].n)).toBe(1);
+    expect(Number((await q(`SELECT count(*) n FROM audit_log WHERE action='flag.update' AND entity_id='wishlists'`)).rows[0].n) - before).toBe(1);
   });
   it('hearts, follows and gift messages stop working when switched off, and resume when switched on', async () => {
     const admin = await login(app, 'admin', { role: 'admin' }); const { p, variant, shop } = await listedProduct(); const buyer = await login(app, 'shop', {});

@@ -18,6 +18,21 @@ export const TEMPLATES: Record<string, (d: Data) => { subject: string; body: str
   review_reply: d => ({ subject: `${esc(d.shop)} replied to your review`, body: `${esc(d.shop)} replied to your review of ${esc(d.product)}:\n\n${String(d.preview ?? '').slice(0, 300)}\n\nSee it: ${esc(d.url)}` }),
   order_cancelled: d => ({ subject: `Order #${d.number} was cancelled`, body: `Your order #${d.number} was cancelled and any payment has been refunded.` }),
 };
+
+/** One sample of every field any template reads, so the admin can preview wording safely. */
+export const SAMPLE_DATA: Data = { number: 10234, name: 'Maya', buyer: 'Maya', shop: 'Clay & Ember', from: 'Clay & Ember', author: 'Maya', product: 'Speckled mug', about: 'Speckled mug', rating: 5, preview: 'Lovely work, it arrived well wrapped.', reason: 'Damaged in the post', totalCents: 6800, taxCents: 324, amountCents: 2400,
+  carrier: 'Canada Post', trackingNumber: 'AB123456789CA', trackingUrl: 'https://example.test/track', url: 'https://example.test/orders/abc', shipBy: 'Fri, Nov 6', eta: 'Nov 12', gift: '',
+  lines: [{ quantity: 2, title: 'Speckled mug', variant: 'Blue' }], sellers: [{ shop: 'Clay & Ember', eta: 'Nov 12', lines: [{ quantity: 2, title: 'Speckled mug' }] }] };
+/** The {words} an admin may use in a subject line: only short plain values, never lists. */
+export const placeholdersFor = (t: string) => Object.entries(SAMPLE_DATA).filter(([, v]) => ['string', 'number'].includes(typeof v) && v !== '').map(([k]) => k).filter(k => { try { return JSON.stringify(TEMPLATES[t](SAMPLE_DATA)).length > 0; } catch { return false; } });
+export interface Wording { subject: string | null; intro: string; closing: string }
+const fill = (tpl: string, d: Data) => tpl.replace(/\{(\w+)\}/g, (_m, k) => (['string', 'number'].includes(typeof d[k]) ? esc(d[k]) : '')).replace(/\s+/g, ' ').trim().slice(0, 150);
+/** The usual email with the admin's optional subject, opening line and closing line. The facts in the body (amounts, dates, links) are never replaced. */
+export function applyOverride(m: { subject: string; body: string }, d: Data, w: Wording | undefined) {
+  if (!w) return m; const subject = w.subject && w.subject.trim() ? fill(w.subject, d) || m.subject : m.subject;
+  return { subject, body: [w.intro?.trim(), m.body, w.closing?.trim()].filter(Boolean).join('\n\n') };
+}
+export async function loadOverrides(c: Client | typeof pool = pool) { return new Map<string, Wording>((await c.query('SELECT template, subject, intro, closing FROM email_overrides')).rows.map(r => [r.template as string, { subject: r.subject, intro: r.intro, closing: r.closing }])); }
 /** Queue an email. Anything that is not a receipt or order update is skipped if the person turned that kind off (by account or by an unsubscribe link). Returns whether it was queued. */
 export async function enqueue(c: Client | typeof pool, to: string, template: keyof typeof TEMPLATES, data: Data) {
   const k = TEMPLATE_CATEGORY[template]; if (k && !k.transactional && !(await prefFor(c, to, k.category)).email) return false;
@@ -45,10 +60,11 @@ export async function processOutbox(send: Sender = makeSender(), limit = 50) {
   let sent = 0, failed = 0; const c = await pool.connect();
   try {
     await c.query('BEGIN');
+    const overrides = await loadOverrides(c);
     const rows = (await c.query(`SELECT * FROM outbox_emails WHERE status='pending' AND send_after <= now() ORDER BY created_at LIMIT $1 FOR UPDATE SKIP LOCKED`, [limit])).rows;
     for (const r of rows) {
       const t = TEMPLATES[r.template]; if (!t) { await c.query(`UPDATE outbox_emails SET status='failed', error='unknown_template' WHERE id=$1`, [r.id]); failed++; continue; }
-      const m = t(r.data); const k = TEMPLATE_CATEGORY[r.template]; let body = m.body; let footer: string | undefined; let headers: Record<string, string> | undefined;
+      const m = applyOverride(t(r.data), r.data, overrides.get(r.template)); const k = TEMPLATE_CATEGORY[r.template]; let body = m.body; let footer: string | undefined; let headers: Record<string, string> | undefined;
       if (k && !k.transactional) {                                                              // optional mail always carries a working way out
         const link = `${BASE()}/unsubscribe?t=${encodeURIComponent(unsubscribeToken(r.to_email, k.category))}`; footer = `You get this because of your notification settings. <a href="${escHtml(link)}">Unsubscribe from these emails</a>.`; body = `${m.body}\n\n--\nUnsubscribe from these emails: ${link}`;
         headers = { 'List-Unsubscribe': `<${BASE()}/api/unsubscribe/${encodeURIComponent(unsubscribeToken(r.to_email, k.category))}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' };

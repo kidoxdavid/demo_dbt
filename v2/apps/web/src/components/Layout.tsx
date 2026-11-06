@@ -1,3 +1,4 @@
+import { LegalFooter } from '../screens/PageView';
 import { useState, type FormEvent } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { Icon } from './Icon';
@@ -33,7 +34,7 @@ export function BuyerLayout() {
   const desktop = useDesktop(); const { pathname } = useLocation(); const tab = TAB_FOR(pathname);
   return <>
     {desktop && <DesktopChrome />}
-    <div role="main" className={desktop ? 'dmain' : undefined}><Outlet /></div>
+    <div role="main" className={desktop ? 'dmain' : undefined}><Outlet /><LegalFooter /></div>
     {!desktop && tab !== null && <TabBar items={BUYER_TABS} active={tab} />}
   </>;
 }

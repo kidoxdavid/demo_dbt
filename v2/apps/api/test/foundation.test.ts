@@ -111,9 +111,9 @@ describe('independent windows and roles', () => {
 });
 
 describe('settings and feature flags', () => {
-  it('public settings and flags are readable by anyone; a missing flag is ON; AI descriptions start OFF', async () => {
+  it('public settings and flags are readable by anyone; a missing flag is ON', async () => {
     const pub = (await call('GET', '/api/settings/public')).json(); expect(pub).toMatchObject({ platform_look: 'atelier', free_shipping_threshold_cents: 7500, currency: 'CAD' }); expect(pub.commission_bps).toBeUndefined();
-    const flags = (await call('GET', '/api/flags')).json(); expect(flags.wishlists).toBe(true); expect(flags.ai_descriptions).toBe(false);
+    const flags = (await call('GET', '/api/flags')).json(); expect(flags.wishlists).toBe(true); expect(flags.ai_descriptions).toBeUndefined();          // a toggle with no feature behind it was removed
   });
   it('admins change settings with validation and a before/after audit record; others cannot', async () => {
     const admin = await login(app, 'admin', { role: 'admin' }); const o = { area: 'admin' as const, cookie: admin.cookie };

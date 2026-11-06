@@ -30,10 +30,10 @@ for (const scheme of ['light', 'dark']) {
   await ctx.close();
   // signed-in studio (desktop)
   const s = await ctxFor(scheme, 1280); await s.page.goto(BASE + '/studio/login'); await s.page.fill('#sl-email', 'amara@clayember.test'); await s.page.fill('#sl-pw', PW); await s.page.getByRole('button', { name: 'Sign in' }).click(); await s.page.waitForSelector('.sd-side');
-  for (const [n, p] of [['studio-dashboard', '/studio'], ['studio-orders', '/studio/orders'], ['studio-products', '/studio/products'], ['studio-new-product', '/studio/products/new'], ['studio-shop', '/studio/shop'], ['studio-shipping', '/studio/shipping'], ['studio-messages', '/studio/messages'], ['studio-ads', '/studio/ads']]) { await s.page.goto(BASE + p); await scan(s.page, n, scheme); }
+  for (const [n, p] of [['studio-dashboard', '/studio'], ['studio-orders', '/studio/orders'], ['studio-products', '/studio/products'], ['studio-new-product', '/studio/products/new'], ['studio-shop', '/studio/shop'], ['studio-shipping', '/studio/shipping'], ['studio-messages', '/studio/messages'], ['studio-ads', '/studio/ads'], ['studio-promotion', '/studio/promotions']]) { await s.page.goto(BASE + p); await scan(s.page, n, scheme); }
   await s.ctx.close();
   // consoles
-  for (const [area, email, paths] of [['admin', 'admin@eazystores.test', ['', '/users', '/sellers', '/moderation', '/settings', '/audit']], ['support', 'support@eazystores.test', ['', '/users', '/audit']], ['finance', 'finance@eazystores.test', ['', '/sellers', '/reports']], ['marketing', 'marketing@eazystores.test', ['', '/ads', '/synonyms']]]) {
+  for (const [area, email, paths] of [['admin', 'admin@eazystores.test', ['', '/users', '/sellers', '/moderation', '/settings', '/audit', '/roles', '/emails', '/pages', '/branding', '/promotions']], ['support', 'support@eazystores.test', ['', '/users', '/audit']], ['finance', 'finance@eazystores.test', ['', '/sellers', '/reports']], ['marketing', 'marketing@eazystores.test', ['', '/ads', '/synonyms', '/promotions']]]) {
     const c = await ctxFor(scheme, 1280); await c.page.goto(`${BASE}/${area}/login`); await c.page.fill('#cl-email', email); await c.page.fill('#cl-pw', PW); await c.page.getByRole('button', { name: 'Sign in' }).click(); await c.page.waitForURL(u => !u.pathname.endsWith('/login'));
     for (const p of paths) { await c.page.goto(`${BASE}/${area}${p}`); await scan(c.page, `${area}${p || ''}`, scheme); }
     await c.ctx.close();

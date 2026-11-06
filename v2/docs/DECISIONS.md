@@ -90,3 +90,13 @@
 - **No payment provider by default in production.** Not setting `PAYMENT_PROVIDER` is the safe state; money cannot move by misconfiguration.
 - **The first admin is created from the Shell with `make-staff`**, not from an environment variable, so a leaked or mistyped variable can never grant admin.
 - **`?look=` and `/_art` stay development-only**, so the production site cannot be shown a design preview and visual proof of those screens comes from the development build.
+
+## Phase 12 decisions
+- **A toggle must do something.** Every switch is enforced by the server (a closed feature answers a specific code) and read by the website to hide its buttons. Toggles with no feature behind them were removed instead of left as dead switches.
+- **Promotions on a store page are free and approval-gated by default.** The paid auction stays for category and search. Approval is itself a switch, so the admin can run open or moderated.
+- **Role changes are sparse overrides with locked ends.** Defaults live in code; the admin's choices live in `role_config`. Admin and maker owner are never stored, `roles.manage` and team management are admin-only, so a mistake cannot remove everyone's access.
+- **Acting as a maker is borrowed power with a paper trail.** Reason, the admin's own password, two hours, a visible banner, every non-read request logged against the maker, and it ends from the banner.
+- **Opening another console keeps sessions separate.** The admin gets a fresh session in that window, so signing out of one never touches another.
+- **Email wording wraps the facts, never replaces them.** Subject, an opening line and a closing line only; amounts, dates and links are generated, and a subject cannot carry a line break.
+- **Pages are plain text, hidden until published**, and rendered as text (never HTML). Legal wording is the owner's; none is supplied.
+- **A portal's look is applied to the page root**, the same place dark mode lives, never to a container.

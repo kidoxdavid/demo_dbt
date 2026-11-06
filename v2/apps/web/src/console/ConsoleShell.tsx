@@ -1,3 +1,4 @@
+import { useApplyLook, useBrand } from '../branding';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Link, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { ApiError, api } from '../api';
@@ -14,7 +15,7 @@ export const useArea = () => useConsole().area;
 export const useApiPath = () => { const a = useArea(); return (p: string) => `/api/${a}${p}`; };
 
 export const NAV: Record<ConsoleArea, { to: string; label: string; icon: IconName; end?: boolean }[]> = {
-  admin: [{ to: '', label: 'Overview', icon: 'home', end: true }, { to: '/users', label: 'People', icon: 'user' }, { to: '/sellers', label: 'Sellers', icon: 'store' }, { to: '/moderation', label: 'Review queue', icon: 'shield' }, { to: '/promotions', label: 'Store promotions', icon: 'chart' }, { to: '/roles', label: 'Roles and access', icon: 'shield' }, { to: '/settings', label: 'Settings', icon: 'tag' }, { to: '/audit', label: 'Audit log', icon: 'chart' }],
+  admin: [{ to: '', label: 'Overview', icon: 'home', end: true }, { to: '/users', label: 'People', icon: 'user' }, { to: '/sellers', label: 'Sellers', icon: 'store' }, { to: '/moderation', label: 'Review queue', icon: 'shield' }, { to: '/promotions', label: 'Store promotions', icon: 'chart' }, { to: '/roles', label: 'Roles and access', icon: 'shield' }, { to: '/emails', label: 'Emails', icon: 'chart' }, { to: '/pages', label: 'Pages', icon: 'tag' }, { to: '/branding', label: 'Names and looks', icon: 'store' }, { to: '/settings', label: 'Settings', icon: 'tag' }, { to: '/audit', label: 'Audit log', icon: 'chart' }],
   support: [{ to: '', label: 'Orders', icon: 'box', end: true }, { to: '/users', label: 'People', icon: 'user' }, { to: '/audit', label: 'Audit log', icon: 'chart' }],
   finance: [{ to: '', label: 'Overview', icon: 'home', end: true }, { to: '/sellers', label: 'Seller balances', icon: 'wallet' }, { to: '/orders', label: 'Orders and refunds', icon: 'box' }, { to: '/reports', label: 'GST and exports', icon: 'chart' }, { to: '/audit', label: 'Audit log', icon: 'shield' }],
   marketing: [{ to: '', label: 'Home page', icon: 'home', end: true }, { to: '/ads', label: 'Ads', icon: 'chart' }, { to: '/promotions', label: 'Store promotions', icon: 'tag' }, { to: '/synonyms', label: 'Search words', icon: 'search' }],
@@ -42,11 +43,11 @@ export function ConsoleLogin() {
 
 /** Sidebar on a wide screen, a scrolling tab row on a narrow one. */
 export function ConsoleLayout() {
-  const { area, user, ready, logout } = useConsole(); const { pathname } = useLocation();
+  const { area, user, ready, logout } = useConsole(); const { pathname } = useLocation(); const brand = useBrand(area); useApplyLook(brand.look);
   if (!ready) return <div className="pad" style={{ paddingTop: 40 }}><div className="skeleton" style={{ height: 240 }} /></div>;
   if (!user) return <Navigate to={`/${area}/login`} replace state={{ from: pathname }} />;
   const base = `/${area}`; const on = (n: { to: string; end?: boolean }) => (n.end ? pathname === base + n.to || pathname === base + n.to + '/' : pathname.startsWith(base + n.to));
-  return <div className="sd cons"><aside className="sd-side"><Link to={base}><Wordmark word={WORD[area]} /></Link>
+  return <div className="sd cons"><aside className="sd-side"><Link to={base}><Wordmark word={brand.word} /></Link>
     <nav aria-label={`${area} sections`} className="cons-nav">{NAV[area].map(n => <Link key={n.label} to={base + n.to} className={`sd-nav${on(n) ? ' on' : ''}`} aria-current={on(n) ? 'page' : undefined}><Icon name={n.icon} />{n.label}</Link>)}</nav>
     {area === 'admin' && <div className="cons-portals" style={{ margin: '12px 0' }}><div className="muted" style={{ fontSize: 12, marginBottom: 4 }}>Open another console</div>{(['support', 'finance', 'marketing'] as const).map(p => <button key={p} type="button" className="sd-nav" style={{ width: '100%', textAlign: 'left' }} onClick={async () => { try { const r = await api<{ url: string }>(`/api/admin/portals/${p}/enter`, { method: 'POST' }); window.location.href = r.url; } catch { /* stays here */ } }}><Icon name="store" />{p[0].toUpperCase() + p.slice(1)}</button>)}</div>}
     <div className="card sd-shopcard"><b>{user.fullName}</b><div className="u">{user.email}</div><button type="button" className="muted" style={{ fontSize: 12, marginTop: 8, textDecoration: 'underline' }} onClick={() => logout()}>Sign out</button></div></aside>

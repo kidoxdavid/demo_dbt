@@ -1,3 +1,4 @@
+import { useApplyLook, useBrand } from '../branding';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { Link, Navigate, Outlet, useLocation } from 'react-router-dom';
 import { ApiError, api } from '../api';
@@ -37,12 +38,12 @@ function ActingBanner({ acting }: { acting: Acting }) {
   return <div role="status" style={{ position: 'sticky', top: 0, zIndex: 50, background: 'var(--ink)', color: 'var(--bg)', padding: '10px 16px', display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', fontSize: 14 }}><span style={{ flex: 1, minWidth: 200 }}><b>Working as admin inside {acting.shop ?? 'this maker'}</b> · everything you change is logged · reason: {acting.reason}</span><button type="button" onClick={leave} style={{ textDecoration: 'underline', color: 'inherit', fontWeight: 600 }}>Leave</button></div>;
 }
 export function StudioLayout() {
-  const { user, shop, acting, ready, toShip } = useStudio(); const [unread] = useUnread('studio', !!user); const desktop = useDesktop(); const { pathname } = useLocation();
+  const { user, shop, acting, ready, toShip } = useStudio(); const brand = useBrand('studio'); useApplyLook(brand.look); const [unread] = useUnread('studio', !!user); const desktop = useDesktop(); const { pathname } = useLocation();
   if (!ready) return <div className="pad" style={{ paddingTop: 40 }}><div className="skeleton" style={{ height: 240 }} /></div>;
   if (!user || !shop) return <Navigate to="/studio/login" replace state={{ from: pathname }} />;
   const url = `eazystores.ca/shop/${shop.slug}`; const tab = PHONE_TAB(pathname);
   if (!desktop) return <>{acting && <ActingBanner acting={acting} />}<div className="sd-phone-pad"><Outlet /></div>{tab !== null && <TabBar items={STUDIO_TABS} active={tab} />}</>;
-  return <>{acting && <ActingBanner acting={acting} />}<div className="sd"><aside className="sd-side"><Link to="/studio"><Wordmark studio /></Link>
+  return <>{acting && <ActingBanner acting={acting} />}<div className="sd"><aside className="sd-side"><Link to="/studio"><Wordmark word={brand.word} /></Link>
     {NAV.map(n => <Link key={n.label} to={n.to} className={`sd-nav${(n.end ? pathname === n.to : pathname.startsWith(n.to)) ? ' on' : ''}`}><Icon name={n.icon} />{n.label}{n.label === 'Orders' && toShip > 0 && <span className="sd-badge">{toShip}</span>}{n.label === 'Notifications' && unread > 0 && <span className="sd-badge">{unread}</span>}</Link>)}
     <div className="card sd-shopcard"><b>{shop.name}</b><div className="u">{url}</div></div></aside><main className="sd-main"><Outlet /></main></div></>;
 }

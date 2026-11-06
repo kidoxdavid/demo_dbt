@@ -50,7 +50,7 @@ export function registerAdmin(app: FastifyInstance) {
 
   // ---- Settings (validated by schema, audited with old and new value)
   app.get('/api/admin/settings', async (req) => { requirePerm(req, 'settings.write'); const all = await allSettings();
-    return Object.entries(SETTINGS).map(([key, s]) => ({ key, value: all[key], default: s.default, help: s.help, public: s.public, unit: (s as any).unit ?? null, label: (s as any).label ?? key.replace(/_/g, ' '), schema: z.toJSONSchema(s.schema, { io: 'input' }) })); });
+    return Object.entries(SETTINGS).filter(([key]) => key !== 'portal_branding').map(([key, s]) => ({ key, value: all[key], default: s.default, help: s.help, public: s.public, unit: (s as any).unit ?? null, label: (s as any).label ?? key.replace(/_/g, ' '), schema: z.toJSONSchema(s.schema, { io: 'input' }) })); });
   app.put('/api/admin/settings/:key', async (req) => {
     const u = requirePerm(req, 'settings.write'); const { key } = z.object({ key: z.string().max(60) }).parse(req.params); if (!isSettingKey(key)) throw new HttpError(404, 'unknown_setting');
     const b = z.object({ value: z.unknown(), reason }).strict().parse(req.body); const parsed = SETTINGS[key].schema.safeParse(b.value); if (!parsed.success) throw new HttpError(400, 'invalid_value', parsed.error.issues.map(i => i.message));

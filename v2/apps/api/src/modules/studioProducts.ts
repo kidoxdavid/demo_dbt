@@ -1,3 +1,4 @@
+import { requireSellerFlag } from '../lib/sellerFlags.js';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { audit, pool, q, tx, type Client } from '../db.js';
@@ -156,7 +157,7 @@ export function registerStudioProducts(app: FastifyInstance) {
   });
 
   app.post('/api/studio/products/:id/publish', async (req) => {
-    const s = await sellerCtx(req, 'seller.products.write'); const { id } = idp.parse(req.params); const b = z.object({ acknowledged: z.boolean().default(false) }).strict().parse(req.body ?? {});
+    const s = await sellerCtx(req, 'seller.products.write'); await requireSellerFlag(s.sellerId, 'publishing'); const { id } = idp.parse(req.params); const b = z.object({ acknowledged: z.boolean().default(false) }).strict().parse(req.body ?? {});
     return tx(async c => {
       const p = await ownProduct(c, id, s.sellerId, true); const r = await readiness(c, p, b.acknowledged);
       if (!r.ready) { const bad = r.problems.find(x => x.code.startsWith('prohibited_item')); throw new HttpError(422, bad ? bad.code : 'not_ready', r.problems); }

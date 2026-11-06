@@ -6,7 +6,7 @@ import rateLimit from '@fastify/rate-limit';
 import { ZodError } from 'zod';
 import { config } from './config.js';
 import { errorFields, log, safePath } from './lib/log.js';
-import { q } from './db.js';
+import { audit, pool, q } from './db.js';
 import { HttpError } from './errors.js';
 import { AREAS, AREA_ROLES, type Area, type RoleGrant } from './permissions.js';
 import { cookieName } from './guards.js';
@@ -23,6 +23,7 @@ import { registerEngagement } from './modules/engagement.js';
 import { registerAds } from './modules/ads.js';
 import { registerPromotions } from './modules/promotions.js';
 import { registerRoles } from './modules/roles.js';
+import { registerAdminControl } from './modules/adminControl.js';
 import { ensureRoleConfig } from './lib/roleConfig.js';
 import { registerNotifications } from './modules/notifications.js';
 import { registerPrivacy } from './modules/privacy.js';
@@ -64,6 +65,8 @@ export async function buildApp(opts: { authRateLimitMax?: number; webDir?: strin
 
   // A request id on every response (and in every error), and one access-log line per request: method, safe path, status, time. No query strings, no cookies, no tokens.
   app.addHook('onRequest', async (req, reply) => { reply.header('x-request-id', req.id); });
+  // Everything an admin changes while acting as a maker is written to the audit log against that maker.
+  app.addHook('onResponse', async (req, reply) => { if (req.user?.acting && req.method !== 'GET' && req.method !== 'HEAD' && !req.url.startsWith('/api/studio/acting/')) await audit(pool, { actor: req.user.id, area: 'studio', action: 'acting.request', entityType: 'seller', entityId: req.user.acting.sellerId, next: { method: req.method, path: safePath(req.url), status: reply.statusCode }, reason: req.user.acting.reason, ip: req.ip }).catch(() => {}); });
   app.addHook('onResponse', async (req, reply) => { log('info', 'request', { requestId: req.id, method: req.method, path: safePath(req.url), status: reply.statusCode, ms: Math.round(reply.elapsedTime), area: req.area, user: req.user?.id }); });
 
   // CSRF: cookie auth + SameSite=Lax, and mutations must come from this host or an allowed origin.
@@ -78,10 +81,14 @@ export async function buildApp(opts: { authRateLimitMax?: number; webDir?: strin
   // Load this window's session. Roles only count in a window they belong to, so a shop session never carries staff or seller power.
   app.addHook('preHandler', async (req) => {
     const raw = req.cookies[cookieName(req.area)]; if (!raw) return; await ensureRoleConfig();
-    const s = (await q(`SELECT s.id AS sid, s.last_seen_at, u.id, u.email, u.full_name FROM sessions s JOIN users u ON u.id=s.user_id
+    const s = (await q(`SELECT s.id AS sid, s.last_seen_at, s.acting_seller_id, s.acting_reason, u.id, u.email, u.full_name FROM sessions s JOIN users u ON u.id=s.user_id
                         WHERE s.token_hash=$1 AND s.area=$2 AND s.expires_at>now() AND u.status='active'`, [sha256(raw), req.area])).rows[0]; if (!s) return;
     const grants = (await q('SELECT id, role, seller_id FROM user_roles WHERE user_id=$1', [s.id])).rows.map(r => ({ id: r.id, role: r.role, sellerId: r.seller_id }) as RoleGrant);
     const roles = req.area === 'shop' ? [] : grants.filter(g => AREA_ROLES[req.area as Exclude<Area, 'shop'>].includes(g.role));
+    // An admin "acting as" a maker works in that one maker's studio with a maker-owner's powers, for a limited time, and every change is logged below.
+    if (s.acting_seller_id && req.area === 'studio') {
+      req.user = { id: s.id, email: s.email, fullName: s.full_name, area: req.area, roles: [{ id: 'acting', role: 'seller_owner', sellerId: s.acting_seller_id }], sessionId: s.sid, acting: { sellerId: s.acting_seller_id, reason: s.acting_reason ?? '' } };
+    } else
     req.user = { id: s.id, email: s.email, fullName: s.full_name, area: req.area, roles, sessionId: s.sid };
     if (Date.now() - new Date(s.last_seen_at).getTime() > 10 * 60_000) q('UPDATE sessions SET last_seen_at=now() WHERE id=$1', [s.sid]).catch(() => {});
   });
@@ -93,7 +100,7 @@ export async function buildApp(opts: { authRateLimitMax?: number; webDir?: strin
   app.get('/health', async () => ({ ok: true }));
   app.get('/healthz', async () => ({ ok: true }));                                                                       // liveness: the process is up
   app.get('/readyz', async (_req, reply) => { try { await q('SELECT 1'); return { ok: true }; } catch { return reply.code(503).send({ ok: false }); } });          // readiness: the database answers
-  registerAuth(app); registerPublicConfig(app); registerCategories(app); registerCatalogue(app); registerHome(app); registerSaved(app); registerStudio(app); registerStudioDashboard(app); registerStudioProducts(app); registerCart(app); registerOrders(app); registerStudioOrders(app); registerAdmin(app); registerConsoles(app); registerEngagement(app); registerAds(app); registerPromotions(app); registerRoles(app); registerNotifications(app); registerPrivacy(app);
+  registerAuth(app); registerPublicConfig(app); registerCategories(app); registerCatalogue(app); registerHome(app); registerSaved(app); registerStudio(app); registerStudioDashboard(app); registerStudioProducts(app); registerCart(app); registerOrders(app); registerStudioOrders(app); registerAdmin(app); registerConsoles(app); registerEngagement(app); registerAds(app); registerPromotions(app); registerRoles(app); registerAdminControl(app); registerNotifications(app); registerPrivacy(app);
   if (webDir) await registerWeb(app, webDir);
   return app;
 }

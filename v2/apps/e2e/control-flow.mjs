@@ -47,4 +47,16 @@ await admin.getByRole('switch', { name: /Marketing: Edit the home page/ }).click
 await mk.goto(`${BASE}/marketing/ads`); await mk.waitForSelector('[role=alert], .err, .empty', { timeout: 15000 }); ok(!(await mk.locator('.tr').count()), 'marketing loses access to its tools right after the admin switches the permission off');
 await admin.getByRole('button', { name: 'Back to default' }).click(); await admin.waitForSelector('text=Back to the default.');
 await mk.goto(`${BASE}/marketing/ads`); await mk.waitForSelector('h1'); ok(true, 'and gets it back when reset');
+
+// 6. Open another console from admin, with no second sign-in
+await admin.goto(`${BASE}/admin`); await admin.waitForSelector('.cons-portals'); await admin.locator('.cons-portals').getByRole('button', { name: 'Support' }).click(); await admin.waitForURL(/\/support$/); await admin.waitForSelector('.sd-side');
+ok(!admin.url().includes('/login'), 'admin opens the support console from the admin sidebar without signing in again');
+// 7. Switches for one maker, and working as that maker
+await admin.goto(`${BASE}/admin/sellers`); await admin.fill('input[aria-label="Search by business, shop or owner email"]', 'clay'); await admin.waitForSelector('.table .tr'); await admin.locator('.table .tr', { hasText: 'Clay & Ember' }).first().click(); await admin.waitForSelector('text=Switches for this maker');
+await admin.getByRole('switch', { name: 'Publish new listings for this maker' }).click(); await admin.waitForSelector('text=Type a short reason first.'); ok(true, 'a reason is needed before a maker switch changes');
+await admin.fill('#mk-why', 'Listings under review'); await admin.getByRole('switch', { name: 'Publish new listings for this maker' }).click(); await admin.waitForFunction(() => document.querySelector('[role=switch][aria-label="Publish new listings for this maker"]')?.getAttribute('aria-checked') === 'false'); ok(true, 'publishing is paused for this maker');
+await admin.getByRole('switch', { name: 'Publish new listings for this maker' }).click(); await admin.waitForFunction(() => document.querySelector('[role=switch][aria-label="Publish new listings for this maker"]')?.getAttribute('aria-checked') === 'true'); ok(true, 'and switched back on');
+await admin.getByRole('button', { name: 'Work as this maker…' }).click(); await admin.fill('#aa-why', 'Fixing a listing for them'); await admin.fill('#aa-pw', PW); await admin.getByRole('button', { name: 'Open the studio' }).click(); await admin.waitForURL(/\/studio$/); await admin.waitForSelector('text=Working as admin inside');
+ok(await admin.locator('text=Fixing a listing for them').first().isVisible(), 'the studio opens with a banner that says whose studio and why');
+await admin.getByRole('button', { name: 'Leave' }).click(); await admin.waitForURL(/\/admin\/sellers\//); ok(true, 'Leave returns to the maker page in admin');
 await browser.close(); console.log(log.join('\n')); console.log(fails.length ? `\n${fails.length} FAILED:\n${fails.join('\n')}` : '\nAll control flow checks passed.'); process.exit(fails.length ? 1 : 0);

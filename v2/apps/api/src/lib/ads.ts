@@ -1,3 +1,4 @@
+import { sellerOnSql } from './sellerFlags.js';
 import { createHmac, randomBytes, timingSafeEqual, createHash } from 'node:crypto';
 import { pool, q } from '../db.js';
 import { config } from '../config.js';
@@ -30,7 +31,7 @@ export async function pickAds(o: { placement: 'category' | 'search'; category?: 
       coalesce((SELECT sum(spend_cents) FROM ad_daily d WHERE d.campaign_id=c.id AND d.day=current_date),0)::int AS spent_today, coalesce((SELECT sum(spend_cents) FROM ad_daily d WHERE d.campaign_id=c.id),0)::int AS spent_total,
       coalesce((SELECT array_agg(cg.slug) FROM product_categories pc JOIN categories cg ON cg.id=pc.category_id WHERE pc.product_id=p.id),'{}') AS cats
     ${CARD_FROM} JOIN ad_products ap ON ap.product_id=p.id JOIN ad_campaigns c ON c.id=ap.campaign_id
-    WHERE ${VISIBLE} AND c.status='active' AND NOT EXISTS (SELECT 1 FROM product_categories pc JOIN categories cg ON cg.id=pc.category_id WHERE pc.product_id=p.id AND cg.restricted)
+    WHERE ${VISIBLE} AND c.status='active' AND ${sellerOnSql('c.seller_id', 'ads')} AND NOT EXISTS (SELECT 1 FROM product_categories pc JOIN categories cg ON cg.id=pc.category_id WHERE pc.product_id=p.id AND cg.restricted)
       AND (NOT s.vacation_mode AND EXISTS (SELECT 1 FROM variants x WHERE x.product_id=p.id AND x.status='active' AND (NOT x.tracks_stock OR x.stock_on_hand - x.stock_reserved > 0)))`)).rows;
   if (!rows.length) return [];
   const ids = [...new Set(rows.map(r => r.campaign_id as string))]; const targets = (await q('SELECT campaign_id, kind, value FROM ad_targets WHERE campaign_id = ANY($1::uuid[])', [ids])).rows;

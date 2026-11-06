@@ -48,6 +48,7 @@ export function ConsoleLayout() {
   const base = `/${area}`; const on = (n: { to: string; end?: boolean }) => (n.end ? pathname === base + n.to || pathname === base + n.to + '/' : pathname.startsWith(base + n.to));
   return <div className="sd cons"><aside className="sd-side"><Link to={base}><Wordmark word={WORD[area]} /></Link>
     <nav aria-label={`${area} sections`} className="cons-nav">{NAV[area].map(n => <Link key={n.label} to={base + n.to} className={`sd-nav${on(n) ? ' on' : ''}`} aria-current={on(n) ? 'page' : undefined}><Icon name={n.icon} />{n.label}</Link>)}</nav>
+    {area === 'admin' && <div className="cons-portals" style={{ margin: '12px 0' }}><div className="muted" style={{ fontSize: 12, marginBottom: 4 }}>Open another console</div>{(['support', 'finance', 'marketing'] as const).map(p => <button key={p} type="button" className="sd-nav" style={{ width: '100%', textAlign: 'left' }} onClick={async () => { try { const r = await api<{ url: string }>(`/api/admin/portals/${p}/enter`, { method: 'POST' }); window.location.href = r.url; } catch { /* stays here */ } }}><Icon name="store" />{p[0].toUpperCase() + p.slice(1)}</button>)}</div>}
     <div className="card sd-shopcard"><b>{user.fullName}</b><div className="u">{user.email}</div><button type="button" className="muted" style={{ fontSize: 12, marginTop: 8, textDecoration: 'underline' }} onClick={() => logout()}>Sign out</button></div></aside>
     <main className="sd-main"><Outlet /></main></div>;
 }

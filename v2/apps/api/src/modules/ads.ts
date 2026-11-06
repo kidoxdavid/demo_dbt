@@ -7,6 +7,7 @@ import { requirePerm } from '../guards.js';
 import { pickAds, readClick, sellerOwed, tokenId } from '../lib/ads.js';
 import { VISIBLE, CARD_FROM } from '../lib/cards.js';
 import { allFlags, allSettings } from '../settings.js';
+import { requireSellerFlag } from '../lib/sellerFlags.js';
 import { sellerCtx } from './studio.js';
 
 const uuid = z.string().uuid(); const idp = z.object({ id: uuid });
@@ -76,7 +77,7 @@ export function registerAds(app: FastifyInstance) {
     return { ...c, daily };
   });
   app.post('/api/studio/ads', async (req, reply) => {
-    await flag(); const s = await sellerCtx(req, 'seller.shop.write'); const b = campaignIn.parse(req.body); const min = Number((await allSettings()).ads_min_bid_cents);
+    await flag(); const s = await sellerCtx(req, 'seller.shop.write'); await requireSellerFlag(s.sellerId, 'ads'); const b = campaignIn.parse(req.body); const min = Number((await allSettings()).ads_min_bid_cents);
     if (b.bidCents < min) throw new HttpError(422, 'bid_too_low', { minBidCents: min }); if (b.dailyBudgetCents < b.bidCents) throw new HttpError(422, 'budget_below_bid');
     const id = await tx(async c => { await checkProducts(c, s.sellerId, b.productIds); await checkTargets(c, b.categories);
       const r = (await c.query('INSERT INTO ad_campaigns(seller_id,name,bid_cents,daily_budget_cents,total_budget_cents) VALUES ($1,$2,$3,$4,$5) RETURNING id', [s.sellerId, b.name, b.bidCents, b.dailyBudgetCents, b.totalBudgetCents])).rows[0]; await setLists(c, r.id, b);
@@ -84,7 +85,7 @@ export function registerAds(app: FastifyInstance) {
     return reply.code(201).send((await campaignRows('WHERE c.id=$1', [id]))[0]);
   });
   app.patch('/api/studio/ads/:id', async req => {
-    await flag(); const s = await sellerCtx(req, 'seller.shop.write'); const { id } = idp.parse(req.params); const b = campaignIn.partial().extend({ status: z.enum(['active', 'paused', 'ended']) }).partial().strict().parse(req.body); const min = Number((await allSettings()).ads_min_bid_cents);
+    await flag(); const s = await sellerCtx(req, 'seller.shop.write'); await requireSellerFlag(s.sellerId, 'ads'); const { id } = idp.parse(req.params); const b = campaignIn.partial().extend({ status: z.enum(['active', 'paused', 'ended']) }).partial().strict().parse(req.body); const min = Number((await allSettings()).ads_min_bid_cents);
     await tx(async c => {
       const cur = (await c.query('SELECT * FROM ad_campaigns WHERE id=$1 AND seller_id=$2 FOR UPDATE', [id, s.sellerId])).rows[0]; if (!cur) throw new HttpError(404, 'not_found');
       if (cur.status === 'blocked') throw new HttpError(409, 'blocked_by_staff'); if (cur.status === 'ended') throw new HttpError(409, 'campaign_ended');

@@ -59,6 +59,6 @@ export function registerAuth(app: FastifyInstance) {
 
   app.get('/api/me', async (req) => userView(requireUser(req), req.area));
   app.get('/api/admin/me', async (req) => userView(requireUser(req), req.area));
-  app.get('/api/studio/me', async (req) => userView(requireUser(req), req.area));
+  app.get('/api/studio/me', async (req) => { const u = requireUser(req); const base = userView(u, req.area); if (!u.acting) return base; const shop = (await q('SELECT name FROM shops WHERE seller_id=$1', [u.acting.sellerId])).rows[0]; return { ...base, acting: { sellerId: u.acting.sellerId, shop: shop?.name ?? null, reason: u.acting.reason } }; });
   for (const win of ['support', 'finance', 'marketing']) app.get(`/api/${win}/me`, async (req) => userView(requireUser(req), req.area));
 }

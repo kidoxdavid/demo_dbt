@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { api, useApi } from '../api';
+import { api, ApiError, useApi } from '../api';
 import { ProductArt } from '../art/ProductArt';
 import { RatingStars } from '../components/Engagement';
 import { Button, Chip } from '../components/ui';
@@ -57,6 +57,8 @@ export function SellerPage() {
   const changed = st !== s.status || tr !== s.verificationTier || bpsVal !== s.commissionBps;
   const save = async () => { setErr(''); setSaved(''); setBusy(true); try { await api(`/api/admin/sellers/${id}`, { method: 'PATCH', body: { ...(st !== s.status ? { status: st } : {}), ...(tr !== s.verificationTier ? { verificationTier: tr } : {}), ...(bpsVal !== s.commissionBps ? { commissionBps: bpsVal } : {}), reason: reason.trim() } }); setStatus(''); setTier(''); setBps(null); setReason(''); setSaved('Saved.'); reload(); } catch (e) { setErr(fail(e)); } finally { setBusy(false); } };
   return <Page title={s.shops[0]?.name ?? s.legalName} sub={<>{s.legalName} · {s.ownerEmail ?? 'no owner'} · {s.liveProducts} live products · {money(s.salesCents)} sold</>} actions={<Link to="/admin/sellers" className="btn ghost sm">Back</Link>}>
+    <MakerSwitches id={id} />
+    <ActAs id={id} shop={s.shops[0]?.name ?? s.legalName} />
     <div className="card sd-card form" style={{ marginTop: 16 }}><b>Standing</b>
       <label className="label" htmlFor="sl-st">Status</label><select id="sl-st" className="field" value={st} onChange={e => setStatus(e.target.value)}><option value="active">Active</option><option value="suspended">Suspended (shop hidden, no sales)</option><option value="closed">Closed</option></select>
       <label className="label" htmlFor="sl-tier">Verification</label><select id="sl-tier" className="field" value={tr} onChange={e => setTier(e.target.value)}><option value="basic">Basic</option><option value="payout_verified">Payout verified</option><option value="verified_maker">Verified maker</option></select>
@@ -120,4 +122,24 @@ export function SettingsPage() {
     {edit && <div className="card sd-card form" style={{ marginTop: 16 }} role="group" aria-label={`Change ${edit.label}`}><b>{edit.label}</b><label className="label" htmlFor="st-val">{unitLabel(edit)}</label>{editor}<label className="label" htmlFor="st-why">Reason (optional, kept in the audit log)</label><input id="st-why" className="field" value={reason} onChange={e => setReason(e.target.value)} />
       {err && <div className="err" role="alert">{err}</div>}<div style={{ display: 'flex', gap: 10, marginTop: 14 }}><Button disabled={busy} onClick={save}>Save</Button><Button variant="ghost" onClick={() => setEdit(null)}>Cancel</Button></div></div>}
     {!edit && err && <div className="err" role="alert">{err}</div>}{!edit && note && <p role="status" className="muted" style={{ marginTop: 12 }}>{note}</p>}</Page>;
+}
+
+/** Switch one maker's features on or off. A short reason is required and goes in the audit log. */
+function MakerSwitches({ id }: { id: string }) {
+  const { data, reload } = useApi<{ key: string; enabled: boolean; label: string; help: string }[]>(`/api/admin/sellers/${id}/flags`); const [reason, setReason] = useState(''); const [err, setErr] = useState('');
+  const flip = async (key: string, enabled: boolean) => { setErr(''); try { await api(`/api/admin/sellers/${id}/flags/${key}`, { method: 'PUT', body: { enabled, reason: reason.trim() } }); reload(); } catch (e) { setErr(fail(e)); } };
+  return <div className="card sd-card" style={{ marginTop: 16 }}><b>Switches for this maker</b><div className="muted" style={{ fontSize: 14 }}>These apply to this maker only. Type a short reason first (it goes in the audit log and History below).</div>
+    <label className="label" htmlFor="mk-why">Reason</label><input id="mk-why" className="field" value={reason} onChange={e => setReason(e.target.value)} placeholder="For example: listings under review" />
+    {(data ?? []).map(f => <div key={f.key} className="tr" style={{ alignItems: 'center', marginTop: 8 }}><div className="t"><b>{f.label}</b><div>{f.help}</div></div><span style={{ opacity: reason.trim().length < 3 ? 0.5 : 1 }}><Switch on={f.enabled} label={`${f.label} for this maker`} onChange={v => reason.trim().length >= 3 ? flip(f.key, v) : setErr('Type a short reason first.')} /></span></div>)}
+    {err && <div className="err" role="alert">{err}</div>}</div>;
+}
+/** Work inside this maker's studio as an admin: needs a reason and your password, lasts two hours, and is logged. */
+function ActAs({ id, shop }: { id: string; shop: string }) {
+  const [open, setOpen] = useState(false); const [reason, setReason] = useState(''); const [pw, setPw] = useState(''); const [err, setErr] = useState(''); const [busy, setBusy] = useState(false);
+  const go = async () => { setErr(''); setBusy(true); try { const r = await api<{ url: string }>(`/api/admin/sellers/${id}/act-as`, { method: 'POST', body: { reason: reason.trim(), password: pw } }); window.location.href = r.url; } catch (e) { setErr(e instanceof ApiError && e.code === 'wrong_password' ? 'That is not your password.' : fail(e)); } finally { setBusy(false); } };
+  return <div className="card sd-card form" style={{ marginTop: 16 }}><b>Work inside this maker's studio</b><div className="muted" style={{ fontSize: 14 }}>Open {shop}'s studio as an admin to fix products, orders or shop settings for them. It lasts two hours, shows a banner, and every change is logged.</div>
+    {!open ? <Button size="sm" style={{ marginTop: 12 }} variant="ghost" onClick={() => setOpen(true)}>Work as this maker…</Button> : <>
+      <label className="label" htmlFor="aa-why">Why (at least 5 characters)</label><input id="aa-why" className="field" value={reason} onChange={e => setReason(e.target.value)} />
+      <label className="label" htmlFor="aa-pw">Your password</label><input id="aa-pw" className="field" type="password" autoComplete="current-password" value={pw} onChange={e => setPw(e.target.value)} />
+      {err && <div className="err" role="alert">{err}</div>}<div style={{ display: 'flex', gap: 10, marginTop: 14 }}><Button disabled={busy || reason.trim().length < 5 || !pw} onClick={go}>Open the studio</Button><Button variant="ghost" onClick={() => setOpen(false)}>Cancel</Button></div></>}</div>;
 }

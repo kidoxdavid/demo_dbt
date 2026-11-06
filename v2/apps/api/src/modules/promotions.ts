@@ -6,6 +6,7 @@ import { requirePerm } from '../guards.js';
 import { CARD_COLUMNS, CARD_FROM, VISIBLE, toCard } from '../lib/cards.js';
 import { allFlags, allSettings, requireFlag } from '../settings.js';
 import { sellerCtx } from './studio.js';
+import { requireSellerFlag, sellerOnSql } from '../lib/sellerFlags.js';
 
 const uuid = z.string().uuid(); const idp = z.object({ id: uuid });
 const text = (max: number) => z.string().trim().max(max).refine(s => !/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(s), 'invalid_characters');
@@ -18,7 +19,7 @@ const mine = async (shopId: string) => (await q(`SELECT sp.*, p.title AS product
 const view = (r: any) => r && ({ id: r.id, headline: r.headline, body: r.body, ctaLabel: r.cta_label, productId: r.product_id, productTitle: r.product_title ?? null, startsOn: r.starts_on?.toISOString?.().slice(0, 10) ?? r.starts_on, endsOn: r.ends_on ? (r.ends_on.toISOString?.().slice(0, 10) ?? r.ends_on) : null,
   status: r.status, rejectReason: r.reject_reason, views: r.views, clicks: r.clicks, approved: !!r.approved_at });
 /** Is it showing right now? (live, started, not past its end date.) */
-const SHOWING = `sp.status='live' AND sp.starts_on <= current_date AND (sp.ends_on IS NULL OR sp.ends_on >= current_date)`;
+const SHOWING = `${sellerOnSql('sp.seller_id', 'store_promotions')} AND sp.status='live' AND sp.starts_on <= current_date AND (sp.ends_on IS NULL OR sp.ends_on >= current_date)`;
 
 export function registerPromotions(app: FastifyInstance) {
   // ---- the maker's side
@@ -28,7 +29,7 @@ export function registerPromotions(app: FastifyInstance) {
     return { promotion: view(await mine(s.shopId)) ?? null, requiresApproval: !!(await allSettings()).store_promotions_require_approval, products };
   });
   app.put('/api/studio/promotion', async req => {
-    await requireFlag('store_promotions'); const s = await sellerCtx(req, 'seller.shop.write'); const b = promoIn.parse(req.body); const needs = !!(await allSettings()).store_promotions_require_approval;
+    await requireFlag('store_promotions'); const s = await sellerCtx(req, 'seller.shop.write'); await requireSellerFlag(s.sellerId, 'store_promotions'); const b = promoIn.parse(req.body); const needs = !!(await allSettings()).store_promotions_require_approval;
     if (b.productId && !(await q('SELECT 1 FROM products WHERE id=$1 AND seller_id=$2 AND status=$3', [b.productId, s.sellerId, 'published'])).rowCount) throw new HttpError(422, 'product_not_yours');
     const startsOn = b.startsOn ?? new Date().toISOString().slice(0, 10); if (b.endsOn && b.endsOn < startsOn) throw new HttpError(422, 'ends_before_start');
     await tx(async c => {
@@ -46,7 +47,7 @@ export function registerPromotions(app: FastifyInstance) {
   });
   /** The maker's own switch: pause (hide) it, show it again if it was approved, or end it for good. */
   app.post('/api/studio/promotion/status', async req => {
-    await requireFlag('store_promotions'); const s = await sellerCtx(req, 'seller.shop.write'); const b = z.object({ status: z.enum(['live', 'paused', 'ended']) }).strict().parse(req.body);
+    await requireFlag('store_promotions'); const s = await sellerCtx(req, 'seller.shop.write'); await requireSellerFlag(s.sellerId, 'store_promotions'); const b = z.object({ status: z.enum(['live', 'paused', 'ended']) }).strict().parse(req.body);
     await tx(async c => {
       const cur = (await c.query(`SELECT * FROM store_promotions WHERE shop_id=$1 AND status IN ('pending','live','paused','rejected') FOR UPDATE`, [s.shopId])).rows[0]; if (!cur) throw new HttpError(404, 'not_found');
       if (b.status === 'live' && (cur.status !== 'paused' || !cur.approved_at)) throw new HttpError(409, cur.status === 'rejected' ? 'rejected_by_staff' : 'not_approved');

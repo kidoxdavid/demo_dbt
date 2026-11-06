@@ -57,7 +57,7 @@ export function applyRoleConfig(rows: RoleConfigRow[]) {
   for (const a of CONSOLE_AREAS) AREA_ROLES[a] = ['admin', ...[...areasByRole].filter(([r, set]) => r !== 'admin' && set.has(a)).map(([r]) => r as Role)];       // admin can always enter every console
 }
 export interface RoleGrant { id: string; role: Role; sellerId: string | null }
-export interface SessionUser { id: string; email: string; fullName: string; area: Area; roles: RoleGrant[]; sessionId: string }
+export interface SessionUser { id: string; email: string; fullName: string; area: Area; roles: RoleGrant[]; sessionId: string; /** set while an admin is working inside one maker's studio */ acting?: { sellerId: string; reason: string } }
 
 export function canAccessArea(roles: RoleGrant[], area: Area) { return area === 'shop' || roles.some(r => AREA_ROLES[area].includes(r.role)); }
 export function can(user: Pick<SessionUser, 'roles'>, perm: Permission): boolean { return user.roles.some(r => isStaffRole(r.role) && STAFF_PERMS[r.role].includes(perm)); }

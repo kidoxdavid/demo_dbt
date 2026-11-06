@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { PageMenu } from '../components/PageMenu';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ApiError, api, useApi } from '../api';
 import { ProductArt } from '../art/ProductArt';
@@ -99,6 +100,6 @@ export function ProductPage() {
     <Button variant="ghost" aria-label={saved ? 'Remove from saved' : 'Save'} aria-pressed={saved} onClick={() => toggleSaved(p.id)}><Icon name="heart" /></Button></div>;
   if (desktop) return <div className="dpad"><div className="crumbs" style={{ marginBottom: 18 }}><Link to="/">Home</Link>{p.category?.breadcrumbs.map(c => <span key={c.slug}> › <Link to={`/c/${c.slug}`}>{c.name}</Link></span>)}</div>
     <div className="pdp-desktop"><Hero p={p} /><div>{info}</div></div></div>;
-  return <div className="screen" style={{ paddingBottom: 0 }}><button className="backbtn" aria-label="Back" onClick={() => (history.length > 1 ? nav(-1) : nav('/'))}><Icon name="chev" /></button><Hero p={p} /><div className="pad">{info}</div>{bar}</div>;
+  return <div className="screen" style={{ paddingBottom: 0 }}><button className="backbtn" aria-label="Back" onClick={() => (history.length > 1 ? nav(-1) : nav('/'))}><Icon name="chev" /></button><PageMenu /><Hero p={p} /><div className="pad">{info}</div>{bar}</div>;
 }
 void BasketLink; void moneyShort;

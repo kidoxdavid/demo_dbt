@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useFlag } from '../flags';
 import { DesktopChrome } from '../components/Layout';
+import { PageMenu } from '../components/PageMenu';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useApi } from '../api';
 import { ReviewList, type ReviewData } from '../components/Engagement';
@@ -44,7 +45,7 @@ function ShopPageInner() {
   const policies = s.policies ?? {};
   return <div role="main" data-theme={lookOverride() ? undefined : s.look} style={{ background: 'var(--bg)', color: 'var(--ink)', minHeight: '100vh' }}>
     <div className="shopbanner">{s.banner ? <img src={s.banner} alt="" /> : <ProductArt kind={kind} tone={BANNER_TONE[s.look] ?? 'blush'} />}
-      {!desktop && <button className="backbtn" aria-label="Back" onClick={() => (history.length > 1 ? nav(-1) : nav('/'))}><Icon name="chev" /></button>}</div>
+      {!desktop && <button className="backbtn" aria-label="Back" onClick={() => (history.length > 1 ? nav(-1) : nav('/'))}><Icon name="chev" /></button>}<PageMenu /></div>
     <div className="pad" style={desktop ? { maxWidth: 1000, margin: '0 auto', width: '100%' } : undefined}><div className="shop-id"><div className="row"><div className="shoplogo">{s.logo ? <img src={s.logo} alt="" /> : <ProductArt kind={kind} tone="warm" />}</div>
       {follows && <Button size="sm" onClick={() => toggleFollow(s.slug)} aria-pressed={following}>{following ? 'Following' : 'Follow'}</Button>}</div>
       <h1 className="serif">{s.name}</h1><div className="sub">{[s.tagline?.replace(/ from .*/, ''), [s.city, s.region].filter(Boolean).join(', ')].filter(Boolean).join(' · ')}</div>

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useFlag } from '../flags';
+import { PageMenu } from '../components/PageMenu';
 import { Link } from 'react-router-dom';
 import { ProductArt } from '../art/ProductArt';
 import type { ArtKind, Tone } from '../art/tones';
@@ -39,12 +40,12 @@ function Gift() {
 /** Basket. Matches reference buyer-basket.png (phone). One card per maker: each ships separately with its own delivery window. */
 export function BasketPage() {
   const { cart, ready } = useCart(); const desktop = useDesktop(); const { user } = useSession(); void user;
-  if (ready && cart.count === 0) return <div className={desktop ? 'dpad' : 'screen'}><div className="empty" style={{ paddingTop: 80 }}><h1 className="serif" style={{ fontSize: 30, color: 'var(--ink)' }}>Your basket is empty</h1><p style={{ marginTop: 8 }}>Pieces you add will wait here.</p><Link to="/" className="btn" style={{ marginTop: 18 }}>Browse the shop</Link></div></div>;
+  if (ready && cart.count === 0) return <div className={desktop ? 'dpad' : 'screen'} style={{ position: 'relative' }}><PageMenu /><div className="empty" style={{ paddingTop: 80 }}><h1 className="serif" style={{ fontSize: 30, color: 'var(--ink)' }}>Your basket is empty</h1><p style={{ marginTop: 8 }}>Pieces you add will wait here.</p><Link to="/" className="btn" style={{ marginTop: 18 }}>Browse the shop</Link></div></div>;
   const makers = cart.sellers.length; const total = cart.totalCents;
-  const head = <div className="bk-head"><h1 className="serif" style={{ fontSize: 30 }}>Your basket</h1><p>{makers} maker{makers === 1 ? '' : 's'}{makers > 1 ? ' · ships separately' : ''} · <Link to="/" className="tl" style={{ textDecoration: 'underline' }}>Continue shopping</Link></p></div>;
+  const head = <div className="bk-head"><h1 className="serif" style={{ fontSize: 30 }}>Your basket</h1><p>{makers} maker{makers === 1 ? '' : 's'}{makers > 1 ? ' · ships separately' : ''}</p></div>;
   const groups = <>{cart.sellers.map(s => <Group key={s.sellerId} s={s} />)}<GiftIfOn /></>;
   const checkout = <Button to={cart.blocked ? undefined : '/checkout'} disabled={cart.blocked} aria-disabled={cart.blocked}>{cart.blocked ? 'Fix the items above' : `Checkout · ${money(total)} incl. GST`}</Button>;
   if (desktop) return <div className="dpad"><div className="bk-desktop"><div>{head}{groups}</div><div className="card sum"><b>Order summary</b><div className="r"><span>Subtotal · {cart.count} item{cart.count === 1 ? '' : 's'}</span><b>{money(cart.itemsCents)}</b></div><div className="r"><span>Shipping</span><b>{money(cart.shippingCents)}</b></div><div className="r"><span>GST</span><b>{money(cart.taxCents)}</b></div>{checkout}</div></div></div>;
-  return <div className="screen" style={{ paddingBottom: 190 }}><div className="pad" style={{ paddingTop: 4 }}>{head}{groups}</div>
+  return <div className="screen" style={{ paddingBottom: 190, position: 'relative' }}><PageMenu /><div className="pad" style={{ paddingTop: 4 }}>{head}{groups}</div>
     <div className="summarybar"><div className="r"><span>Subtotal · {cart.count} item{cart.count === 1 ? '' : 's'}</span><b>{money(cart.itemsCents)}</b></div><div className="r"><span>Shipping</span><b>{money(cart.shippingCents)}</b></div>{checkout}</div></div>;
 }

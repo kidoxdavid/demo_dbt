@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { ApiError, api, useApi } from '../api';
 import { ProductArt } from '../art/ProductArt';
 import { Button, Chip } from '../components/ui';
@@ -13,8 +13,9 @@ const stateChip = (p: any) => p.status === 'published' ? (p.moderation === 'queu
 const range = (p: any) => (p.minPriceCents === null ? '—' : p.minPriceCents === p.maxPriceCents ? money(p.minPriceCents) : `${money(p.minPriceCents)}–${money(p.maxPriceCents)}`);
 
 export function ProductsPage() {
-  const [status, setStatus] = useState(''); const [q, setQ] = useState(''); const [limit, setLimit] = useState(30); const desktop = useDesktop(); const { data, loading } = useApi<any>(`/api/studio/products?limit=${limit}${status ? `&status=${status}` : ''}${q.trim() ? `&q=${encodeURIComponent(q.trim())}` : ''}`);
+  const notice = (useLocation().state as { notice?: string } | null)?.notice; const [status, setStatus] = useState(''); const [q, setQ] = useState(''); const [limit, setLimit] = useState(30); const desktop = useDesktop(); const { data, loading } = useApi<any>(`/api/studio/products?limit=${limit}${status ? `&status=${status}` : ''}${q.trim() ? `&q=${encodeURIComponent(q.trim())}` : ''}`);
   return <div className={`sd-page${desktop ? '' : ' pad'}`} style={desktop ? undefined : { paddingTop: 10 }}><div style={{ display: 'flex', alignItems: 'center' }}><h1 className="serif">Products</h1><span style={{ marginLeft: 'auto' }}><Button size="sm" to="/studio/products/new">Add product</Button></span></div>
+    {notice && <div role="status" className="card sd-card" style={{ marginTop: 12 }}>{notice}</div>}
     <div className="tools"><input className="field" type="search" aria-label="Search your products" placeholder="Search your products" value={q} onChange={e => { setQ(e.target.value); setLimit(30); }} /></div>
     <div className="seg" role="tablist">{ST.map(([v, l]) => <button key={v} role="tab" aria-selected={status === v} className={status === v ? 'on' : ''} onClick={() => { setStatus(v); setLimit(30); }}>{l}</button>)}</div>
     {data?.items.length === 0 && !loading ? <div className="empty"><h2 className="serif">{q || status ? 'Nothing matches' : 'No products yet'}</h2><p>{q || status ? 'Try a different search.' : 'Add your first product to open your shop.'}</p></div>
@@ -55,7 +56,7 @@ export function ProductEditor() {
   const publish = () => run(async () => { await api(`/api/studio/products/${id}`, { method: 'PATCH', body: patchBody() }); try { await api(`/api/studio/products/${id}/publish`, { method: 'POST', body: { acknowledged: ack } }); } catch (x) { if (x instanceof ApiError && x.code === 'not_ready') { apply(await api<PV>(`/api/studio/products/${id}`)); throw new Error('handled'); } throw x; } apply(await api<PV>(`/api/studio/products/${id}`)); setMsg('Your product is live.'); await refresh(); });
   const unpublish = () => run(async () => { await api(`/api/studio/products/${id}/unpublish`, { method: 'POST', body: {} }); apply(await api<PV>(`/api/studio/products/${id}`)); setMsg('Hidden from the shop.'); });
   const dup = () => run(async () => { const n = await api<PV>(`/api/studio/products/${id}/duplicate`, { method: 'POST', body: {} }); nav(`/studio/products/${n.id}`); window.scrollTo(0, 0); });
-  const del = () => { if (!window.confirm('Delete this product? This cannot be undone.')) return; void run(async () => { await api(`/api/studio/products/${id}`, { method: 'DELETE' }); nav('/studio/products'); }); };
+  const del = () => { if (!window.confirm(`Delete "${p?.title || 'this product'}"?\n\nIt comes off your shop and out of every basket. If it has been ordered before, it is kept in your order history instead of being erased.`)) return; void run(async () => { const r = await api<{ message: string }>(`/api/studio/products/${id}`, { method: 'DELETE' }); await refresh(); nav('/studio/products', { state: { notice: r.message } }); }); };
   const problems = p.readiness.problems;
   return <div className={`sd-page${desktop ? '' : ' pad'}`} style={desktop ? undefined : { paddingTop: 10 }}><Link to="/studio/products" className="crumbs">‹ Products</Link>
     <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 6, flexWrap: 'wrap' }}><h1 className="serif" style={{ fontSize: 30 }}>{p.title || 'New product'}</h1>{stateChip(p)}</div>
@@ -83,7 +84,8 @@ export function ProductEditor() {
       {problems.length > 0 && p.status !== 'published' && <ul className="problems" aria-live="polite">{problems.map(x => <li key={x.code + x.field}>{x.message}</li>)}</ul>}
       {err && <div className="err" role="alert">{err}</div>}{msg && <div className="saved" role="status" style={{ color: 'var(--ok)' }}>{msg}</div>}
       <div style={{ display: 'flex', gap: 10, marginTop: 18, flexWrap: 'wrap' }}><Button disabled={busy} onClick={save}>Save</Button>{p.status !== 'published' ? <Button variant="ghost" disabled={busy || (!!p.category?.restricted && !ack)} onClick={publish}>Publish</Button> : <Button variant="ghost" disabled={busy} onClick={unpublish}>Hide from shop</Button>}
-        {p.status === 'published' && <Button variant="ghost" to={`/p/${p.id}`}>View in shop</Button>}<Button variant="ghost" disabled={busy} onClick={dup}>Duplicate</Button>{p.status !== 'published' && <Button variant="ghost" disabled={busy} onClick={del}>Delete</Button>}</div></div></div>;
+        {p.status === 'published' && <Button variant="ghost" to={`/p/${p.id}`}>View in shop</Button>}<Button variant="ghost" disabled={busy} onClick={dup}>Duplicate</Button></div>
+      <div className="card sd-card" style={{ marginTop: 22, borderColor: 'var(--err, var(--line))' }}><b>Delete this product</b><p className="muted" style={{ margin: '6px 0 12px' }}>Takes it off your shop and out of every basket. If it has been ordered before, it is kept in your order history.</p><Button variant="ghost" disabled={busy} onClick={del} style={{ color: 'var(--err, var(--ink))' }}>Delete product</Button></div></div></div>;
 }
 function VariantRow({ v, onSave, disabled }: { v: { id: string; options: Record<string, string>; priceCents: number; stock: number; reserved: number }; onSave: (b: object) => void; disabled: boolean }) {
   const [price, setPrice] = useState(dollars(v.priceCents)); const [stock, setStock] = useState(String(v.stock)); useEffect(() => { setPrice(dollars(v.priceCents)); setStock(String(v.stock)); }, [v.priceCents, v.stock]);

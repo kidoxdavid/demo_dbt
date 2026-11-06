@@ -1,6 +1,7 @@
 import qrcode from 'qrcode-generator';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useDesktop } from '../hooks';
 import { ApiError, api, useApi } from '../api';
 import { ProductArt } from '../art/ProductArt';
 import type { ArtKind, Tone } from '../art/tones';
@@ -16,10 +17,10 @@ const KEY = 'es_ob'; const mem = { get: (k: string) => { try { return sessionSto
 
 /** Seller sign-up in five short steps: what you sell, shop identity, first product (photo first), shipping and returns, live. Matches reference seller-onboarding-1..4 (step 5 is the "live" screen). */
 export function Onboarding() {
-  const { step: s = '1' } = useParams(); const step = Math.min(5, Math.max(1, Number(s) || 1)); const { user, shop, ready } = useStudio();
+  const { step: s = '1' } = useParams(); const step = Math.min(5, Math.max(1, Number(s) || 1)); const { user, shop, ready } = useStudio(); const desktop = useDesktop();
   if (!ready) return <div className="pad" style={{ paddingTop: 40 }}><div className="skeleton" style={{ height: 240 }} /></div>;
   if (step > 1 && !(user && shop)) return <Navigate to="/studio/start/1" replace />;
-  return <div role="main" className="screen ob" style={{ paddingBottom: 130 }}><Progress step={step} total={5} left={LEFT[step - 1]} />
+  return <div role="main" className="screen ob" style={{ paddingBottom: 130 }}>{desktop && <div className="pad" style={{ paddingTop: 16 }}><Link to="/" className="crumbs">‹ Back to eazystores</Link></div>}<Progress step={step} total={5} left={LEFT[step - 1]} />
     {step === 1 && <StepSell />}{step === 2 && <StepIdentity />}{step === 3 && <StepProduct />}{step === 4 && <StepShipping />}{step === 5 && <StepLive />}</div>;
 }
 

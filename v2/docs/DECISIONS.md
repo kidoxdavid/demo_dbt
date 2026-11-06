@@ -109,3 +109,6 @@
 - **No dead ends:** a page that said "coming soon" is either built from real data or its link is removed. Gift guides are live searches, so they can never show something that is not for sale.
 - **Phone consoles use a menu drawer, not a squeezed sidebar.** Same pages, same URLs, a 60 px top bar and a drawer.
 - **The studio dashboard uses the app clock** (`EAZY_FAKE_NOW` in demos and tests), so numbers do not change at midnight under a visual test.
+- **Deleting never breaks history.** A product with orders or reviews is kept (marked deleted, off sale, out of the maker's list); an unused one is removed. The maker is told which, in plain words.
+- **A write by a maker, staff member or payment clears the short shared listing answers**, so what people see always matches what was just changed.
+- **EAZYfoods is read from its source, not run.** Running another codebase's install scripts was blocked; `docs/PORTAL_GAPS.md` says so at the top and lists what a run would still add.

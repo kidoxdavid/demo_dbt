@@ -20,7 +20,7 @@ const productPatch = z.object({
 }).partial().strict();
 
 async function ownProduct(c: Client | typeof pool, id: string, sellerId: string, lock = false) {
-  const p = (await c.query(`SELECT * FROM products WHERE id=$1 AND seller_id=$2 ${lock ? 'FOR UPDATE' : ''}`, [id, sellerId])).rows[0]; if (!p) throw new HttpError(404, 'not_found'); return p;
+  const p = (await c.query(`SELECT * FROM products WHERE id=$1 AND seller_id=$2 AND deleted_at IS NULL ${lock ? 'FOR UPDATE' : ''}`, [id, sellerId])).rows[0]; if (!p) throw new HttpError(404, 'not_found'); return p;
 }
 const oneLeftError = (e: any) => { if (e?.message === 'one_of_a_kind_stock') throw new HttpError(422, 'one_of_a_kind_needs_single_item'); if (e?.message === 'one_of_a_kind_variants') throw new HttpError(422, 'one_of_a_kind_needs_single_variant'); throw e; };
 
@@ -85,7 +85,7 @@ export function registerStudioProducts(app: FastifyInstance) {
         (SELECT min(price_cents) FROM variants v WHERE v.product_id=p.id AND v.status='active') AS min_price, (SELECT max(price_cents) FROM variants v WHERE v.product_id=p.id AND v.status='active') AS max_price,
         (SELECT coalesce(sum(stock_on_hand - stock_reserved),0)::int FROM variants v WHERE v.product_id=p.id AND v.status='active' AND tracks_stock) AS stock,
         (SELECT pm.media_id FROM product_media pm JOIN media m ON m.id=pm.media_id AND m.kind='image' WHERE pm.product_id=p.id ORDER BY pm.position LIMIT 1) AS cover, count(*) OVER()::int AS total
-      FROM products p WHERE p.seller_id=$1 AND ($2::text IS NULL OR p.status=$2) AND ($3::text IS NULL OR p.title ILIKE $3 ESCAPE '\\') ORDER BY p.updated_at DESC LIMIT $4 OFFSET $5`, [s.sellerId, f.status ?? null, like, f.limit, f.offset])).rows;
+      FROM products p WHERE p.seller_id=$1 AND p.deleted_at IS NULL AND ($2::text IS NULL OR p.status=$2) AND ($3::text IS NULL OR p.title ILIKE $3 ESCAPE '\\') ORDER BY p.updated_at DESC LIMIT $4 OFFSET $5`, [s.sellerId, f.status ?? null, like, f.limit, f.offset])).rows;
     return { total: rows[0]?.total ?? 0, items: rows.map(r => ({ id: r.id, title: r.title || 'Untitled', status: r.status, moderation: r.moderation_status, oneOfAKind: r.one_of_a_kind, madeToOrder: r.made_to_order, minPriceCents: r.min_price, maxPriceCents: r.max_price, stock: r.stock, cover: r.cover ? `/api/studio/media/${r.cover}/w320` : null, art: r.art_kind ? { kind: r.art_kind, tone: r.art_tone } : null, updatedAt: r.updated_at })) };
   });
 
@@ -187,9 +187,20 @@ export function registerStudioProducts(app: FastifyInstance) {
     });
     return reply.code(201).send(await productView(pool, await ownProduct(pool, newId, s.sellerId)));
   });
+  /**
+   * Delete a product, whatever state it is in. If nothing refers to it the row goes. If it has been ordered, it is taken off sale and hidden from the maker's list
+   * but kept, so orders, receipts and reviews still work. Either way it leaves every basket. The answer says which happened.
+   */
   app.delete('/api/studio/products/:id', async (req) => {
     const s = await sellerCtx(req, 'seller.products.write'); const { id } = idp.parse(req.params);
-    return tx(async c => { const p = await ownProduct(c, id, s.sellerId, true); if (p.status !== 'draft') throw new HttpError(409, 'unpublish_first'); await c.query('DELETE FROM products WHERE id=$1', [id]); await audit(c, { actor: s.user.id, area: 'studio', action: 'product.delete', entityType: 'product', entityId: id, prev: { title: p.title }, ip: req.ip }); return { deleted: true }; });
+    return tx(async c => {
+      const p = await ownProduct(c, id, s.sellerId, true);
+      await c.query('DELETE FROM cart_items WHERE variant_id IN (SELECT id FROM variants WHERE product_id=$1)', [id]);
+      const used = (await c.query('SELECT 1 FROM order_lines WHERE product_id=$1 LIMIT 1', [id])).rowCount! > 0 || (await c.query('SELECT 1 FROM reviews WHERE product_id=$1 LIMIT 1', [id])).rowCount! > 0;
+      if (used) await c.query(`UPDATE products SET status='hidden', deleted_at=now(), updated_at=now() WHERE id=$1`, [id]); else await c.query('DELETE FROM products WHERE id=$1', [id]);
+      await audit(c, { actor: s.user.id, area: 'studio', action: used ? 'product.delete_kept' : 'product.delete', entityType: 'product', entityId: id, prev: { title: p.title, status: p.status }, ip: req.ip });
+      return { deleted: !used, removedFromSale: used, message: used ? 'This product has been ordered before, so it was taken off sale and removed from your list. Your order history is kept.' : 'Product deleted.' };
+    });
   });
 
   // ---- Variants and stock

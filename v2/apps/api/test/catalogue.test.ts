@@ -164,10 +164,13 @@ describe('variants, one-of-a-kind and stock', () => {
     expect(p.readiness.problems.map((x: any) => x.code)).toEqual(['lead_time_required']); await st('PATCH', `/api/studio/products/${p.id}`, s.cookie, { leadTimeDays: 5 }); expect((await st('POST', `/api/studio/products/${p.id}/publish`, s.cookie, {})).statusCode).toBe(200);
     const d = (await pub(`/api/products/${p.id}`)).json(); expect(d).toMatchObject({ madeToOrder: true, leadTimeDays: 5 }); expect(d.variants[0]).toMatchObject({ available: true, left: null });
   });
-  it('duplicate, bulk edit and delete rules', async () => {
+it('a live product can be deleted without unpublishing it first', async () => {
+    const s = await liveShop({ title: 'Live and doomed', price: 2000, stock: 4 }); const r = (await st('DELETE', `/api/studio/products/${s.productId}`, s.cookie)).json(); expect(r.deleted).toBe(true); expect((await st('GET', `/api/studio/products/${s.productId}`, s.cookie)).statusCode).toBe(404);
+  });
+    it('duplicate, bulk edit and delete rules', async () => {
     const s = await liveShop({ title: 'Original', price: 2000, stock: 4 }); const d = (await st('POST', `/api/studio/products/${s.productId}/duplicate`, s.cookie)).json();
     expect(d).toMatchObject({ title: 'Original (copy)', status: 'draft' }); expect(d.variants[0]).toMatchObject({ priceCents: 2000, stock: 0 }); expect(d.media).toHaveLength(1);
-    expect((await st('DELETE', `/api/studio/products/${s.productId}`, s.cookie)).json().error).toBe('unpublish_first'); expect((await st('DELETE', `/api/studio/products/${d.id}`, s.cookie)).statusCode).toBe(200);
+    expect((await st('DELETE', `/api/studio/products/${d.id}`, s.cookie)).statusCode).toBe(200);
     const bulk = (b: object) => st('POST', '/api/studio/products/bulk', s.cookie, { ids: [s.productId], ...b });
     expect((await bulk({ priceChangePercent: 10 })).json()).toMatchObject({ products: 1, variantsChanged: 1 }); expect((await pub(`/api/products/${s.productId}`)).json().variants[0].priceCents).toBe(2200);
     expect((await bulk({ setPriceCents: 1500 })).statusCode).toBe(200); expect((await bulk({ stockDelta: 3 })).statusCode).toBe(200); expect((await bulk({ stockDelta: 3, priceChangePercent: 5 })).statusCode).toBe(400);

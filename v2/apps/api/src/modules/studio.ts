@@ -59,7 +59,7 @@ export function registerStudio(app: FastifyInstance) {
   const shopView = async (c: Client | typeof pool, sellerId: string) => {
     const s = (await c.query(`SELECT s.*, se.verification_tier FROM shops s JOIN sellers se ON se.id=s.seller_id WHERE s.seller_id=$1`, [sellerId])).rows[0];
     const cats = (await c.query(`SELECT c.slug, c.name, c.tile_name, c.seller_tips, c.photo_guide, c.restricted FROM seller_categories sc JOIN categories c ON c.id=sc.category_id WHERE sc.seller_id=$1 ORDER BY c.sort`, [sellerId])).rows;
-    const counts = (await c.query(`SELECT count(*)::int AS total, count(*) FILTER (WHERE status='published')::int AS published FROM products WHERE seller_id=$1`, [sellerId])).rows[0];
+    const counts = (await c.query(`SELECT count(*)::int AS total, count(*) FILTER (WHERE status='published')::int AS published FROM products WHERE seller_id=$1 AND deleted_at IS NULL`, [sellerId])).rows[0];
     return { id: s.id, slug: s.slug, name: s.name, tagline: s.tagline, story: s.story, city: s.city, region: s.region, look: s.look, status: s.status, vacation: s.vacation_mode, processing: { minDays: s.processing_days_min, maxDays: s.processing_days_max },
       logo: s.logo_media_id ? `/api/studio/media/${s.logo_media_id}/w320` : null, banner: s.banner_media_id ? `/api/studio/media/${s.banner_media_id}/w1280` : null, policies: s.policies, badges: s.badges, verificationTier: s.verification_tier,
       categories: cats.map(x => ({ slug: x.slug, name: x.name, tile: x.tile_name, sellerTips: x.seller_tips, photoGuide: x.photo_guide, restricted: x.restricted })), products: counts, policyTemplates: POLICY_TEMPLATES };

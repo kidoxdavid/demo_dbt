@@ -21,11 +21,11 @@ describe('short-lived shared answers', () => {
     let fails = 0; const bad = async () => { fails++; throw new Error('boom'); }; await expect(microcache('k2', bad)).rejects.toThrow('boom'); await expect(microcache('k2', bad)).rejects.toThrow('boom'); expect(fails).toBe(2);
     config.listCacheMs = 0; let off = 0; await microcache('k3', async () => ++off); await microcache('k3', async () => ++off); expect(off).toBe(2);          // 0 means no sharing at all
   });
-  it('anonymous listings are shared briefly in production settings and fresh when switched off; changes show once the answer expires', async () => {
+  it('anonymous listings are shared briefly in production settings and fresh when switched off; a change by a maker shows at once', async () => {
     const s = await studioSeller(app); const m = (await upload(app, s.cookie, await jpeg())).json(); const mk = async (title: string) => { const p = (await st(s.cookie, 'POST', '/api/studio/products', { title, categorySlug: 'pottery-ceramics', priceCents: 2500, stock: 4, attributes: {}, mediaIds: [m.id] })).json(); await st(s.cookie, 'POST', `/api/studio/products/${p.id}/publish`, { acknowledged: true }); };
     const url = '/api/products?q=cachezebra'; await mk('Cachezebra one'); config.listCacheMs = 500; const a = await app.inject({ method: 'GET', url }); expect(a.json().total).toBe(1); expect(a.headers['cache-control']).toMatch(/^public, max-age=\d+$/);
-    await mk('Cachezebra two'); expect((await app.inject({ method: 'GET', url })).json().total).toBe(1);          // still the shared answer
-    await new Promise(r => setTimeout(r, 600)); expect((await app.inject({ method: 'GET', url })).json().total).toBe(2); config.listCacheMs = 0; await mk('Cachezebra three');
+    await mk('Cachezebra two'); expect((await app.inject({ method: 'GET', url })).json().total).toBe(2);          // a maker's change clears the shared answer at once
+    await app.inject({ method: 'GET', url }); config.listCacheMs = 0; await mk('Cachezebra three');
     expect((await app.inject({ method: 'GET', url })).json().total).toBe(3); expect((await app.inject({ method: 'GET', url })).headers['cache-control']).toBe('no-store');
     expect((await app.inject({ method: 'GET', url: '/api/products?q=%00' })).statusCode).toBe(400);                                                  // errors are not cached and not 500
   });

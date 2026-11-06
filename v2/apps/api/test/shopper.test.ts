@@ -55,3 +55,28 @@ describe('a maker\'s insights and payouts', () => {
 describe('test mode is stated plainly', () => {
   it('says payments are simulated and email is not sent when this is a practice site', async () => { const m = (await app.inject({ method: 'GET', url: '/api/mode' })).json(); expect(m).toMatchObject({ testMode: true, payments: 'simulated' }); expect(['sent', 'not sent']).toContain(m.email); });
 });
+
+describe('a maker deletes a product', () => {
+  const del = (cookie: string, id: string) => app.inject({ method: 'DELETE', url: `/api/studio/products/${id}`, ...ck('studio', cookie) });
+  const inList = async (cookie: string, id: string) => (await app.inject({ method: 'GET', url: '/api/studio/products?limit=60', ...ck('studio', cookie) })).json().items.some((i: any) => i.id === id);
+  it('a live product nobody ordered is deleted outright, leaves every basket, and the shop page is gone', async () => {
+    const a = await shop(); const jar: Record<string, string> = {}; const add = await app.inject({ method: 'POST', url: '/api/cart/items', payload: { variantId: a.variant, quantity: 1 } }); for (const k of add.cookies) jar[k.name] = k.value;
+    const r = await del(a.s.cookie, a.p.id); expect(r.statusCode).toBe(200); expect(r.json()).toMatchObject({ deleted: true, removedFromSale: false });
+    expect((await q('SELECT 1 FROM products WHERE id=$1', [a.p.id])).rowCount).toBe(0); expect((await app.inject({ method: 'GET', url: `/api/products/${a.p.id}` })).statusCode).toBe(404); expect((await app.inject({ method: 'GET', url: '/api/cart', cookies: jar })).json().count).toBe(0);
+    expect((await del(a.s.cookie, a.p.id)).statusCode).toBe(404);
+  });
+  it('a hidden product that was once live can be deleted too (it used to be stuck forever)', async () => {
+    const a = await shop(); await app.inject({ method: 'POST', url: `/api/studio/products/${a.p.id}/unpublish`, ...ck('studio', a.s.cookie) }); expect((await del(a.s.cookie, a.p.id)).json().deleted).toBe(true);
+  });
+  it('a product that was ordered is taken off sale and out of the list, but the order and its receipt keep working', async () => {
+    const a = await shop(); const jar: Record<string, string> = {}; const add = await app.inject({ method: 'POST', url: '/api/cart/items', payload: { variantId: a.variant, quantity: 1 } }); for (const k of add.cookies) jar[k.name] = k.value;
+    const o = (await app.inject({ method: 'POST', url: '/api/checkout', cookies: jar, payload: { email: 'del@t.test', address: { name: 'D', line1: '1 St', city: 'Calgary', region: 'AB', postal: 'T2N 1N4' } } })).json(); await app.inject({ method: 'POST', url: `/api/dev/payments/${o.payment.ref}/simulate`, payload: { outcome: 'succeeded' } });
+    const r = await del(a.s.cookie, a.p.id); expect(r.json()).toMatchObject({ deleted: false, removedFromSale: true }); expect(r.json().message).toContain('order history');
+    expect(await inList(a.s.cookie, a.p.id)).toBe(false); expect((await app.inject({ method: 'GET', url: `/api/products/${a.p.id}` })).statusCode).toBe(404); expect((await app.inject({ method: 'GET', url: `/api/studio/products/${a.p.id}`, ...ck('studio', a.s.cookie) })).statusCode).toBe(404);
+    const order = (await app.inject({ method: 'GET', url: `/api/orders/by-token/${o.token}` })); expect(order.statusCode).toBe(200); expect(JSON.stringify(order.json())).toContain(a.p.title);
+    expect(Number((await q(`SELECT count(*) n FROM audit_log WHERE action='product.delete_kept' AND entity_id=$1`, [a.p.id])).rows[0].n)).toBe(1);
+  });
+  it('nobody can delete another maker\'s product, and a signed-out visitor cannot delete anything', async () => {
+    const a = await shop(); const b = await shop(); expect((await del(b.s.cookie, a.p.id)).statusCode).toBe(404); expect((await app.inject({ method: 'DELETE', url: `/api/studio/products/${a.p.id}` })).statusCode).toBe(401); expect((await q('SELECT 1 FROM products WHERE id=$1', [a.p.id])).rowCount).toBe(1);
+  });
+});

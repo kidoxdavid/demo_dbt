@@ -89,3 +89,4 @@
 }
 .swatch{position:relative}.swatch::after{content:"";position:absolute;inset:-7px}
 .tl{display:inline-block;padding:13px 0;margin:-13px 0}
+@media (max-width:899px){.sp-top .av{position:relative;border:0;cursor:pointer}.sp-top .av::after{content:"";position:absolute;inset:-6px}}

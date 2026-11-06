@@ -20,14 +20,14 @@ export function BasketLink() { const { cart } = useCart(); return <Link to="/bas
 export function Bell() { const { user } = useSession(); const [n] = useUnread('me', !!user); if (!user) return null; return <Link to="/account/notifications" className="icon-link" aria-label={`Notifications, ${n} unread`}><Icon name="msg" />{n > 0 && <span className="badge">{n}</span>}</Link>; }
 export const PhoneTop = () => <div className="pad home-top"><Link to="/"><Wordmark /></Link><span style={{ flex: 1 }} /><Bell /><Link to="/saved" aria-label="Saved"><Icon name="heart" /></Link><BasketLink /></div>;
 
-function DesktopChrome() {
+export function DesktopChrome() {
   const { data } = useApi<{ promoBar: string; categories: { slug: string; label: string }[] }>('/api/home');
   return <>
     {data?.promoBar && <div className="promo">{data.promoBar}</div>}
     <div className="dhead"><Link to="/"><Wordmark large /></Link><SearchBox large /><span className="right"><Link to="/studio">Sell on eazystores</Link><Bell /><Link to="/saved" aria-label="Saved"><Icon name="heart" /></Link><Link to="/account" aria-label="Account"><Icon name="user" /></Link><BasketLink /></span></div>
     <nav className="dnav" aria-label="Categories">{(data?.categories ?? []).map(c => <Link key={c.slug} to={`/c/${c.slug}`}>{c.label === 'Art & prints' ? 'Art & prints' : c.label}</Link>)}<Link to="/guides">Gift guides</Link></nav></>;
 }
-const TAB_FOR = (p: string) => (p === '/' ? 0 : p.startsWith('/c/') || p.startsWith('/search') ? 1 : p.startsWith('/saved') ? 2 : p.startsWith('/account') || p.startsWith('/orders') ? 4 : null);
+const TAB_FOR = (p: string) => (p === '/' ? 0 : p.startsWith('/c/') || p.startsWith('/search') || p.startsWith('/makers') || p.startsWith('/guides') ? 1 : p.startsWith('/pages/') ? 0 : p.startsWith('/saved') ? 2 : p.startsWith('/account') || p.startsWith('/orders') ? 4 : null);
 
 /** Desktop: promo bar, header and category nav. Phone: the glass tab bar (hidden on pages with their own bottom bar). */
 export function BuyerLayout() {

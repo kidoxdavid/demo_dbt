@@ -1,4 +1,5 @@
 import { registerWeb, webDist } from './lib/web.js';
+import { clearMicrocache } from './lib/microcache.js';
 import Fastify from 'fastify';
 import cookie from '@fastify/cookie';
 import helmet from '@fastify/helmet';
@@ -69,6 +70,8 @@ export async function buildApp(opts: { authRateLimitMax?: number; webDir?: strin
   app.addHook('onRequest', async (req, reply) => { reply.header('x-request-id', req.id); });
   // Everything an admin changes while acting as a maker is written to the audit log against that maker.
   app.addHook('onResponse', async (req, reply) => { if (req.user?.acting && req.method !== 'GET' && req.method !== 'HEAD' && !req.url.startsWith('/api/studio/acting/')) await audit(pool, { actor: req.user.id, area: 'studio', action: 'acting.request', entityType: 'seller', entityId: req.user.acting.sellerId, next: { method: req.method, path: safePath(req.url), status: reply.statusCode }, reason: req.user.acting.reason, ip: req.ip }).catch(() => {}); });
+  // A change by a maker, staff or a payment shows in listings at once: the short shared answers are thrown away after any such write.
+  app.addHook('onResponse', async (req, reply) => { if (req.method !== 'GET' && req.method !== 'HEAD' && reply.statusCode < 400 && /^\/api\/(studio|admin|marketing|support|finance|webhooks|dev\/payments)\b/.test(req.url)) clearMicrocache(); });
   app.addHook('onResponse', async (req, reply) => { log('info', 'request', { requestId: req.id, method: req.method, path: safePath(req.url), status: reply.statusCode, ms: Math.round(reply.elapsedTime), area: req.area, user: req.user?.id }); });
 
   // CSRF: cookie auth + SameSite=Lax, and mutations must come from this host or an allowed origin.

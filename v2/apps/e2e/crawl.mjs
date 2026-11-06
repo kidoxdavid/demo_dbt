@@ -36,7 +36,8 @@ async function crawl(label, ctxOpts, starts, signIn) {
       return !inline && !inSearchPill && (z.h < 40 || z.w < 40) && !(e.tagName === 'INPUT' && ['checkbox', 'radio'].includes(e.type)); }).map(e => `${where(e)} "${(e.getAttribute('aria-label') || e.innerText || '').toString().trim().slice(0, 20)}" ${Math.round(eff(e).w)}x${Math.round(eff(e).h)}`);
       const smallInputs = [...document.querySelectorAll('input:not([type=hidden]):not([type=checkbox]):not([type=radio]), select, textarea')].filter(vis).filter(e => parseFloat(getComputedStyle(e).fontSize) < 16).map(e => `${e.tagName.toLowerCase()}#${e.id || e.getAttribute('aria-label') || ''} ${getComputedStyle(e).fontSize}`);
       const tiny = [...document.querySelectorAll('body *')].filter(e => e.children.length === 0 && (e.textContent || '').trim().length > 2 && vis(e) && parseFloat(getComputedStyle(e).fontSize) < 10).map(e => `"${e.textContent.trim().slice(0, 20)}" ${getComputedStyle(e).fontSize}`);
-      return { smallTargets, smallInputs, tiny, text, len: text.length, links: [...new Set(links)], overflow: document.documentElement.scrollWidth - window.innerWidth, nameless, broken, h1: document.querySelectorAll('h1').length, title: document.title };
+      const exits = document.querySelectorAll('nav.tabbar a, .dhead a, .dnav a, a[href="/"], .backbtn, a.crumbs, .cons-top a, .sd-side a, .cons-menu, nav.cons-nav a').length;
+      return { exits, smallTargets, smallInputs, tiny, text, len: text.length, links: [...new Set(links)], overflow: document.documentElement.scrollWidth - window.innerWidth, nameless, broken, h1: document.querySelectorAll('h1').length, title: document.title };
     });
     if (info.len < 25) log('blank', `only ${info.len} characters on the page`);
     const m = info.text.match(DEAD); if (m) log('dead-end?', `page says "${m[0]}"`);
@@ -46,6 +47,7 @@ async function crawl(label, ctxOpts, starts, signIn) {
     if (mobile && info.smallTargets.length) log('small-tap-target', `${info.smallTargets.length} under 40px, e.g. ${info.smallTargets.slice(0, 3).join('; ')}`);
     if (mobile && info.smallInputs.length) log('small-input-text', `${info.smallInputs.length} fields under 16px (iPhone zooms in), e.g. ${info.smallInputs.slice(0, 2).join('; ')}`);
     if (mobile && info.tiny.length) log('tiny-text', `${info.tiny.length} texts under 10px, e.g. ${info.tiny.slice(0, 3).join('; ')}`);
+    if (info.exits === 0 && !path.startsWith('/_')) log('no-way-out', 'no link to the home page, menu or tab bar, so Back is the only exit');
     if (info.h1 === 0 && info.len >= 25) log('no-heading', 'no h1 on the page');
     for (const l of info.links) if (!seen.has(l) && !queue.includes(l)) queue.push(l);
   }

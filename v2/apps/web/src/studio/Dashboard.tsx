@@ -48,7 +48,7 @@ export function Dashboard() {
   const done = d.checklist.filter(c => c.done).length; const next = d.checklist.find(c => !c.done);
   const change = d.week.changePct === null ? null : `${d.week.changePct >= 0 ? '+' : ''}${d.week.changePct}%`;
   if (!desktop) return <div>
-    <div className="pad sp-top"><Wordmark studio /><span className="av" aria-hidden="true">{(user?.fullName ?? d.firstName).split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()}</span></div>
+    <div className="pad sp-top"><Wordmark studio /><button type="button" className="av" aria-label="Open the menu" aria-haspopup="dialog" onClick={() => window.dispatchEvent(new Event('studio-menu'))}>{(user?.fullName ?? d.firstName).split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()}</button></div>
     <div className="pad" style={{ marginTop: 16 }}><div className="muted" style={{ fontSize: 13 }}>{DAYS[now.getDay()]}</div><h1 className="serif" style={{ fontSize: 30, margin: 0, lineHeight: 'inherit' }}>{greeting(now)}, {d.firstName}</h1>
       <div className="sp-cards"><div className="card task ph"><div className="n serif">{d.tasks.ordersToShip}</div><b>Orders to ship</b><Button size="sm" to="/studio/orders">Open</Button></div>
         <div className="card task ph"><div className="n serif">{d.tasks.messagesToAnswer ?? 0}</div><b>Messages</b><Button size="sm" to="/studio/messages">Reply</Button></div></div>

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useFlag } from '../flags';
+import { DesktopChrome } from '../components/Layout';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useApi } from '../api';
 import { ReviewList, type ReviewData } from '../components/Engagement';
@@ -33,7 +34,7 @@ function ShopReviews({ slug, base }: { slug: string; base: { avg: number; count:
   return <div className="policy">{base && <p style={{ marginBottom: 10 }}><b>★ {base.avg.toFixed(1)}</b> overall from {base.count} ratings{data && data.count !== base.count ? `. ${data.count} written review${data.count === 1 ? '' : 's'} below.` : '.'}</p>}{data ? <ReviewList data={data} more={data.items.length < data.count} onMore={() => setLimit(limit + 10)} /> : <div className="skeleton" style={{ height: 80 }} />}</div>;
 }
 /** A shop page in the shop's chosen look. Matches reference shop-look-{atelier,noir,sage}.png (phone). */
-export function ShopPage() {
+function ShopPageInner() {
   const { slug = '' } = useParams(); const nav = useNavigate(); const desktop = useDesktop(); const { data: s, error } = useApi<Shop>(`/api/shops/${slug}`);
   const first = useApi<{ items: ApiCard[] }>(s ? `/api/products?shop=${slug}&limit=1` : null).data?.items[0];
   const follows = useFlag('shop_follows'); const reviewsOn = useFlag('reviews'); const { followedShops, toggleFollow } = useSession(); const [tab, setTab] = useState<(typeof TABS)[number]>('Shop');
@@ -60,3 +61,6 @@ export function ShopPage() {
   </div>;
 }
 void ProductCard;
+
+/** The maker's store page, with the site header above it on a laptop so there is always a way back to the shop. */
+export function ShopPage() { const desktop = useDesktop(); return <>{desktop && <DesktopChrome />}<ShopPageInner /></>; }

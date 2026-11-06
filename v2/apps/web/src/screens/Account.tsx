@@ -1,3 +1,4 @@
+import { useFlag } from '../flags';
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ApiError, api, useApi } from '../api';
@@ -40,5 +41,7 @@ export function AccountPage() {
       <label className="label" htmlFor="ac-email">Email</label><input id="ac-email" className="field" type="email" autoComplete="email" value={f.email} onChange={e => setF({ ...f, email: e.target.value })} required />
       <label className="label" htmlFor="ac-pw">Password</label><input id="ac-pw" className="field" type="password" autoComplete={mode === 'in' ? 'current-password' : 'new-password'} value={f.password} onChange={e => setF({ ...f, password: e.target.value })} required />
       {err && <div className="err" role="alert">{err}</div>}<Button type="submit" block style={{ marginTop: 18 }} disabled={busy}>{busy ? 'One moment…' : mode === 'in' ? 'Sign in' : 'Create account'}</Button></form>
-    <p className="muted" style={{ fontSize: 14, textAlign: 'center', marginTop: 16 }}>{mode === 'in' ? 'New here?' : 'Already have an account?'} <button style={{ textDecoration: 'underline', color: 'var(--ink)' }} onClick={() => { setMode(mode === 'in' ? 'up' : 'in'); setErr(''); }}>{mode === 'in' ? 'Create an account' : 'Sign in'}</button></p></div></div>;
+    <SignupGate mode={mode}><p className="muted" style={{ fontSize: 14, textAlign: 'center', marginTop: 16 }}>{mode === 'in' ? 'New here?' : 'Already have an account?'} <button style={{ textDecoration: 'underline', color: 'var(--ink)' }} onClick={() => { setMode(mode === 'in' ? 'up' : 'in'); setErr(''); }}>{mode === 'in' ? 'Create an account' : 'Sign in'}</button></p></SignupGate></div></div>;
 }
+/** The "create an account" link, hidden while the admin has closed buyer sign-ups. */
+function SignupGate({ mode, children }: { mode: string; children: React.ReactNode }) { const on = useFlag('buyer_signups'); return mode === 'in' && !on ? null : <>{children}</>; }

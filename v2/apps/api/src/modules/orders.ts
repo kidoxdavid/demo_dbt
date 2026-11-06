@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { pool, q } from '../db.js';
 import { config } from '../config.js';
 import { HttpError } from '../errors.js';
+import { requireFlag } from '../settings.js';
 import { requireUser } from '../guards.js';
 import { cartFor } from '../lib/cartStore.js';
 import { CARRIERS } from '../lib/shipping.js';
@@ -27,6 +28,7 @@ export function registerOrders(app: FastifyInstance) {
   /** Place the order: reserves stock for the hold time, splits per seller, and returns what the payment step needs. Send an Idempotency-Key header to make a retry safe. */
   app.post('/api/checkout', limit, async (req, reply) => {
     const b = z.object({ email: z.string().trim().toLowerCase().email().max(254).optional(), address }).strict().parse(req.body);
+    if (!req.user) await requireFlag('guest_checkout', 'sign_in_required', 401);
     const email = req.user?.email ?? b.email; if (!email) throw new HttpError(422, 'email_required');
     const cartId = await cartFor(req, reply, false); if (!cartId) throw new HttpError(422, 'cart_empty');
     const key = req.headers['idempotency-key']; const out = await checkout({ cartId, userId: req.user?.id ?? null, email, address: cleanAddress(b.address), idempotencyKey: typeof key === 'string' && key.length >= 8 && key.length <= 80 ? `${req.user?.id ?? cartId}:${key}` : undefined, ip: req.ip });

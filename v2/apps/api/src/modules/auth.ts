@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { audit, pool, q, tx } from '../db.js';
 import { HttpError } from '../errors.js';
+import { requireFlag } from '../settings.js';
 import { hashPassword, passwordProblem, sha256, verifyPassword } from '../security.js';
 import { canAccessArea, type Area, type RoleGrant } from '../permissions.js';
 import { cookieName, requireUser } from '../guards.js';
@@ -19,6 +20,7 @@ export function registerAuth(app: FastifyInstance) {
   /** Buyer sign-up (the shop window). Sellers sign up through the studio flow, which also creates their shop. */
   app.post('/api/auth/signup', limit, async (req, reply) => {
     const b = z.object({ email, password: z.string().min(1).max(200), fullName: z.string().trim().min(1).max(120) }).strict().parse(req.body);
+    await requireFlag('buyer_signups', 'signups_closed', 403);
     const problem = passwordProblem(b.password, b.email); if (problem) throw new HttpError(400, `weak_password:${problem}`);
     const hash = await hashPassword(b.password);
     const user = await tx(async c => {

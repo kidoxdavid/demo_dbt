@@ -6,7 +6,7 @@ import { RatingStars } from '../components/Engagement';
 import { Button, Chip } from '../components/ui';
 import { money } from '../format';
 import { useConsole } from './ConsoleShell';
-import { Notes, Page, Rows, SearchBar, Stat, fail, stamp } from './shared';
+import { Notes, Page, Rows, SearchBar, Stat, Switch, fail, stamp } from './shared';
 
 const ROLES = ['admin', 'support', 'finance', 'catalogue', 'marketing'];
 
@@ -90,15 +90,34 @@ function ReportedReviews() {
       {open === r.id && <div style={{ flexBasis: '100%', display: 'flex', gap: 10, flexWrap: 'wrap' }}><input className="field" aria-label="Reason for the decision" placeholder="Reason (kept in the audit log)" value={reason} onChange={e => setReason(e.target.value)} /><Button size="sm" disabled={busy || reason.trim().length < 3} onClick={() => decide(r.id, 'keep')}>Keep the review</Button><Button size="sm" variant="ghost" disabled={busy || reason.trim().length < 3} onClick={() => decide(r.id, 'hide')}>Hide the review</Button></div>}</div>)}</Rows></>;
 }
 
+const PORTAL_TITLE: Record<string, string> = { shop: 'Shop (buyers)', studio: 'Studio (makers)', platform: 'Whole platform' };
+/** Plain words for a setting's value: money as dollars, basis points as a percent. */
+const showValue = (s: any) => s.unit === 'cents' ? money(Number(s.value)) : s.unit === 'bps' ? `${(Number(s.value) / 100).toFixed(2).replace(/\.?0+$/, '')}%` : s.unit === 'days' ? `${s.value} days` : s.unit === 'minutes' ? `${s.value} minutes` : typeof s.value === 'string' ? (s.value || '(empty)') : JSON.stringify(s.value).slice(0, 120);
+const toDraft = (s: any) => s.unit === 'cents' || s.unit === 'bps' ? String(Number(s.value) / 100) : typeof s.value === 'string' || typeof s.value === 'number' ? String(s.value) : JSON.stringify(s.value, null, 1);
+const fromDraft = (s: any, d: string): unknown => {
+  if (s.unit === 'cents' || s.unit === 'bps') { const n = Number(d); if (!Number.isFinite(n)) throw new Error('Enter a number.'); return Math.round(n * 100); }
+  if (s.unit === 'days' || s.unit === 'minutes' || s.unit === 'count') { const n = Number(d); if (!Number.isInteger(n)) throw new Error('Enter a whole number.'); return n; }
+  if (s.unit === 'text' || s.unit === 'choice') return d;
+  try { return JSON.parse(d); } catch { throw new Error('That is not valid. Text needs quotes, lists need [ ].'); }
+};
 export function SettingsPage() {
-  const { data: settings, reload } = useApi<any[]>('/api/admin/settings'); const { data: flags, reload: reloadFlags } = useApi<Record<string, boolean>>('/api/admin/flags'); const [edit, setEdit] = useState<string | null>(null); const [val, setVal] = useState(''); const [reason, setReason] = useState(''); const [err, setErr] = useState(''); const [busy, setBusy] = useState(false);
-  const start = (s: any) => { setEdit(s.key); setVal(JSON.stringify(s.value)); setReason(''); setErr(''); };
-  const save = async () => { setErr(''); setBusy(true); try { let v: unknown; try { v = JSON.parse(val); } catch { setErr('That is not valid. Text needs quotes, for example "atelier".'); return; } await api(`/api/admin/settings/${edit}`, { method: 'PUT', body: { value: v, reason: reason.trim() || undefined } }); setEdit(null); reload(); } catch (e) { setErr(fail(e)); } finally { setBusy(false); } };
-  const flag = async (key: string, enabled: boolean) => { try { await api(`/api/admin/flags/${key}`, { method: 'PUT', body: { enabled } }); reloadFlags(); } catch (e) { setErr(fail(e)); } };
-  return <Page title="Settings" sub="Business rules live here, not in code. Every change is checked and written to the audit log.">
-    <h2 className="serif" style={{ fontSize: 20, marginTop: 20 }}>Rules</h2><Rows>{(settings ?? []).map(s => <div key={s.key} className="tr" style={{ alignItems: 'flex-start' }}><div className="t"><b>{s.key}</b><div>{s.help}</div><code style={{ fontSize: 12, wordBreak: 'break-all' }}>{JSON.stringify(s.value).slice(0, 160)}</code></div><Button size="sm" variant="ghost" onClick={() => start(s)}>Change</Button></div>)}</Rows>
-    {edit && <div className="card sd-card form" style={{ marginTop: 16 }}><b>{edit}</b><label className="label" htmlFor="st-val">New value (JSON)</label><textarea id="st-val" className="field" rows={4} value={val} onChange={e => setVal(e.target.value)} /><label className="label" htmlFor="st-why">Reason</label><input id="st-why" className="field" value={reason} onChange={e => setReason(e.target.value)} />
+  const { data: settings, reload } = useApi<any[]>('/api/admin/settings'); const { data: flags, reload: reloadFlags } = useApi<any[]>('/api/admin/flags');
+  const [edit, setEdit] = useState<any | null>(null); const [val, setVal] = useState(''); const [reason, setReason] = useState(''); const [err, setErr] = useState(''); const [busy, setBusy] = useState(false); const [note, setNote] = useState('');
+  const start = (s: any) => { setEdit(s); setVal(toDraft(s)); setReason(''); setErr(''); setNote(''); };
+  const save = async () => { setErr(''); setBusy(true); try { const v = fromDraft(edit, val); await api(`/api/admin/settings/${edit.key}`, { method: 'PUT', body: { value: v, reason: reason.trim() || undefined } }); setNote(`${edit.label} saved.`); setEdit(null); reload(); } catch (e) { setErr(e instanceof Error && !('status' in e) ? e.message : fail(e)); } finally { setBusy(false); } };
+  const flag = async (key: string, enabled: boolean) => { setErr(''); try { await api(`/api/admin/flags/${key}`, { method: 'PUT', body: { enabled } }); reloadFlags(); } catch (e) { setErr(fail(e)); } };
+  const portals = ['shop', 'studio', 'platform'];
+  const editor = edit && (edit.unit === 'choice' ? <select id="st-val" className="field" value={val} onChange={e => setVal(e.target.value)}>{(edit.schema?.enum ?? []).map((o: string) => <option key={o} value={o}>{o}</option>)}</select>
+    : edit.unit === 'cents' || edit.unit === 'bps' || edit.unit === 'days' || edit.unit === 'minutes' || edit.unit === 'count' ? <input id="st-val" className="field" inputMode="decimal" value={val} onChange={e => setVal(e.target.value)} />
+    : edit.unit === 'text' ? <input id="st-val" className="field" value={val} onChange={e => setVal(e.target.value)} />
+    : <textarea id="st-val" className="field" rows={5} value={val} onChange={e => setVal(e.target.value)} />);
+  const unitLabel = (s: any) => s.unit === 'cents' ? 'Amount in dollars' : s.unit === 'bps' ? 'Percent' : s.unit === 'days' ? 'Number of days' : s.unit === 'minutes' ? 'Number of minutes' : s.unit === 'count' ? 'Number' : s.unit === 'choice' ? 'Choose one' : s.unit === 'text' ? 'Text' : 'Advanced: edit as JSON';
+  return <Page title="Settings and features" sub="Switch features on and off, and set the business rules, for every portal from here. Each change is checked and written to the audit log.">
+    <h2 className="serif" style={{ fontSize: 20, marginTop: 20 }}>Features</h2>
+    {portals.map(p => <div key={p}><h3 style={{ fontSize: 15, margin: '16px 0 6px' }} className="muted">{PORTAL_TITLE[p]}</h3><Rows>{(flags ?? []).filter(f => f.portal === p).map(f => <div key={f.key} className="tr" style={{ alignItems: 'center' }}><div className="t"><b>{f.label}</b><div>{f.help}</div></div><Switch on={f.enabled} label={f.label} onChange={v => flag(f.key, v)} /></div>)}</Rows></div>)}
+    <h2 className="serif" style={{ fontSize: 20, marginTop: 28 }}>Business rules</h2>
+    <Rows>{(settings ?? []).map(s => <div key={s.key} className="tr" style={{ alignItems: 'flex-start' }}><div className="t"><b>{s.label}</b><div>{s.help}</div><div style={{ fontWeight: 600, marginTop: 2 }}>Now: {showValue(s)}</div></div><Button size="sm" variant="ghost" onClick={() => start(s)}>Change</Button></div>)}</Rows>
+    {edit && <div className="card sd-card form" style={{ marginTop: 16 }} role="group" aria-label={`Change ${edit.label}`}><b>{edit.label}</b><label className="label" htmlFor="st-val">{unitLabel(edit)}</label>{editor}<label className="label" htmlFor="st-why">Reason (optional, kept in the audit log)</label><input id="st-why" className="field" value={reason} onChange={e => setReason(e.target.value)} />
       {err && <div className="err" role="alert">{err}</div>}<div style={{ display: 'flex', gap: 10, marginTop: 14 }}><Button disabled={busy} onClick={save}>Save</Button><Button variant="ghost" onClick={() => setEdit(null)}>Cancel</Button></div></div>}
-    <h2 className="serif" style={{ fontSize: 20, marginTop: 24 }}>Features</h2><Rows>{Object.entries(flags ?? {}).map(([k, on]) => <label key={k} className="tr" style={{ cursor: 'pointer' }}><div className="t"><b>{k.replace(/_/g, ' ')}</b></div><input type="checkbox" checked={on} onChange={e => flag(k, e.target.checked)} aria-label={`${k} on`} style={{ width: 20, height: 20, accentColor: 'var(--acc)' }} /></label>)}</Rows>
-    {!edit && err && <div className="err" role="alert">{err}</div>}</Page>;
+    {!edit && err && <div className="err" role="alert">{err}</div>}{!edit && note && <p role="status" className="muted" style={{ marginTop: 12 }}>{note}</p>}</Page>;
 }

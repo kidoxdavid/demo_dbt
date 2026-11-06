@@ -1,3 +1,4 @@
+import { useFlag } from '../flags';
 import type { CSSProperties, ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { Icon, type IconName } from './Icon';
@@ -23,10 +24,10 @@ export function Pills({ items, selected = 0, filter }: { items: string[]; select
 export interface CardData { id: string; title: string; seller: string; price: string; was?: string; chip?: string; art?: { kind: ArtKind; tone: Tone }; photo?: string; href?: string; soldOut?: boolean; heart?: { on: boolean; toggle: () => void } }
 /** Every card is the same size. Only the heart and an optional chip ever sit on the image. */
 export function ProductCard({ p }: { p: CardData }) {
-  const h = p.heart;
+  const h = p.heart; const wish = useFlag('wishlists');
   const body = <>
     <div className="im">{p.photo ? <img src={p.photo} alt="" loading="lazy" /> : p.art ? <ProductArt kind={p.art.kind} tone={p.art.tone} /> : null}
-      {h ? <button type="button" className={`heart${h.on ? ' on' : ''}`} aria-label={h.on ? 'Remove from saved' : 'Save'} aria-pressed={h.on} onClick={e => { e.preventDefault(); e.stopPropagation(); h.toggle(); }}><Icon name="heart" /></button> : <span className="heart" aria-hidden="true"><Icon name="heart" /></span>}
+      {!wish ? null : h ? <button type="button" className={`heart${h.on ? ' on' : ''}`} aria-label={h.on ? 'Remove from saved' : 'Save'} aria-pressed={h.on} onClick={e => { e.preventDefault(); e.stopPropagation(); h.toggle(); }}><Icon name="heart" /></button> : <span className="heart" aria-hidden="true"><Icon name="heart" /></span>}
       {p.chip && <span className="chip tag">{p.chip}</span>}</div>
     <h4>{p.title}</h4><div className="by">{p.seller}</div><div className="pr">{p.soldOut ? <span className="muted">Sold out</span> : <>{p.price}{p.was && <s>{p.was}</s>}</>}</div></>;
   return p.href ? <Link className={`pcard${p.soldOut ? ' soldout' : ''}`} to={p.href}>{body}</Link> : <div className="pcard">{body}</div>;

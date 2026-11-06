@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { pool, q } from '../db.js';
 import { HttpError } from '../errors.js';
+import { requireFlag } from '../settings.js';
 import { cartFor } from '../lib/cartStore.js';
 import { priceCart } from '../lib/cart.js';
 import { DEFAULT_PROFILE, POSTAL, deliveryWindow, shippingCents, type Profile } from '../lib/shipping.js';
@@ -42,6 +43,7 @@ export function registerCart(app: FastifyInstance) {
   });
   /** "This is a gift" and its message, per maker. */
   app.put('/api/cart/gift/:sellerId', async (req, reply) => {
+    await requireFlag('gift_options');
     const { sellerId } = z.object({ sellerId: z.string().uuid() }).parse(req.params); const b = z.object({ isGift: z.boolean(), message: z.string().trim().max(300).default('') }).strict().parse(req.body); const cartId = await cartFor(req, reply, false); if (!cartId) throw new HttpError(404, 'not_found');
     if (!(await q('SELECT 1 FROM cart_items ci JOIN variants v ON v.id=ci.variant_id JOIN products p ON p.id=v.product_id WHERE ci.cart_id=$1 AND p.seller_id=$2', [cartId, sellerId])).rowCount) throw new HttpError(404, 'not_found');
     await q(`INSERT INTO cart_gifts(cart_id,seller_id,is_gift,message) VALUES ($1,$2,$3,$4) ON CONFLICT (cart_id,seller_id) DO UPDATE SET is_gift=EXCLUDED.is_gift, message=EXCLUDED.message`, [cartId, sellerId, b.isGift, b.message || null]); return view(await priceCart(pool, cartId));

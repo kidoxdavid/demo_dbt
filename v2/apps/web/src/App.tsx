@@ -13,6 +13,7 @@ import { MyMessages, MyThread } from './screens/Messages';
 import { ProductPage } from './screens/Product';
 import { ShopPage } from './screens/Shop';
 import { SessionProvider } from './session';
+import { FlagsProvider } from './flags';
 import { ConsoleLayout, ConsoleLogin, ConsoleProvider } from './console/ConsoleShell';
 import { AdminOverview, ModerationPage, PeoplePage, PersonPage, SellerPage, SellersPage, SettingsPage } from './console/Admin';
 import { AdsAdmin, FinanceOverview, HomeEditor, Reports, SellerBalances, Synonyms } from './console/FinanceMarketing';
@@ -55,5 +56,5 @@ function Routed() {
     </Route>
   </Routes>;
 }
-function WithSession() { const { refresh } = useCart(); return <SessionProvider onChange={() => { void refresh(); }}><Routed /></SessionProvider>; }
+function WithSession() { const { refresh } = useCart(); return <SessionProvider onChange={() => { void refresh(); }}><FlagsProvider><Routed /></FlagsProvider></SessionProvider>; }
 export default function App() { return <CartProvider><WithSession /></CartProvider>; }

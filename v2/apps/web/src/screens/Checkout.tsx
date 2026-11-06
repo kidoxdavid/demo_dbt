@@ -1,3 +1,4 @@
+import { useFlag } from '../flags';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ApiError, api, useApi } from '../api';
@@ -14,7 +15,7 @@ interface Placed { orderId: string; token: string; totalCents: number; taxCents:
 
 /** Checkout: address, a clear total with GST, then payment. Stock is held for the reservation time; the order is only paid when the payment provider confirms. */
 export function CheckoutPage() {
-  const { cart, ready, refresh } = useCart(); const { user } = useSession(); const nav = useNavigate();
+  const { cart, ready, refresh } = useCart(); const { user } = useSession(); const nav = useNavigate(); const guestOk = useFlag('guest_checkout');
   const [f, setF] = useState({ email: '', name: user?.fullName ?? '', line1: '', line2: '', city: '', region: 'AB', postal: '', phone: '' }); const [err, setErr] = useState(''); const [busy, setBusy] = useState(false); const [placed, setPlaced] = useState<Placed | null>(null);
   const key = useRef(crypto.randomUUID()); const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value });
   useEffect(() => { if (user && !f.name) setF(x => ({ ...x, name: user.fullName })); }, [user]);          // eslint-disable-line react-hooks/exhaustive-deps
@@ -24,6 +25,7 @@ export function CheckoutPage() {
       setPlaced(await api<Placed>('/api/checkout', { method: 'POST', body, headers: { 'idempotency-key': key.current } })); }
     catch (x) { setErr(x instanceof ApiError ? MESSAGES[x.code] ?? (x.status === 400 ? 'Please check the highlighted details and try again.' : x.status === 422 ? 'Please check your address and try again.' : 'Something went wrong. Try again.') : 'Something went wrong. Try again.'); } finally { setBusy(false); } };
   if (placed) return <Pay placed={placed} onPaid={async () => { await refresh(); nav(`/orders/${placed.token}`, { replace: true }); }} onBack={() => setPlaced(null)} />;
+  if (!guestOk && !user) return <div className="screen pad" style={{ paddingTop: 10 }}><div className="co"><Link to="/basket" className="crumbs">‹ Basket</Link><h1 className="serif" style={{ marginTop: 6 }}>Checkout</h1><p className="muted">Please sign in or create an account to check out.</p><Link to="/account" className="btn" style={{ marginTop: 14 }}>Sign in</Link></div></div>;
   const gst = null as null;
   return <div className="screen pad" style={{ paddingTop: 10 }}><div className="co"><Link to="/basket" className="crumbs">‹ Basket</Link><h1 className="serif" style={{ marginTop: 6 }}>Checkout</h1>
     <form onSubmit={submit} noValidate>

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useFlag } from '../flags';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useApi } from '../api';
 import { ReviewList, type ReviewData } from '../components/Engagement';
@@ -25,7 +26,7 @@ function ShopReviews({ slug, base }: { slug: string; base: { avg: number; count:
 export function ShopPage() {
   const { slug = '' } = useParams(); const nav = useNavigate(); const desktop = useDesktop(); const { data: s, error } = useApi<Shop>(`/api/shops/${slug}`);
   const first = useApi<{ items: ApiCard[] }>(s ? `/api/products?shop=${slug}&limit=1` : null).data?.items[0];
-  const { followedShops, toggleFollow } = useSession(); const [tab, setTab] = useState<(typeof TABS)[number]>('Shop');
+  const follows = useFlag('shop_follows'); const reviewsOn = useFlag('reviews'); const { followedShops, toggleFollow } = useSession(); const [tab, setTab] = useState<(typeof TABS)[number]>('Shop');
   if (error) return <div className="empty"><h2 className="serif">We could not find that shop</h2><Link to="/" className="btn" style={{ marginTop: 16 }}>Back to the shop</Link></div>;
   if (!s) return <div className="skeleton" style={{ height: 150, borderRadius: 0 }} />;
   const kind = (first?.art?.kind ?? 'pottery') as ArtKind; const following = followedShops.has(s.slug);
@@ -34,11 +35,11 @@ export function ShopPage() {
     <div className="shopbanner">{s.banner ? <img src={s.banner} alt="" /> : <ProductArt kind={kind} tone={BANNER_TONE[s.look] ?? 'blush'} />}
       {!desktop && <button className="backbtn" aria-label="Back" onClick={() => (history.length > 1 ? nav(-1) : nav('/'))}><Icon name="chev" /></button>}</div>
     <div className="pad" style={desktop ? { maxWidth: 1000, margin: '0 auto', width: '100%' } : undefined}><div className="shop-id"><div className="row"><div className="shoplogo">{s.logo ? <img src={s.logo} alt="" /> : <ProductArt kind={kind} tone="warm" />}</div>
-      <Button size="sm" onClick={() => toggleFollow(s.slug)} aria-pressed={following}>{following ? 'Following' : 'Follow'}</Button></div>
+      {follows && <Button size="sm" onClick={() => toggleFollow(s.slug)} aria-pressed={following}>{following ? 'Following' : 'Follow'}</Button>}</div>
       <h1 className="serif">{s.name}</h1><div className="sub">{[s.tagline?.replace(/ from .*/, ''), [s.city, s.region].filter(Boolean).join(', ')].filter(Boolean).join(' · ')}</div>
       <div className="chips">{s.verifiedMaker && <Chip>Verified maker</Chip>}{s.rating && <Chip variant="outline">★ {s.rating.avg.toFixed(1)} · {s.rating.count} reviews</Chip>}{s.vacation && <Chip variant="outline">On vacation</Chip>}</div>
       {s.story && <div className="story">{s.story}</div>}
-      <div className="tabs" role="tablist">{TABS.map(t => <button key={t} role="tab" aria-selected={tab === t} className={tab === t ? 'on' : ''} onClick={() => setTab(t)}>{t}</button>)}</div>
+      <div className="tabs" role="tablist">{TABS.filter(t => t !== 'Reviews' || reviewsOn).map(t => <button key={t} role="tab" aria-selected={tab === t} className={tab === t ? 'on' : ''} onClick={() => setTab(t)}>{t}</button>)}</div>
       {tab === 'Shop' && <ProductList base={{ shop: s.slug }} bare />}
       {tab === 'About' && <div className="policy"><p>{s.story ?? s.tagline ?? 'This maker has not written their story yet.'}</p><p className="muted" style={{ marginTop: 10 }}>{s.city ? `Based in ${[s.city, s.region].filter(Boolean).join(', ')}. ` : ''}Orders ship in {s.processing.minDays === s.processing.maxDays ? s.processing.minDays : `${s.processing.minDays}–${s.processing.maxDays}`} days.</p></div>}
       {tab === 'Reviews' && <ShopReviews slug={s.slug} base={s.rating} />}

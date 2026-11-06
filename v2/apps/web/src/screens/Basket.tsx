@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useFlag } from '../flags';
 import { Link } from 'react-router-dom';
 import { ProductArt } from '../art/ProductArt';
 import type { ArtKind, Tone } from '../art/tones';
@@ -25,6 +26,7 @@ function Group({ s }: { s: CartSeller }) {
     {s.lines.map(l => <Line key={l.id} l={l} />)}
     <div className="shiprow"><span><Icon name="truck" /> Shipping</span><span>{s.shippingCents === 0 ? 'Free' : money(s.shippingCents)}</span></div></div>;
 }
+const GiftIfOn = () => (useFlag('gift_options') ? <Gift /> : null);
 /** One "This is a gift" card for the whole basket (as in the mockup); it is saved per maker, so every maker gets the same note. */
 function Gift() {
   const { cart, setGift } = useCart(); const [open, setOpen] = useState(false); const on = cart.sellers.length > 0 && cart.sellers.every(s => s.gift?.isGift); const [msg, setMsg] = useState(cart.sellers[0]?.gift?.message ?? '');
@@ -40,7 +42,7 @@ export function BasketPage() {
   if (ready && cart.count === 0) return <div className={desktop ? 'dpad' : 'screen'}><div className="empty" style={{ paddingTop: 80 }}><h1 className="serif" style={{ fontSize: 30, color: 'var(--ink)' }}>Your basket is empty</h1><p style={{ marginTop: 8 }}>Pieces you add will wait here.</p><Link to="/" className="btn" style={{ marginTop: 18 }}>Browse the shop</Link></div></div>;
   const makers = cart.sellers.length; const total = cart.itemsCents + cart.shippingCents;
   const head = <div className="bk-head"><h1 className="serif" style={{ fontSize: 30 }}>Your basket</h1><p>{makers} maker{makers === 1 ? '' : 's'}{makers > 1 ? ' · ships separately' : ''}</p></div>;
-  const groups = <>{cart.sellers.map(s => <Group key={s.sellerId} s={s} />)}<Gift /></>;
+  const groups = <>{cart.sellers.map(s => <Group key={s.sellerId} s={s} />)}<GiftIfOn /></>;
   const checkout = <Button to={cart.blocked ? undefined : '/checkout'} disabled={cart.blocked} aria-disabled={cart.blocked}>{cart.blocked ? 'Fix the items above' : `Checkout · ${money(total)}`}</Button>;
   if (desktop) return <div className="dpad"><div className="bk-desktop"><div>{head}{groups}</div><div className="card sum"><b>Order summary</b><div className="r"><span>Subtotal · {cart.count} item{cart.count === 1 ? '' : 's'}</span><b>{money(cart.itemsCents)}</b></div><div className="r"><span>Shipping</span><b>{money(cart.shippingCents)}</b></div><div className="r"><span>GST</span><span>Added at checkout</span></div>{checkout}</div></div></div>;
   return <div className="screen" style={{ paddingBottom: 190 }}><div className="pad" style={{ paddingTop: 4 }}>{head}{groups}</div>

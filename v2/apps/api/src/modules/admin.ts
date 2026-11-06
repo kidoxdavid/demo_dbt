@@ -4,7 +4,7 @@ import { audit, q, tx } from '../db.js';
 import { HttpError } from '../errors.js';
 import { requirePerm } from '../guards.js';
 import { isSellerRole, SELLER_ROLES, STAFF_ROLES, type Role } from '../permissions.js';
-import { FLAGS, SETTINGS, allFlags, allSettings, isSettingKey } from '../settings.js';
+import { FLAGS, FLAG_META, type FlagKey, SETTINGS, allFlags, allSettings, isSettingKey } from '../settings.js';
 
 const reason = z.string().trim().min(3).max(500).optional();
 
@@ -50,7 +50,7 @@ export function registerAdmin(app: FastifyInstance) {
 
   // ---- Settings (validated by schema, audited with old and new value)
   app.get('/api/admin/settings', async (req) => { requirePerm(req, 'settings.write'); const all = await allSettings();
-    return Object.entries(SETTINGS).map(([key, s]) => ({ key, value: all[key], default: s.default, help: s.help, public: s.public })); });
+    return Object.entries(SETTINGS).map(([key, s]) => ({ key, value: all[key], default: s.default, help: s.help, public: s.public, unit: (s as any).unit ?? null, label: (s as any).label ?? key.replace(/_/g, ' '), schema: z.toJSONSchema(s.schema, { io: 'input' }) })); });
   app.put('/api/admin/settings/:key', async (req) => {
     const u = requirePerm(req, 'settings.write'); const { key } = z.object({ key: z.string().max(60) }).parse(req.params); if (!isSettingKey(key)) throw new HttpError(404, 'unknown_setting');
     const b = z.object({ value: z.unknown(), reason }).strict().parse(req.body); const parsed = SETTINGS[key].schema.safeParse(b.value); if (!parsed.success) throw new HttpError(400, 'invalid_value', parsed.error.issues.map(i => i.message));
@@ -62,12 +62,12 @@ export function registerAdmin(app: FastifyInstance) {
   });
 
   // ---- Feature flags
-  app.get('/api/admin/flags', async (req) => { requirePerm(req, 'flags.write'); return allFlags(); });
+  app.get('/api/admin/flags', async (req) => { requirePerm(req, 'flags.write'); const on = await allFlags(); return FLAGS.map(key => ({ key, enabled: on[key], default: FLAG_META[key].default, portal: FLAG_META[key].portal, label: FLAG_META[key].label, help: FLAG_META[key].help })); });
   app.put('/api/admin/flags/:key', async (req) => {
     const u = requirePerm(req, 'flags.write'); const { key } = z.object({ key: z.string().max(60) }).parse(req.params); if (!(FLAGS as readonly string[]).includes(key)) throw new HttpError(404, 'unknown_flag');
     const b = z.object({ enabled: z.boolean(), reason }).strict().parse(req.body);
     return tx(async c => {
-      const prev = (await allFlags())[key];
+      const prev = (await allFlags())[key as FlagKey];
       await c.query(`INSERT INTO feature_flags(key,enabled,updated_by) VALUES ($1,$2,$3) ON CONFLICT (key) DO UPDATE SET enabled=EXCLUDED.enabled, updated_by=EXCLUDED.updated_by, updated_at=now()`, [key, b.enabled, u.id]);
       await audit(c, { actor: u.id, area: 'admin', action: 'flag.update', entityType: 'flag', entityId: key, prev: { enabled: prev }, next: { enabled: b.enabled }, reason: b.reason, ip: req.ip }); return { key, enabled: b.enabled };
     });

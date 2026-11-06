@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { audit, pool, q, tx, type Client } from '../db.js';
 import { config } from '../config.js';
 import { HttpError } from '../errors.js';
+import { requireFlag } from '../settings.js';
 import { requireUser } from '../guards.js';
 import { canForSeller, isSellerRole, type SellerPermission, type SessionUser } from '../permissions.js';
 import { hashPassword, passwordProblem } from '../security.js';
@@ -38,6 +39,7 @@ export function registerStudio(app: FastifyInstance) {
   /** Seller sign-up: the person, the seller, the draft shop and the studio session in one step. "What do you sell?" pre-fills everything else. */
   app.post('/api/studio/signup', authLimit, async (req, reply) => {
     const b = z.object({ email, password: z.string().min(1).max(200), fullName: z.string().trim().min(1).max(120), categories: z.array(z.string().regex(/^[a-z0-9-]+$/)).min(1).max(8), shopName: z.string().trim().min(1).max(80).optional() }).strict().parse(req.body);
+    await requireFlag('maker_signups', 'signups_closed', 403);
     const problem = passwordProblem(b.password, b.email); if (problem) throw new HttpError(400, `weak_password:${problem}`); const hash = await hashPassword(b.password);
     const out = await tx(async c => {
       const cats = (await c.query(`SELECT id FROM categories WHERE slug = ANY($1) AND status='active'`, [b.categories])).rows; if (cats.length !== new Set(b.categories).size) throw new HttpError(422, 'unknown_category');

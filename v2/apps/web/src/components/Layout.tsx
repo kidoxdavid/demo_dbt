@@ -13,7 +13,7 @@ import { useSession } from '../session';
 export function SearchBox({ large, initial = '' }: { large?: boolean; initial?: string }) {
   const nav = useNavigate(); const [q, setQ] = useState(initial);
   const submit = (e: FormEvent) => { e.preventDefault(); const t = q.trim(); if (t) nav(`/search?q=${encodeURIComponent(t)}`); };
-  return <form className={`card search${large ? ' lg' : ''}`} role="search" onSubmit={submit}><span className="muted"><Icon name="search" /></span><input aria-label="Search" value={q} onChange={e => setQ(e.target.value)} placeholder={large ? 'Search for pottery, art, perfume, hair, toys…' : 'Search pottery, art, perfume…'} /></form>;
+  return <form className={`card search${large ? ' lg' : ''}`} role="search" onSubmit={submit} onClick={e => { if (e.target === e.currentTarget) (e.currentTarget.querySelector('input') as HTMLInputElement | null)?.focus(); }}><span className="muted"><Icon name="search" /></span><input aria-label="Search" value={q} onChange={e => setQ(e.target.value)} placeholder={large ? 'Search for pottery, art, perfume, hair, toys…' : 'Search pottery, art, perfume…'} /></form>;
 }
 export function BasketLink() { const { cart } = useCart(); return <Link to="/basket" className="icon-link" aria-label={`Basket, ${cart.count} items`}><Icon name="bag" />{cart.count > 0 && <span className="badge">{cart.count}</span>}</Link>; }
 /** The bell only exists for signed-in people; the number is what is waiting in their inbox. */
@@ -31,10 +31,10 @@ const TAB_FOR = (p: string) => (p === '/' ? 0 : p.startsWith('/c/') || p.startsW
 
 /** Desktop: promo bar, header and category nav. Phone: the glass tab bar (hidden on pages with their own bottom bar). */
 export function BuyerLayout() {
-  const desktop = useDesktop(); const { pathname } = useLocation(); const tab = TAB_FOR(pathname);
+  const desktop = useDesktop(); const { pathname } = useLocation(); const tab = TAB_FOR(pathname); const { cart } = useCart();
   return <>
     {desktop && <DesktopChrome />}
     <div role="main" className={desktop ? 'dmain' : undefined}><Outlet /><LegalFooter /></div>
-    {!desktop && tab !== null && <TabBar items={BUYER_TABS} active={tab} />}
+    {!desktop && tab !== null && <TabBar items={BUYER_TABS.map(t => (t.label === 'Basket' ? { ...t, badge: cart.count } : t))} active={tab} />}
   </>;
 }

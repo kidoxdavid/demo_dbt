@@ -6,7 +6,7 @@ import type { ArtKind, Tone } from './art/tones';
 import { moneyShort } from './format';
 
 export interface User { id: string; email: string; fullName: string }
-export interface ApiCard { id: string; title: string; seller: { name: string; slug: string }; priceCents: number; wasCents: number | null; chip: string | null; photo: string | null; art: { kind: string; tone: string } | null; available: boolean }
+export interface ApiCard { quickAdd?: string | null; id: string; title: string; seller: { name: string; slug: string }; priceCents: number; wasCents: number | null; chip: string | null; photo: string | null; art: { kind: string; tone: string } | null; available: boolean }
 interface Ctx {
   user: User | null; ready: boolean; savedProducts: Set<string>; followedShops: Set<string>; toast: string | null;
   signIn: (email: string, password: string) => Promise<void>; signUp: (email: string, password: string, fullName: string) => Promise<void>; signOut: () => Promise<void>;
@@ -35,7 +35,7 @@ export function SessionProvider({ children, onChange }: { children: ReactNode; o
       try { await api(`/api/me/saved/${id}`, { method: on ? 'DELETE' : 'PUT' }); } catch { setProducts(products); say('Could not save. Try again.'); } },
     toggleFollow: async slug => { if (!user) return needSignIn('Sign in to follow shops'); const on = shops.has(slug); const next = new Set(shops); on ? next.delete(slug) : next.add(slug); setShops(next);
       try { await api(`/api/shops/${slug}/follow`, { method: on ? 'DELETE' : 'PUT' }); } catch { setShops(shops); say('Could not follow. Try again.'); } },
-    card: (c, tone) => ({ id: c.id, title: c.title, seller: c.seller.name, price: moneyShort(c.priceCents), was: c.wasCents ? moneyShort(c.wasCents) : undefined, chip: c.chip ?? undefined, photo: c.photo ?? undefined, soldOut: !c.available,
+    card: (c, tone) => ({ id: c.id, title: c.title, seller: c.seller.name, price: moneyShort(c.priceCents), was: c.wasCents ? moneyShort(c.wasCents) : undefined, chip: c.chip ?? undefined, photo: c.photo ?? undefined, soldOut: !c.available, quickAdd: c.quickAdd ?? undefined,
       art: c.art ? { kind: c.art.kind as ArtKind, tone: (tone ?? c.art.tone) as Tone } : undefined, href: `/p/${c.id}`, heart: { on: products.has(c.id), toggle: () => { void v.toggleSaved(c.id); } } }) }), [user, ready, products, shops, toast, say, load, needSignIn, onChange]);
   return <S.Provider value={v}>{children}{toast && <div className="toast" role="status">{toast}</div>}</S.Provider>;
 }

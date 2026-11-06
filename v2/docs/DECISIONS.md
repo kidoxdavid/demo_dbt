@@ -100,3 +100,12 @@
 - **Email wording wraps the facts, never replaces them.** Subject, an opening line and a closing line only; amounts, dates and links are generated, and a subject cannot carry a line break.
 - **Pages are plain text, hidden until published**, and rendered as text (never HTML). Legal wording is the owner's; none is supplied.
 - **A portal's look is applied to the page root**, the same place dark mode lives, never to a container.
+
+## Phase 13 decisions
+- **Approved mockups win over my taste, so bigger touch areas are invisible.** Where a 44 px box would change an approved screen, the control keeps its look and gets an invisible hit area; where nothing approved is affected (staff consoles, new pages) the control is simply 44 px.
+- **Fields are 16 px on phones everywhere.** iPhones zoom into smaller fields; this changes a few pixels on approved screens and stays inside the 1.5% limit. References were not regenerated.
+- **One-tap add only where it is unambiguous:** a single variant, in stock, nothing to fill in, maker not on a break. Everything else opens the piece.
+- **The basket shows the real total, GST included.** A price that changes at the last step is the surest way to lose a buyer.
+- **No dead ends:** a page that said "coming soon" is either built from real data or its link is removed. Gift guides are live searches, so they can never show something that is not for sale.
+- **Phone consoles use a menu drawer, not a squeezed sidebar.** Same pages, same URLs, a 60 px top bar and a drawer.
+- **The studio dashboard uses the app clock** (`EAZY_FAKE_NOW` in demos and tests), so numbers do not change at midnight under a visual test.

@@ -53,3 +53,23 @@
 /* staff consoles */
 .cons-nav{display:flex;flex-direction:column;gap:4px}
 @media (max-width:899px){.cons .sd-side{position:static;width:auto;height:auto;flex-direction:row;flex-wrap:wrap;align-items:center;padding:12px 14px;border-right:0;border-bottom:1px solid var(--line)}.cons .sd-side>a:first-child{padding:0 8px 0 0}.cons-nav{flex-direction:row;overflow-x:auto;flex:1}.cons-nav .sd-nav{padding:8px 12px;white-space:nowrap}.cons .sd-shopcard{margin-top:0;width:100%}.cons .sd-main{padding:18px 14px}}
+
+/* ---- phones: staff consoles and the studio ---- */
+.cons-top{position:sticky;top:0;z-index:40;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 14px;min-height:60px;background:var(--surf);border-bottom:1px solid var(--line)}
+.cons-top>a{display:flex;align-items:center;min-height:44px}
+.cons-menu{min-height:44px;min-width:44px;padding:0 16px;border-radius:999px;border:1px solid var(--line);background:var(--bg);font-weight:600;font-size:15px}
+.cons-scrim{position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.45)}
+.cons-drawer{position:fixed;z-index:70;top:0;right:0;bottom:0;width:min(88vw,340px);overflow-y:auto;background:var(--surf);padding:16px;box-shadow:-8px 0 24px rgba(0,0,0,.18);overscroll-behavior:contain}
+.cons-drawer .cons-nav{flex-direction:column}
+.cons-drawer .sd-nav,.cons-phone .cons-portals .sd-nav{min-height:48px;display:flex;align-items:center;gap:10px;padding:0 12px;font-size:16px}
+@media (max-width:899px){
+  .cons input:not([type=checkbox]):not([type=radio]),.cons select,.cons textarea,.sd input:not([type=checkbox]):not([type=radio]),.sd select,.sd textarea,.sd-phone-pad input:not([type=checkbox]):not([type=radio]),.sd-phone-pad select,.sd-phone-pad textarea,.field{font-size:16px}
+  .cons .field,.cons select.field{min-height:44px}
+  .cons .btn,.cons button.btn,.cons .btn.sm{min-height:44px;display:inline-flex;align-items:center;justify-content:center}
+  .cons .chip,.cons .badge{font-size:12px}
+  .cons .tr{min-height:48px}
+  .cons .tr button{min-height:44px}
+  .cons .crumbs{display:inline-flex;align-items:center;min-height:44px}
+  .sd-main,.cons .sd-main{padding-bottom:40px}
+}
+@media (max-width:899px){.sd-phone-pad{padding-bottom:104px}}

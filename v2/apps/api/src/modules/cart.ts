@@ -10,7 +10,7 @@ import { now as clockNow } from '../lib/clock.js';
 import { VISIBLE } from '../lib/cards.js';
 
 const view = (cart: Awaited<ReturnType<typeof priceCart>>) => ({
-  count: cart.count, itemsCents: cart.itemsCents, shippingCents: cart.shippingCents, totalCents: cart.itemsCents + cart.shippingCents, taxNote: 'GST is added at checkout', blocked: cart.blocked,
+  count: cart.count, itemsCents: cart.itemsCents, shippingCents: cart.shippingCents, taxCents: cart.taxCents, totalCents: cart.totalCents, taxNote: 'GST is included in the total below', blocked: cart.blocked,
   sellers: cart.groups.map(g => ({ sellerId: g.sellerId, shop: g.shop, itemsCents: g.itemsCents, shippingCents: g.shippingCents, freeShipping: g.freeShipping, eta: g.eta, gift: g.gift,
     lines: g.lines.map(l => ({ id: l.itemId, variantId: l.variantId, productId: l.productId, title: l.title, variant: l.variantLabel, quantity: l.quantity, unitCents: l.unitCents, compareAtCents: l.compareAtCents, lineCents: l.lineCents, image: l.image, art: l.art, issue: l.issue, available: l.available, oneOfAKind: l.oneOfAKind, personalisation: l.personalisation })) })) });
 

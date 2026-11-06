@@ -40,11 +40,11 @@ function Gift() {
 export function BasketPage() {
   const { cart, ready } = useCart(); const desktop = useDesktop(); const { user } = useSession(); void user;
   if (ready && cart.count === 0) return <div className={desktop ? 'dpad' : 'screen'}><div className="empty" style={{ paddingTop: 80 }}><h1 className="serif" style={{ fontSize: 30, color: 'var(--ink)' }}>Your basket is empty</h1><p style={{ marginTop: 8 }}>Pieces you add will wait here.</p><Link to="/" className="btn" style={{ marginTop: 18 }}>Browse the shop</Link></div></div>;
-  const makers = cart.sellers.length; const total = cart.itemsCents + cart.shippingCents;
+  const makers = cart.sellers.length; const total = cart.totalCents;
   const head = <div className="bk-head"><h1 className="serif" style={{ fontSize: 30 }}>Your basket</h1><p>{makers} maker{makers === 1 ? '' : 's'}{makers > 1 ? ' · ships separately' : ''}</p></div>;
   const groups = <>{cart.sellers.map(s => <Group key={s.sellerId} s={s} />)}<GiftIfOn /></>;
-  const checkout = <Button to={cart.blocked ? undefined : '/checkout'} disabled={cart.blocked} aria-disabled={cart.blocked}>{cart.blocked ? 'Fix the items above' : `Checkout · ${money(total)}`}</Button>;
-  if (desktop) return <div className="dpad"><div className="bk-desktop"><div>{head}{groups}</div><div className="card sum"><b>Order summary</b><div className="r"><span>Subtotal · {cart.count} item{cart.count === 1 ? '' : 's'}</span><b>{money(cart.itemsCents)}</b></div><div className="r"><span>Shipping</span><b>{money(cart.shippingCents)}</b></div><div className="r"><span>GST</span><span>Added at checkout</span></div>{checkout}</div></div></div>;
+  const checkout = <Button to={cart.blocked ? undefined : '/checkout'} disabled={cart.blocked} aria-disabled={cart.blocked}>{cart.blocked ? 'Fix the items above' : `Checkout · ${money(total)} incl. GST`}</Button>;
+  if (desktop) return <div className="dpad"><div className="bk-desktop"><div>{head}{groups}</div><div className="card sum"><b>Order summary</b><div className="r"><span>Subtotal · {cart.count} item{cart.count === 1 ? '' : 's'}</span><b>{money(cart.itemsCents)}</b></div><div className="r"><span>Shipping</span><b>{money(cart.shippingCents)}</b></div><div className="r"><span>GST</span><b>{money(cart.taxCents)}</b></div>{checkout}</div></div></div>;
   return <div className="screen" style={{ paddingBottom: 190 }}><div className="pad" style={{ paddingTop: 4 }}>{head}{groups}</div>
     <div className="summarybar"><div className="r"><span>Subtotal · {cart.count} item{cart.count === 1 ? '' : 's'}</span><b>{money(cart.itemsCents)}</b></div><div className="r"><span>Shipping</span><b>{money(cart.shippingCents)}</b></div>{checkout}</div></div>;
 }

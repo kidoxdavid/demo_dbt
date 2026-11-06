@@ -30,6 +30,9 @@ async function balances(sellerId?: string, c: { query: (sql: string, p?: unknown
   return { holdDays: hold, rows: rows.map(r => ({ ...r, availableCents: Math.max(0, Math.min(r.owedCents, r.eligibleCents - r.paidOutCents)), pendingCents: r.owedCents - Math.max(0, Math.min(r.owedCents, r.eligibleCents - r.paidOutCents)) })) };
 }
 
+/** One maker's balances, for their own Payouts page. */
+export const balancesFor = (sellerId: string) => balances(sellerId);
+
 export function registerConsoles(app: FastifyInstance) {
   // =========================================================== ADMIN
   app.get('/api/admin/overview', async req => {

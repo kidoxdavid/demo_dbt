@@ -38,7 +38,7 @@
 .pdp-hero{height:360px;position:relative;overflow:hidden}.pdp-hero .track{display:flex;height:100%;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none}.pdp-hero .track::-webkit-scrollbar{display:none}
 .pdp-hero .slide{flex:none;width:100%;height:100%;scroll-snap-align:center}.pdp-hero svg,.pdp-hero img,.pdp-hero video{width:100%;height:100%;display:block;object-fit:cover}
 .dots{position:absolute;left:0;right:0;bottom:12px;display:flex;justify-content:center;gap:6px}.dots i{width:6px;height:6px;border-radius:3px;background:var(--ink);opacity:.3}.dots i.on{width:18px;opacity:1}
-.backbtn{position:absolute;top:12px;left:14px;width:36px;height:36px;border-radius:50%;background:var(--heart-bg);color:var(--heart-ink);display:grid;place-items:center;z-index:3}.backbtn .ico{transform:rotate(180deg)}
+.backbtn{position:absolute;top:10px;left:12px;width:44px;height:44px;border-radius:50%;background:var(--heart-bg);color:var(--heart-ink);display:grid;place-items:center;z-index:3}.backbtn .ico{transform:rotate(180deg)}
 .pdp-body{margin-top:16px}.pdp-body h1{font-size:27px;line-height:1.1;margin-top:10px}
 .byline{display:flex;align-items:center;gap:8px;margin-top:8px;font-size:13px}.byline .lg{width:22px;height:22px;border-radius:50%;overflow:hidden;display:inline-block;flex:none}.byline .lg svg,.byline .lg img{width:100%;height:100%;display:block;object-fit:cover}
 .price{font-size:24px;font-weight:600;margin-top:12px}.price small{font-size:13px;font-weight:400;color:var(--mut)}.price s{font-size:15px;font-weight:400;color:var(--mut);margin-left:8px}

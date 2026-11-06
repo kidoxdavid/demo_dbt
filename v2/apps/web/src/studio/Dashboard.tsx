@@ -49,7 +49,7 @@ export function Dashboard() {
   const change = d.week.changePct === null ? null : `${d.week.changePct >= 0 ? '+' : ''}${d.week.changePct}%`;
   if (!desktop) return <div>
     <div className="pad sp-top"><Wordmark studio /><span className="av" aria-hidden="true">{(user?.fullName ?? d.firstName).split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()}</span></div>
-    <div className="pad" style={{ marginTop: 16 }}><div className="muted" style={{ fontSize: 13 }}>{DAYS[now.getDay()]}</div><div className="serif" style={{ fontSize: 30 }}>{greeting(now)}, {d.firstName}</div>
+    <div className="pad" style={{ marginTop: 16 }}><div className="muted" style={{ fontSize: 13 }}>{DAYS[now.getDay()]}</div><h1 className="serif" style={{ fontSize: 30, margin: 0, lineHeight: 'inherit' }}>{greeting(now)}, {d.firstName}</h1>
       <div className="sp-cards"><div className="card task ph"><div className="n serif">{d.tasks.ordersToShip}</div><b>Orders to ship</b><Button size="sm" to="/studio/orders">Open</Button></div>
         <div className="card task ph"><div className="n serif">{d.tasks.messagesToAnswer ?? 0}</div><b>Messages</b><Button size="sm" to="/studio/messages">Reply</Button></div></div>
       <div className="card sp-week"><div className="muted" style={{ fontSize: 12 }}>This week</div><div className="big"><div className="serif">{sales(d.week.salesCents)}</div>{change && <b className="up" style={{ fontSize: 13 }}>{change}</b>}</div><Spark daily={d.week.daily} h={56} vb={70} /></div>

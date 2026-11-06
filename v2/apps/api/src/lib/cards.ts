@@ -10,12 +10,13 @@ export const CARD_FROM = `FROM products p JOIN shops s ON s.id=p.shop_id JOIN se
 export const CARD_COLUMNS = `p.id, p.title, p.chip_override, p.handmade, p.one_of_a_kind, p.made_to_order, p.art_kind, p.art_tone, p.created_at,
   s.name AS shop_name, s.slug AS shop_slug, s.rating_avg, s.rating_count, v.price_cents, v.compare_at_cents,
   (NOT s.vacation_mode AND EXISTS (SELECT 1 FROM variants x WHERE x.product_id=p.id AND x.status='active' AND (NOT x.tracks_stock OR x.stock_on_hand - x.stock_reserved > 0))) AS available,
+  (SELECT x.id FROM variants x WHERE x.product_id=p.id AND x.status='active' AND (NOT x.tracks_stock OR x.stock_on_hand - x.stock_reserved > 0) AND p.personalisation = '[]'::jsonb AND NOT s.vacation_mode AND (SELECT count(*) FROM variants y WHERE y.product_id=p.id AND y.status='active') = 1 LIMIT 1) AS quick_variant,
   (SELECT pm.media_id FROM product_media pm JOIN media m ON m.id=pm.media_id AND m.kind='image' WHERE pm.product_id=p.id ORDER BY pm.position LIMIT 1) AS photo_id,
   (SELECT m.blur FROM product_media pm JOIN media m ON m.id=pm.media_id AND m.kind='image' WHERE pm.product_id=p.id ORDER BY pm.position LIMIT 1) AS photo_blur`;
 
-export interface Card { id: string; title: string; seller: { name: string; slug: string }; priceCents: number; wasCents: number | null; chip: string | null; photo: string | null; photoBlur: string | null; art: { kind: string; tone: string } | null; oneOfAKind: boolean; madeToOrder: boolean; available: boolean; rating: { avg: number; count: number } | null }
+export interface Card { id: string; title: string; seller: { name: string; slug: string }; priceCents: number; wasCents: number | null; chip: string | null; photo: string | null; photoBlur: string | null; art: { kind: string; tone: string } | null; oneOfAKind: boolean; madeToOrder: boolean; available: boolean; /** the one variant a single tap may add (single-variant, in stock, nothing to fill in), else null */ quickAdd: string | null; rating: { avg: number; count: number } | null }
 export function toCard(r: any): Card {
   const chip = r.chip_override ?? (r.one_of_a_kind ? 'One of a kind' : r.handmade ? 'Handmade' : null);
   return { id: r.id, title: r.title, seller: { name: r.shop_name, slug: r.shop_slug }, priceCents: r.price_cents, wasCents: r.compare_at_cents ?? null, chip, photo: mediaUrl(r.photo_id, 'w640'), photoBlur: r.photo_blur ?? null,
-    art: r.art_kind ? { kind: r.art_kind, tone: r.art_tone ?? 'warm' } : null, oneOfAKind: r.one_of_a_kind, madeToOrder: r.made_to_order, available: r.available, rating: r.rating_count > 0 ? { avg: Number(r.rating_avg), count: r.rating_count } : null };
+    art: r.art_kind ? { kind: r.art_kind, tone: r.art_tone ?? 'warm' } : null, oneOfAKind: r.one_of_a_kind, madeToOrder: r.made_to_order, available: r.available, quickAdd: r.quick_variant ?? null, rating: r.rating_count > 0 ? { avg: Number(r.rating_avg), count: r.rating_count } : null };
 }

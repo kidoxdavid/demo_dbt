@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { pool, q } from '../db.js';
 import { sellerCtx } from './studio.js';
+import { now as clockNow } from '../lib/clock.js';
 
 /** Words that point at a category even when its name does not contain them ("vase" means pottery). */
 const HINTS: Record<string, string[]> = { 'pottery-ceramics': ['mug', 'vase', 'bowl', 'plate', 'cup', 'teapot', 'stoneware', 'glaze', 'dish', 'jug', 'tumbler', 'planter', 'porcelain'], 'candles-home-fragrance': ['candle', 'wax', 'diffuser', 'incense', 'melt', 'soy'], 'art-prints': ['print', 'painting', 'poster', 'illustration', 'drawing', 'canvas', 'giclee'], jewellery: ['ring', 'necklace', 'earring', 'bracelet', 'pendant', 'brooch'],
@@ -10,14 +11,14 @@ const NOT_UNPAID = `so.status NOT IN ('awaiting_payment','cancelled')`;
 /** The studio home: what needs doing today, how the week is going, how far set-up has got. Numbers come straight from orders, stock and page views. */
 export function registerStudioDashboard(app: FastifyInstance) {
   app.get('/api/studio/dashboard', async (req) => {
-    const s = await sellerCtx(req, 'seller.products.read'); const sid = s.sellerId;
+    const s = await sellerCtx(req, 'seller.products.read'); const sid = s.sellerId; const at = clockNow();      // the app's clock, so demos and tests can pin the date
     const [toShip, low, week, prev, daily, visits, recent, shop, profile] = await Promise.all([
       q(`SELECT count(*)::int n, min(ship_by) AS earliest FROM seller_orders WHERE seller_id=$1 AND status IN ('new','accepted')`, [sid]),
       q(`SELECT p.id, p.title, v.options, (v.stock_on_hand - v.stock_reserved)::int AS left FROM products p JOIN variants v ON v.product_id=p.id AND v.status='active' AND v.tracks_stock WHERE p.seller_id=$1 AND p.status='published' AND v.stock_on_hand - v.stock_reserved BETWEEN 1 AND 2 ORDER BY 4, p.title LIMIT 3`, [sid]),
-      q(`SELECT coalesce(sum(items_cents + shipping_cents),0)::int AS sales, count(*)::int AS orders FROM seller_orders so WHERE seller_id=$1 AND ${NOT_UNPAID} AND created_at >= now() - interval '7 days'`, [sid]),
-      q(`SELECT coalesce(sum(items_cents + shipping_cents),0)::int AS sales FROM seller_orders so WHERE seller_id=$1 AND ${NOT_UNPAID} AND created_at >= now() - interval '14 days' AND created_at < now() - interval '7 days'`, [sid]),
-      q(`SELECT d::date AS day, coalesce(sum(so.items_cents + so.shipping_cents),0)::int AS cents FROM generate_series(current_date - 6, current_date, '1 day') d LEFT JOIN seller_orders so ON so.seller_id=$1 AND ${NOT_UNPAID} AND so.created_at::date = d::date GROUP BY d ORDER BY d`, [sid]),
-      q(`SELECT coalesce(sum(views),0)::int AS n FROM shop_views WHERE shop_id=$1 AND day >= current_date - 6`, [s.shopId]),
+      q(`SELECT coalesce(sum(items_cents + shipping_cents),0)::int AS sales, count(*)::int AS orders FROM seller_orders so WHERE seller_id=$1 AND ${NOT_UNPAID} AND created_at >= $2::timestamptz - interval '7 days'`, [sid, at]),
+      q(`SELECT coalesce(sum(items_cents + shipping_cents),0)::int AS sales FROM seller_orders so WHERE seller_id=$1 AND ${NOT_UNPAID} AND created_at >= $2::timestamptz - interval '14 days' AND created_at < $2::timestamptz - interval '7 days'`, [sid, at]),
+      q(`SELECT d::date AS day, coalesce(sum(so.items_cents + so.shipping_cents),0)::int AS cents FROM generate_series($2::timestamptz::date - 6, $2::timestamptz::date, '1 day') d LEFT JOIN seller_orders so ON so.seller_id=$1 AND ${NOT_UNPAID} AND so.created_at::date = d::date GROUP BY d ORDER BY d`, [sid, at]),
+      q(`SELECT coalesce(sum(views),0)::int AS n FROM shop_views WHERE shop_id=$1 AND day >= $2::timestamptz::date - 6`, [s.shopId, at]),
       q(`SELECT so.id, so.status, (so.items_cents + so.shipping_cents) AS sales_cents, so.ship_by, so.created_at, o.number, o.buyer_name, o.ship_to->>'city' AS city, (SELECT l.title || CASE WHEN count(*) OVER() > 1 THEN '' ELSE '' END FROM order_lines l WHERE l.seller_order_id=so.id ORDER BY l.id LIMIT 1) AS title,
           (SELECT coalesce(sum(quantity),0)::int FROM order_lines l WHERE l.seller_order_id=so.id) AS qty, (SELECT l.variant_label FROM order_lines l WHERE l.seller_order_id=so.id ORDER BY l.id LIMIT 1) AS variant, (SELECT l.art_kind FROM order_lines l WHERE l.seller_order_id=so.id ORDER BY l.id LIMIT 1) AS art_kind, (SELECT l.art_tone FROM order_lines l WHERE l.seller_order_id=so.id ORDER BY l.id LIMIT 1) AS art_tone,
           (SELECT l.image_media_id FROM order_lines l WHERE l.seller_order_id=so.id ORDER BY l.id LIMIT 1) AS image

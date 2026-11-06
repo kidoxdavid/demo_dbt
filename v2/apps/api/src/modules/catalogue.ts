@@ -127,6 +127,13 @@ export function registerCatalogue(app: FastifyInstance) {
     };
   });
 
+  /** Every live shop with something for sale, for the "Meet the makers" page. */
+  app.get('/api/makers', async (req) => {
+    const { limit, offset } = z.object({ limit: z.coerce.number().int().min(1).max(60).default(48), offset: z.coerce.number().int().min(0).max(5000).default(0) }).parse(req.query);
+    const rows = (await pool.query(`SELECT s.name, s.slug, s.tagline, s.city, s.region, s.logo_media_id, s.rating_avg, s.rating_count, s.look, (SELECT count(*) FROM products p WHERE p.shop_id=s.id AND p.status='published' AND p.moderation_status<>'removed')::int AS product_count
+      FROM shops s JOIN sellers se ON se.id=s.seller_id WHERE s.status='live' AND se.status='active' AND EXISTS (SELECT 1 FROM products p WHERE p.shop_id=s.id AND p.status='published' AND p.moderation_status<>'removed') ORDER BY product_count DESC, s.name LIMIT $1 OFFSET $2`, [limit, offset])).rows;
+    return { items: rows.map(r => ({ name: r.name, slug: r.slug, tagline: r.tagline, city: r.city, region: r.region, logo: mediaUrl(r.logo_media_id, 'w320'), look: r.look, productCount: r.product_count, rating: r.rating_count > 0 ? { avg: Number(r.rating_avg), count: r.rating_count } : null })) };
+  });
   app.get('/api/shops/:slug', async (req) => {
     const { slug } = z.object({ slug: z.string().regex(SLUG) }).parse(req.params);
     const s = (await pool.query(`SELECT s.*, se.verification_tier, (SELECT count(*) FROM products p WHERE p.shop_id=s.id AND p.status='published' AND p.moderation_status<>'removed')::int AS product_count

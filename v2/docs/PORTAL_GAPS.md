@@ -2,14 +2,14 @@
 
 Source: `kidoxdavid/eazyfoods` (PROJECT_STATUS.md and the portal source), read on 2026-11-06. EAZYfoods is a grocery and home-kitchen marketplace with delivery drivers, so some things do not apply to a makers' marketplace that ships by post. Everything below marked **applies** is something a makers' marketplace also needs.
 
-## Already matched (this phase)
-Feature switches enforced by the server; per-vendor switches; admin as the top role; "open their portal" as the vendor; separate sign-in windows; audit log; editable portal names and looks; staff-editable emails and pages.
+## Already matched
+Feature switches enforced by the server; per-vendor switches; admin as the top role; "open their portal" as the vendor; separate sign-in windows; audit log; editable portal names and looks; staff-editable emails and pages; roles and permissions editor; a real maker Insights page and a real maker Payouts page (what is ready, waiting and paid); "Meet the makers" and "Gift guides" pages; one-tap add from product cards; phone menu for every staff console.
 
 ## Admin and operations (applies)
 | EAZYfoods has | Here |
 |---|---|
 | Waiting badges on every menu item (new vendors, refunds, support, ads, catalogue approvals, unanswered questions) and red dot / tab-title counts | Missing |
-| Insights dashboards for admin and for each vendor: 7/30/90-day KPIs vs the previous period, daily charts, orders by hour/weekday, top products and stores | Missing (maker dashboard has basic sales numbers only) |
+| Insights dashboards for admin and for each vendor: 7/30/90-day KPIs vs the previous period, daily charts, orders by hour/weekday, top products and stores | Maker side built (7/30/90 days, vs the period before, daily chart, best sellers). Admin side and orders-by-hour still missing |
 | Vendor documents and verification onboarding (upload, review, approve) | Missing (verification tier is set by hand) |
 | Delete or erase accounts and vendors with typed confirmation, and a "Start from scratch" button that removes demo data | Missing (done by command only) |
 | Menu hiding per portal and a notice banner at the top of every page of a portal | Missing |

@@ -3,8 +3,8 @@ import { api } from './api';
 
 export interface CartLine { id: string; variantId: string; productId: string; title: string; variant: string | null; quantity: number; unitCents: number; compareAtCents: number | null; lineCents: number; image: string | null; art: { kind: string; tone: string } | null; issue: string | null; available: number | null; oneOfAKind: boolean }
 export interface CartSeller { sellerId: string; shop: { name: string; slug: string; logo: string | null }; itemsCents: number; shippingCents: number; freeShipping: boolean; eta: { min: string; max: string; shipBy: string }; gift: { isGift: boolean; message: string } | null; lines: CartLine[] }
-export interface CartView { count: number; itemsCents: number; shippingCents: number; totalCents: number; taxNote: string; blocked: boolean; sellers: CartSeller[] }
-const EMPTY: CartView = { count: 0, itemsCents: 0, shippingCents: 0, totalCents: 0, taxNote: '', blocked: false, sellers: [] };
+export interface CartView { count: number; itemsCents: number; shippingCents: number; taxCents: number; totalCents: number; taxNote: string; blocked: boolean; sellers: CartSeller[] }
+const EMPTY: CartView = { count: 0, itemsCents: 0, shippingCents: 0, taxCents: 0, totalCents: 0, taxNote: '', blocked: false, sellers: [] };
 interface Ctx { cart: CartView; ready: boolean; refresh: () => Promise<void>; add: (variantId: string, quantity?: number) => Promise<void>; setQty: (id: string, quantity: number) => Promise<void>; remove: (id: string) => Promise<void>; setGift: (sellerId: string, isGift: boolean, message: string) => Promise<void> }
 const C = createContext<Ctx | null>(null);
 export const useCart = () => { const c = useContext(C); if (!c) throw new Error('CartProvider missing'); return c; };

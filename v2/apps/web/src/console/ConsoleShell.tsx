@@ -1,5 +1,6 @@
 import { useApplyLook, useBrand } from '../branding';
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type FormEvent } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useDesktop } from '../hooks';
 import { Link, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { ApiError, api } from '../api';
 import { Icon, type IconName } from '../components/Icon';
@@ -43,13 +44,17 @@ export function ConsoleLogin() {
 
 /** Sidebar on a wide screen, a scrolling tab row on a narrow one. */
 export function ConsoleLayout() {
-  const { area, user, ready, logout } = useConsole(); const { pathname } = useLocation(); const brand = useBrand(area); useApplyLook(brand.look);
+  const { area, user, ready, logout } = useConsole(); const { pathname } = useLocation(); const brand = useBrand(area); useApplyLook(brand.look); const desktop = useDesktop(); const [open, setOpen] = useState(false); const first = useRef<HTMLAnchorElement>(null);
+  useEffect(() => { setOpen(false); }, [pathname]);
+  useEffect(() => { if (!open) return; first.current?.focus(); const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); }; window.addEventListener('keydown', esc); document.body.style.overflow = 'hidden'; return () => { window.removeEventListener('keydown', esc); document.body.style.overflow = ''; }; }, [open]);
   if (!ready) return <div className="pad" style={{ paddingTop: 40 }}><div className="skeleton" style={{ height: 240 }} /></div>;
   if (!user) return <Navigate to={`/${area}/login`} replace state={{ from: pathname }} />;
   const base = `/${area}`; const on = (n: { to: string; end?: boolean }) => (n.end ? pathname === base + n.to || pathname === base + n.to + '/' : pathname.startsWith(base + n.to));
-  return <div className="sd cons"><aside className="sd-side"><Link to={base}><Wordmark word={brand.word} /></Link>
-    <nav aria-label={`${area} sections`} className="cons-nav">{NAV[area].map(n => <Link key={n.label} to={base + n.to} className={`sd-nav${on(n) ? ' on' : ''}`} aria-current={on(n) ? 'page' : undefined}><Icon name={n.icon} />{n.label}</Link>)}</nav>
-    {area === 'admin' && <div className="cons-portals" style={{ margin: '12px 0' }}><div className="muted" style={{ fontSize: 12, marginBottom: 4 }}>Open another console</div>{(['support', 'finance', 'marketing'] as const).map(p => <button key={p} type="button" className="sd-nav" style={{ width: '100%', textAlign: 'left' }} onClick={async () => { try { const r = await api<{ url: string }>(`/api/admin/portals/${p}/enter`, { method: 'POST' }); window.location.href = r.url; } catch { /* stays here */ } }}><Icon name="store" />{p[0].toUpperCase() + p.slice(1)}</button>)}</div>}
-    <div className="card sd-shopcard"><b>{user.fullName}</b><div className="u">{user.email}</div><button type="button" className="muted" style={{ fontSize: 12, marginTop: 8, textDecoration: 'underline' }} onClick={() => logout()}>Sign out</button></div></aside>
+  const links = <nav aria-label={`${area} sections`} className="cons-nav">{NAV[area].map((n, i) => <Link key={n.label} ref={i === 0 ? first : undefined} to={base + n.to} className={`sd-nav${on(n) ? ' on' : ''}`} aria-current={on(n) ? 'page' : undefined}><Icon name={n.icon} />{n.label}</Link>)}</nav>;
+  const portals = area === 'admin' && <div className="cons-portals" style={{ margin: '12px 0' }}><div className="muted" style={{ fontSize: 13, marginBottom: 4 }}>Open another console</div>{(['support', 'finance', 'marketing'] as const).map(p => <button key={p} type="button" className="sd-nav" style={{ width: '100%', textAlign: 'left' }} onClick={async () => { try { const r = await api<{ url: string }>(`/api/admin/portals/${p}/enter`, { method: 'POST' }); window.location.href = r.url; } catch { /* stays here */ } }}><Icon name="store" />{p[0].toUpperCase() + p.slice(1)}</button>)}</div>;
+  const me = <div className="card sd-shopcard"><b>{user.fullName}</b><div className="u">{user.email}</div><button type="button" className="muted" style={{ fontSize: 14, marginTop: 8, textDecoration: 'underline', minHeight: 44 }} onClick={() => logout()}>Sign out</button></div>;
+  if (!desktop) return <div className="cons cons-phone"><header className="cons-top"><Link to={base} aria-label={`${brand.word} home`}><Wordmark word={brand.word} /></Link><button type="button" className="cons-menu" aria-expanded={open} aria-controls="cons-drawer" onClick={() => setOpen(!open)}><span aria-hidden="true">☰</span> Menu</button></header>
+    {open && <><div className="cons-scrim" onClick={() => setOpen(false)} /><aside id="cons-drawer" className="cons-drawer" role="dialog" aria-label="Menu"><div style={{ display: 'flex', alignItems: 'center', marginBottom: 8 }}><Wordmark word={brand.word} /><button type="button" className="cons-menu" style={{ marginLeft: 'auto' }} onClick={() => setOpen(false)} aria-label="Close menu">Close</button></div>{links}{portals}{me}</aside></>}
     <main className="sd-main"><Outlet /></main></div>;
+  return <div className="sd cons"><aside className="sd-side"><Link to={base}><Wordmark word={brand.word} /></Link>{links}{portals}{me}</aside><main className="sd-main"><Outlet /></main></div>;
 }

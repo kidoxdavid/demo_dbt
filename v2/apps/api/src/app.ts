@@ -25,6 +25,7 @@ import { registerPromotions } from './modules/promotions.js';
 import { registerRoles } from './modules/roles.js';
 import { registerAdminControl } from './modules/adminControl.js';
 import { registerContent } from './modules/content.js';
+import { registerStudioReports } from './modules/studioReports.js';
 import { ensureRoleConfig } from './lib/roleConfig.js';
 import { registerNotifications } from './modules/notifications.js';
 import { registerPrivacy } from './modules/privacy.js';
@@ -101,7 +102,7 @@ export async function buildApp(opts: { authRateLimitMax?: number; webDir?: strin
   app.get('/health', async () => ({ ok: true }));
   app.get('/healthz', async () => ({ ok: true }));                                                                       // liveness: the process is up
   app.get('/readyz', async (_req, reply) => { try { await q('SELECT 1'); return { ok: true }; } catch { return reply.code(503).send({ ok: false }); } });          // readiness: the database answers
-  registerAuth(app); registerPublicConfig(app); registerCategories(app); registerCatalogue(app); registerHome(app); registerSaved(app); registerStudio(app); registerStudioDashboard(app); registerStudioProducts(app); registerCart(app); registerOrders(app); registerStudioOrders(app); registerAdmin(app); registerConsoles(app); registerEngagement(app); registerAds(app); registerPromotions(app); registerRoles(app); registerAdminControl(app); registerContent(app); registerNotifications(app); registerPrivacy(app);
+  registerAuth(app); registerPublicConfig(app); registerCategories(app); registerCatalogue(app); registerHome(app); registerSaved(app); registerStudio(app); registerStudioDashboard(app); registerStudioProducts(app); registerCart(app); registerOrders(app); registerStudioOrders(app); registerAdmin(app); registerConsoles(app); registerEngagement(app); registerAds(app); registerPromotions(app); registerRoles(app); registerAdminControl(app); registerContent(app); registerStudioReports(app); registerNotifications(app); registerPrivacy(app);
   if (webDir) await registerWeb(app, webDir);
   return app;
 }

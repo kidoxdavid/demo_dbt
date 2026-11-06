@@ -73,13 +73,13 @@ const STEPS = ['Order placed', 'Accepted by the maker', 'Shipped', 'Delivered'];
 const rank = (s: string) => ({ new: 0, accepted: 1, shipped: 2, delivered: 3 } as Record<string, number>)[s] ?? -1;
 /** Order status. Guests reach it by the private link in their email. */
 export function OrderPage() {
-  const { token = '' } = useParams(); const { data: o, error, reload } = useApi<any>(`/api/orders/by-token/${token}`);
+  const { token = '' } = useParams(); const { data: o, error, reload } = useApi<any>(`/api/orders/by-token/${token}`); const { data: mode } = useApi<{ testMode: boolean; email: string }>('/api/mode');
   useEffect(() => { if (o && o.paymentStatus === 'pending') { const t = setInterval(reload, 3000); return () => clearInterval(t); } }, [o, reload]);
   if (error) return <div className="empty" style={{ paddingTop: 80 }}><h1 className="serif">We could not find that order</h1><p>Check the link in your confirmation email.</p></div>;
   if (!o) return <div className="pad" style={{ paddingTop: 40 }}><div className="skeleton" style={{ height: 160 }} /></div>;
   const paid = o.paymentStatus !== 'pending' && o.paymentStatus !== 'failed';
   return <div className="screen pad" style={{ paddingTop: 24 }}><div className="co">
-    <div style={{ textAlign: 'center' }}><div className="ok-mark"><Icon name="check" size={28} /></div><h1 className="serif" style={{ marginTop: 14 }}>{paid ? 'Thank you' : o.paymentStatus === 'failed' ? 'Payment did not go through' : 'Waiting for payment'}</h1><p className="muted" style={{ marginTop: 6 }}>Order #{o.number}{paid ? ` · confirmation sent to ${o.email}` : ''}</p></div>
+    <div style={{ textAlign: 'center' }}><div className="ok-mark"><Icon name="check" size={28} /></div><h1 className="serif" style={{ marginTop: 14 }}>{paid ? 'Thank you' : o.paymentStatus === 'failed' ? 'Payment did not go through' : 'Waiting for payment'}</h1><p className="muted" style={{ marginTop: 6 }}>Order #{o.number}{paid ? ` · ${mode?.email === 'sent' ? 'confirmation sent to' : 'confirmation for'} ${o.email}` : ''}</p>{paid && mode?.testMode && <p role="note" className="muted" style={{ marginTop: 8, fontSize: 14 }}>Test mode: no card was charged{mode.email === 'sent' ? '' : ' and no email was sent (emails are switched off here)'}.</p>}</div>
     {o.sellers.map((s: any) => <div key={s.id} className="card sec"><div style={{ display: 'flex', justifyContent: 'space-between' }}><Link to={`/shop/${s.shop.slug}`}><b>{s.shop.name}</b></Link>{s.eta?.min && <span className="muted" style={{ fontSize: 12 }}>Arrives {dateRange(s.eta.min, s.eta.max)}</span>}</div>
       {s.lines.map((l: any, i: number) => <div key={i} style={{ marginTop: 8 }}><div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14 }}><span>{l.title}{l.variant ? ` · ${l.variant}` : ''} × {l.quantity}</span><b style={{ fontWeight: 500 }}>{money(l.unitCents * l.quantity)}</b></div><LineReview token={token} line={l} delivered={s.status === 'delivered'} onDone={reload} /></div>)}
       {paid && <ul className="timeline">{STEPS.map((t, i) => <li key={t} className={i <= rank(s.status) ? 'on' : ''}><i />{t}</li>)}</ul>}

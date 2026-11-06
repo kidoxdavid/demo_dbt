@@ -33,11 +33,20 @@ export function AuditPage() {
   const area = useArea(); const [action, setAction] = useState(''); const [entity, setEntity] = useState(''); const { data } = useApi<any[]>(`/api/${area}/audit?limit=100${action ? `&action=${encodeURIComponent(action)}` : ''}${entity ? `&entityType=${encodeURIComponent(entity)}` : ''}`);
   return <Page title="Audit log" sub="Every sensitive change, newest first. Entries cannot be edited or deleted.">
     <div className="tools"><input className="field" aria-label="Filter by action" placeholder="Action, e.g. payout.create" value={action} onChange={e => setAction(e.target.value.trim())} /><input className="field" aria-label="Filter by type" placeholder="Type, e.g. seller" value={entity} onChange={e => setEntity(e.target.value.trim())} /></div>
-    <Rows empty="No entries match.">{(data ?? []).map(a => <div key={a.id} className="tr" style={{ alignItems: 'flex-start' }}><div className="t"><b>{a.action}</b><div>{a.entityType}{a.entityId ? ` · ${String(a.entityId).length > 30 ? String(a.entityId).slice(0, 8) : a.entityId}` : ''} · {a.actorEmail ?? 'system'} · {a.area ?? ''}</div>{a.reason && <div style={{ color: 'var(--ink)' }}>“{a.reason}”</div>}{a.next && <div style={{ wordBreak: 'break-all' }}>{JSON.stringify(a.next).slice(0, 200)}</div>}</div><span className="muted" style={{ fontSize: 12, whiteSpace: 'nowrap' }}>{stamp(a.at)}</span></div>)}</Rows></Page>;
+    <Rows empty="No entries match.">{(data ?? []).map(a => <div key={a.id} className="tr" style={{ alignItems: 'flex-start' }}><div className="t"><b>{a.action}</b><div>{a.entityType}{a.entityId ? ` · ${String(a.entityId).length > 30 ? String(a.entityId).slice(0, 8) : a.entityId}` : ''} · {a.actorEmail ?? 'system'} · {a.area ?? ''}</div>{a.reason && <div style={{ color: 'var(--ink)' }}>“{a.reason}”</div>}{a.next && <div style={{ wordBreak: 'break-all' }}>{plain(a.next)}</div>}</div><span className="muted" style={{ fontSize: 12, whiteSpace: 'nowrap' }}>{stamp(a.at)}</span></div>)}</Rows></Page>;
 }
 export const m = money;
 
 /** An on/off switch (a real button with role "switch", so it works with keyboards and screen readers). */
 export function Switch({ on, label, onChange }: { on: boolean; label: string; onChange: (v: boolean) => void }) {
-  return <button type="button" role="switch" aria-checked={on} aria-label={label} onClick={() => onChange(!on)} style={{ width: 46, height: 28, borderRadius: 999, padding: 3, flex: 'none', background: on ? 'var(--acc)' : 'var(--line)', display: 'flex', justifyContent: on ? 'flex-end' : 'flex-start', alignItems: 'center', transition: 'background .15s' }}><span style={{ width: 22, height: 22, borderRadius: 999, background: 'var(--surf)', boxShadow: '0 1px 2px rgba(0,0,0,.25)' }} /></button>;
+  return <button type="button" role="switch" aria-checked={on} aria-label={label} onClick={() => onChange(!on)} style={{ minWidth: 54, minHeight: 44, flex: 'none', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'transparent' }}>
+    <span style={{ width: 46, height: 28, borderRadius: 999, padding: 3, background: on ? 'var(--acc)' : 'var(--line)', display: 'flex', justifyContent: on ? 'flex-end' : 'flex-start', alignItems: 'center', transition: 'background .15s' }}><span style={{ width: 22, height: 22, borderRadius: 999, background: 'var(--surf)', boxShadow: '0 1px 2px rgba(0,0,0,.25)' }} /></span></button>;
+}
+
+/** Audit details in plain words: "status: suspended, tier: basic" instead of raw JSON, with empty values left out. */
+export function plain(v: unknown): string {
+  if (v === null || v === undefined) return '';
+  if (typeof v !== 'object') return String(v);
+  const parts = Object.entries(v as Record<string, unknown>).filter(([, x]) => x !== null && x !== undefined && x !== '').map(([k, x]) => `${k.replace(/([A-Z])/g, ' $1').replace(/_/g, ' ').toLowerCase()}: ${typeof x === 'object' ? plain(x) || '—' : String(x)}`);
+  return parts.join(', ').slice(0, 200);
 }

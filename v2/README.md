@@ -35,3 +35,6 @@ Production settings for notifications: `SMTP_URL`, `EMAIL_FROM`, `PUBLIC_URL` (u
 
 ## Deploying (Phase 11)
 The API also serves the built website in production (`npm run build -w @eazystores/web`, then start the API with `NODE_ENV=production`; `WEB_DIST` overrides the folder). `render.yaml` at the repository root is the Render blueprint. Read `docs/DEPLOYMENT.md` to deploy, `docs/OPERATIONS.md` to run it, `docs/BACKUP_RECOVERY.md` for backups, and `docs/LAUNCH_READINESS.md` for what is and is not ready (payments are the blocker).
+
+## Quality checks (run these before anything ships)
+`node apps/e2e/crawl.mjs` opens every page of every portal on a phone and a laptop and lists anything a person would trip on (set `ADMIN_PW`, `SUPPORT_PW`, `FINANCE_PW`, `MARKETING_PW`, `MAKER_EMAIL`, `MAKER_PW` for your sign-ins). `node apps/e2e/buyer-journey.mjs` buys something as a brand-new person on a phone and a laptop. Both need the website on :5180 and the API running.

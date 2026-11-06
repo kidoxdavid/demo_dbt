@@ -1,5 +1,8 @@
 import { useFlag } from '../flags';
-import type { CSSProperties, ReactNode } from 'react';
+import { useState, type CSSProperties, type ReactNode } from 'react';
+import { ApiError } from '../api';
+import { useCart } from '../cart';
+import { useSession } from '../session';
 import { Link } from 'react-router-dom';
 import { Icon, type IconName } from './Icon';
 import { ProductArt } from '../art/ProductArt';
@@ -21,21 +24,23 @@ export function Pills({ items, selected = 0, filter }: { items: string[]; select
   return <div className="pills">{items.map((c, i) => <span key={c} className={`pill${!filter && i === selected ? ' on' : ''}${filter ? ' filter' : ''}`}>{c}{filter ? ' ⌄' : ''}</span>)}</div>;
 }
 
-export interface CardData { id: string; title: string; seller: string; price: string; was?: string; chip?: string; art?: { kind: ArtKind; tone: Tone }; photo?: string; href?: string; soldOut?: boolean; heart?: { on: boolean; toggle: () => void } }
+export interface CardData { id: string; title: string; seller: string; price: string; was?: string; chip?: string; art?: { kind: ArtKind; tone: Tone }; photo?: string; href?: string; soldOut?: boolean; quickAdd?: string; heart?: { on: boolean; toggle: () => void } }
 /** Every card is the same size. Only the heart and an optional chip ever sit on the image. */
 export function ProductCard({ p }: { p: CardData }) {
-  const h = p.heart; const wish = useFlag('wishlists');
+  const h = p.heart; const wish = useFlag('wishlists'); const { add } = useCart(); const { say } = useSession(); const [adding, setAdding] = useState<'idle' | 'busy' | 'done'>('idle');
+  const quick = async (e: React.MouseEvent) => { e.preventDefault(); e.stopPropagation(); if (!p.quickAdd || adding === 'busy') return; setAdding('busy'); try { await add(p.quickAdd, 1); setAdding('done'); say(`Added ${p.title} to your basket`); setTimeout(() => setAdding('idle'), 1600); } catch (err) { setAdding('idle'); say(err instanceof ApiError ? ({ out_of_stock: 'Sorry, that one just sold out.', already_in_basket: 'That one-of-a-kind piece is already in your basket.', shop_on_vacation: 'This maker is on a break right now.', quantity_limit: 'That is the most you can add.' } as Record<string, string>)[err.code] ?? 'Could not add that. Open the piece to try again.' : 'Could not add that. Check your connection and try again.'); } };
   const body = <>
     <div className="im">{p.photo ? <img src={p.photo} alt="" loading="lazy" /> : p.art ? <ProductArt kind={p.art.kind} tone={p.art.tone} /> : null}
       {!wish ? null : h ? <button type="button" className={`heart${h.on ? ' on' : ''}`} aria-label={h.on ? 'Remove from saved' : 'Save'} aria-pressed={h.on} onClick={e => { e.preventDefault(); e.stopPropagation(); h.toggle(); }}><Icon name="heart" /></button> : <span className="heart" aria-hidden="true"><Icon name="heart" /></span>}
-      {p.chip && <span className="chip tag">{p.chip}</span>}</div>
+      {p.chip && <span className="chip tag">{p.chip}</span>}
+      {p.quickAdd && !p.soldOut && <button type="button" className={`qadd${adding === 'done' ? ' done' : ''}`} aria-label={adding === 'done' ? `${p.title} added` : `Add ${p.title} to basket`} onClick={quick} disabled={adding === 'busy'}><Icon name={adding === 'done' ? 'check' : 'plus'} /></button>}</div>
     <h4>{p.title}</h4><div className="by">{p.seller}</div><div className="pr">{p.soldOut ? <span className="muted">Sold out</span> : <>{p.price}{p.was && <s>{p.was}</s>}</>}</div></>;
   return p.href ? <Link className={`pcard${p.soldOut ? ' soldout' : ''}`} to={p.href}>{body}</Link> : <div className="pcard">{body}</div>;
 }
 
-export type TabItem = { icon: IconName; label: string; to: string };
+export type TabItem = { icon: IconName; label: string; to: string; badge?: number };
 export function TabBar({ items, active }: { items: TabItem[]; active: number }) {
-  return <nav className="tabbar" aria-label="Main">{items.map((t, i) => <Link key={t.label} to={t.to} className={i === active ? 'on' : ''} aria-current={i === active ? 'page' : undefined}><Icon name={t.icon} /><span>{t.label}</span></Link>)}</nav>;
+  return <nav className="tabbar" aria-label="Main">{items.map((t, i) => <Link key={t.label} to={t.to} className={i === active ? 'on' : ''} aria-current={i === active ? 'page' : undefined}><Icon name={t.icon} /><span>{t.label}</span>{!!t.badge && <b className="tabbadge" aria-label={`${t.badge} in your basket`}>{t.badge > 99 ? '99+' : t.badge}</b>}</Link>)}</nav>;
 }
 export const BUYER_TABS: TabItem[] = [{ icon: 'home', label: 'Shop', to: '/' }, { icon: 'grid', label: 'Browse', to: '/c/pottery-ceramics' }, { icon: 'heart', label: 'Saved', to: '/saved' }, { icon: 'bag', label: 'Basket', to: '/basket' }, { icon: 'user', label: 'Account', to: '/account' }];
 export const STUDIO_TABS: TabItem[] = [{ icon: 'home', label: 'Home', to: '/studio' }, { icon: 'box', label: 'Orders', to: '/studio/orders' }, { icon: 'tag', label: 'Products', to: '/studio/products' }, { icon: 'msg', label: 'Messages', to: '/studio/messages' }, { icon: 'chart', label: 'Insights', to: '/studio/insights' }];
